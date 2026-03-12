@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Standalone Forge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <p class="eyebrow">Unity Standalone Wrapper</p>
+        <h1>Turn a game URL into a hosted standalone build.</h1>
+        <p class="hero-copy">
+          Paste a supported game URL or a name from your local catalog. The app runs
+          <code>unity_standalone.py</code>, tracks progress, and serves the generated
+          <code>Build/</code> folder plus launcher HTML when the export finishes.
+        </p>
+      </header>
+
+      <main class="layout">
+        <section class="panel panel-form">
+          <div class="panel-head">
+            <h2>New Export</h2>
+            <p>
+              Name mode resolves through <code>game_catalog.json</code>. Direct links work
+              immediately.
+            </p>
+          </div>
+
+          <form id="export-form" class="export-form">
+            <label class="field">
+              <span>Game name or URL</span>
+              <input
+                id="source"
+                name="source"
+                type="text"
+                placeholder="https://example.com/game or Catalog Game Name"
+                autocomplete="off"
+                required
+              />
+            </label>
+
+            <label class="field">
+              <span>Output folder name</span>
+              <input
+                id="outputName"
+                name="outputName"
+                type="text"
+                placeholder="Optional custom folder name"
+                autocomplete="off"
+              />
+            </label>
+
+            <button id="submit-button" class="submit-button" type="submit">
+              Start build
+            </button>
+            <p id="form-message" class="form-message" aria-live="polite"></p>
+          </form>
+        </section>
+
+        <aside class="panel panel-notes">
+          <div class="panel-head">
+            <h2>Pipeline</h2>
+          </div>
+          <ol class="pipeline">
+            <li>Resolve the submitted URL or catalog match.</li>
+            <li>Run the standalone exporter in a background job.</li>
+            <li>Track progress from logs and the exporter progress file.</li>
+            <li>Expose the final launcher at a permanent play URL.</li>
+          </ol>
+        </aside>
+      </main>
+
+      <section class="jobs-section">
+        <div class="section-head">
+          <h2>Build Queue</h2>
+          <p>Active and recent exports stay here until the server restarts.</p>
+        </div>
+        <div id="jobs" class="jobs-grid"></div>
+      </section>
+    </div>
+
+    <template id="job-template">
+      <article class="job-card">
+        <div class="job-topline">
+          <div>
+            <p class="job-status"></p>
+            <h3 class="job-title"></h3>
+          </div>
+          <p class="job-percent"></p>
+        </div>
+
+        <div class="meter">
+          <div class="meter-fill"></div>
+        </div>
+
+        <div class="job-meta">
+          <p class="job-phase"></p>
+          <p class="job-eta"></p>
+        </div>
+
+        <dl class="job-facts">
+          <div>
+            <dt>Source</dt>
+            <dd class="job-source"></dd>
+          </div>
+          <div>
+            <dt>Folder</dt>
+            <dd class="job-folder"></dd>
+          </div>
+          <div>
+            <dt>Build dir</dt>
+            <dd class="job-builddir"></dd>
+          </div>
+        </dl>
+
+        <div class="job-actions"></div>
+        <p class="job-error"></p>
+
+        <details class="job-logs">
+          <summary>Logs</summary>
+          <pre class="job-log-output"></pre>
+        </details>
+      </article>
+    </template>
+
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </body>
+</html>

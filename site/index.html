@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Standalone Forge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <p class="eyebrow">GitHub Pages Build Console</p>
+        <h1>Dispatch Unity exports from a static site.</h1>
+        <p class="hero-copy">
+          This page runs on GitHub Pages. It does not execute Python in the browser.
+          Instead, it triggers a GitHub Actions workflow that runs
+          <code>unity_standalone.py</code>, publishes the generated
+          <code>Build/</code> and <code>index.html</code>, and returns a play link when the
+          workflow finishes.
+        </p>
+      </header>
+
+      <main class="layout">
+        <section class="panel panel-form">
+          <div class="panel-head">
+            <h2>New Export</h2>
+            <p>
+              Enter a direct game URL or a name from <code>game_catalog.json</code>. The
+              repo target and token are hardcoded for this demo in
+              <code>site/config.js</code>.
+            </p>
+          </div>
+
+          <form id="export-form" class="export-form">
+            <p id="repo-target" class="status-chip"></p>
+            <p id="config-warning" class="helper-text"></p>
+
+            <label class="field">
+              <span>Game name or URL</span>
+              <input
+                id="source"
+                name="source"
+                type="text"
+                placeholder="https://example.com/game or Catalog Game Name"
+                autocomplete="off"
+                required
+              />
+            </label>
+
+            <button id="submit-button" class="submit-button" type="submit">
+              Start GitHub build
+            </button>
+            <p id="form-message" class="form-message" aria-live="polite"></p>
+          </form>
+        </section>
+
+        <aside class="panel panel-notes">
+          <div class="panel-head">
+            <h2>How It Works</h2>
+          </div>
+          <ol class="pipeline">
+            <li>The page resolves the input to a source URL.</li>
+            <li>It dispatches <code>.github/workflows/build-game.yml</code>.</li>
+            <li>The workflow runs the Python exporter in GitHub Actions.</li>
+            <li>The completed folder is deployed back to GitHub Pages.</li>
+          </ol>
+          <p class="note">
+            Required token scope in <code>site/config.js</code>:
+            <code>Actions: read and write</code> and <code>Contents: read and write</code>.
+          </p>
+        </aside>
+      </main>
+
+      <section class="jobs-section">
+        <div class="section-head">
+          <h2>Recent Requests</h2>
+          <p>These are tracked in your browser so you can watch workflow progress.</p>
+        </div>
+        <div id="jobs" class="jobs-grid"></div>
+      </section>
+
+      <section class="jobs-section">
+        <div class="section-head">
+          <h2>Published Games</h2>
+          <p>These are the builds currently deployed on the site.</p>
+        </div>
+        <div id="published-games" class="jobs-grid"></div>
+      </section>
+    </div>
+
+    <template id="job-template">
+      <article class="job-card">
+        <div class="job-topline">
+          <div>
+            <p class="job-status"></p>
+            <h3 class="job-title"></h3>
+          </div>
+          <p class="job-percent"></p>
+        </div>
+
+        <div class="meter">
+          <div class="meter-fill"></div>
+        </div>
+
+        <div class="job-meta">
+          <p class="job-phase"></p>
+          <p class="job-eta"></p>
+        </div>
+
+        <dl class="job-facts">
+          <div>
+            <dt>Source</dt>
+            <dd class="job-source"></dd>
+          </div>
+          <div>
+            <dt>Request</dt>
+            <dd class="job-request"></dd>
+          </div>
+          <div>
+            <dt>Repository</dt>
+            <dd class="job-repo"></dd>
+          </div>
+        </dl>
+
+        <div class="job-actions"></div>
+        <p class="job-error"></p>
+      </article>
+    </template>
+
+    <template id="published-template">
+      <article class="job-card published-card">
+        <div class="job-topline">
+          <div>
+            <p class="job-status">Published</p>
+            <h3 class="job-title"></h3>
+          </div>
+        </div>
+
+        <dl class="job-facts">
+          <div>
+            <dt>Source</dt>
+            <dd class="job-source"></dd>
+          </div>
+          <div>
+            <dt>Folder</dt>
+            <dd class="job-folder"></dd>
+          </div>
+          <div>
+            <dt>Built</dt>
+            <dd class="job-built"></dd>
+          </div>
+        </dl>
+
+        <div class="job-actions"></div>
+      </article>
+    </template>
+
+    <script src="./config.js"></script>
+    <script src="./app.js" defer></script>
+  </body>
+</html>

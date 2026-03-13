@@ -9553,13 +9553,24 @@ def prepare_geometry_dash_lite_streaming_assets(
     )
 
 
-def copy_eagler_support_files(output_dir: Path) -> list[str]:
+def resolve_support_file(name: str) -> Path:
     script_dir = Path(__file__).resolve().parent
+    candidates = [
+        script_dir / name,
+        script_dir / "site" / name,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    checked_paths = ", ".join(str(candidate) for candidate in candidates)
+    raise FetchError(f"Missing support file {name}. Checked: {checked_paths}")
+
+
+def copy_eagler_support_files(output_dir: Path) -> list[str]:
     copied: list[str] = []
     for name in ("ocean-launcher.css", "ocean-launcher.js"):
-        source = script_dir / name
-        if not source.exists():
-            raise FetchError(f"Missing support file next to unity_standalone.py: {source}")
+        source = resolve_support_file(name)
         shutil.copyfile(source, output_dir / name)
         copied.append(name)
     return copied

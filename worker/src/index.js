@@ -2,6 +2,59 @@ const JSON_HEADERS = {
   "content-type": "application/json; charset=UTF-8",
 };
 
+const DRIVE_SITE_URL = "https://sites.google.com/view/drive-u-7-home-10/";
+const DRIVE_SITE_PREFIX = "/view/drive-u-7-home-10/";
+const DUCKDUCKGO_HTML_URL = "https://html.duckduckgo.com/html/";
+const REPORTS_FILE_PATH = "reports/not-working.txt";
+const SEARCH_INDEX_TTL_MS = 30 * 60 * 1000;
+const MAX_SITE_CANDIDATES = 6;
+const MAX_WEB_CANDIDATES = 6;
+const SEARCHABLE_SITE_MATCH_FLOOR = 28;
+const REPORT_FILE_HEADER = "# Not Working Game Reports\n";
+const DOWNLOAD_EXTENSIONS = [".apk", ".dmg", ".exe", ".iso", ".msi", ".pkg", ".rar", ".zip", ".7z"];
+const INFRASTRUCTURE_HOSTS = [
+  "accounts.google.com",
+  "apis.google.com",
+  "fonts.googleapis.com",
+  "fonts.gstatic.com",
+  "google.com",
+  "googleapis.com",
+  "googletagmanager.com",
+  "gstatic.com",
+  "schema.org",
+  "w3.org",
+  "youtube.com",
+  "youtu.be",
+];
+const FRIENDLY_HOSTS = [
+  "github.io",
+  "githubusercontent.com",
+  "jsdelivr.net",
+  "netlify.app",
+  "pages.dev",
+  "sites.google.com",
+  "vercel.app",
+  "workers.dev",
+];
+const PENALIZED_HOSTS = [
+  "crazygames.com",
+  "fandom.com",
+  "itch.io",
+  "poki.com",
+  "reddit.com",
+  "steamcommunity.com",
+  "store.steampowered.com",
+  "wikipedia.org",
+  "y8.com",
+  "youtube.com",
+];
+const GENERIC_SITE_TITLES = new Set(["classroom g+", "home", "search this site", "unblocked games"]);
+
+let driveSiteIndexCache = {
+  loadedAt: 0,
+  items: [],
+};
+
 function json(payload, init = {}) {
   return new Response(JSON.stringify(payload), {
     ...init,
@@ -65,6 +118,13 @@ function githubHeaders(env) {
   };
 }
 
+function workerHeaders() {
+  return {
+    Accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+    "User-Agent": "standalone-forge-proxy",
+  };
+}
+
 function workflowFile(env) {
   return String(env.GITHUB_WORKFLOW_FILE || "build-game.yml").trim() || "build-game.yml";
 }
@@ -73,10 +133,29 @@ function githubApiBase(env) {
   return `https://api.github.com/repos/${encodeURIComponent(env.GITHUB_OWNER)}/${encodeURIComponent(env.GITHUB_REPO)}`;
 }
 
+function encodeGitHubPath(path) {
+  return String(path || "")
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
 function validateEnv(env) {
   const missing = ["GITHUB_TOKEN", "GITHUB_OWNER", "GITHUB_REPO"].filter((key) => !String(env[key] || "").trim());
   if (missing.length) {
     throw new Error(`Missing Worker environment values: ${missing.join(", ")}`);
+  }
+}
+
+async function parseResponsePayload(response) {
+  const text = await response.text();
+  if (!text) {
+    return null;
+  }
+  try {
+    return JSON.parse(text);
+  } catch (_error) {
+    return { raw: text };
   }
 }
 
@@ -88,25 +167,30 @@ async function githubJson(url, env, init = {}, label = "GitHub request") {
       ...(init.headers || {}),
     },
   });
-
-  const text = await response.text();
-  let payload = null;
-  if (text) {
-    try {
-      payload = JSON.parse(text);
-    } catch (_error) {
-      payload = { raw: text };
-    }
-  }
-
+  const payload = await parseResponsePayload(response);
   if (!response.ok) {
-    const message =
-      payload?.message ||
-      payload?.raw ||
-      `${label} failed with status ${response.status}`;
+    const message = payload?.message || payload?.raw || `${label} failed with status ${response.status}`;
     throw new Error(`${label} failed with status ${response.status}: ${message}`);
   }
+  return payload;
+}
 
+async function githubJsonOrNull(url, env, init = {}, label = "GitHub request") {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      ...githubHeaders(env),
+      ...(init.headers || {}),
+    },
+  });
+  const payload = await parseResponsePayload(response);
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    const message = payload?.message || payload?.raw || `${label} failed with status ${response.status}`;
+    throw new Error(`${label} failed with status ${response.status}: ${message}`);
+  }
   return payload;
 }
 
@@ -118,23 +202,26 @@ async function githubNoContent(url, env, init = {}, label = "GitHub request") {
       ...(init.headers || {}),
     },
   });
-
   if (!response.ok) {
-    const text = await response.text();
-    let payload = null;
-    if (text) {
-      try {
-        payload = JSON.parse(text);
-      } catch (_error) {
-        payload = { raw: text };
-      }
-    }
-    const message =
-      payload?.message ||
-      payload?.raw ||
-      `${label} failed with status ${response.status}`;
+    const payload = await parseResponsePayload(response);
+    const message = payload?.message || payload?.raw || `${label} failed with status ${response.status}`;
     throw new Error(`${label} failed with status ${response.status}: ${message}`);
   }
+}
+
+async function fetchText(url, init = {}, label = "Request") {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      ...workerHeaders(),
+      ...(init.headers || {}),
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`${label} failed with status ${response.status}: ${text || response.statusText}`);
+  }
+  return response.text();
 }
 
 function sleep(ms) {
@@ -155,27 +242,621 @@ function normalizeSourceUrl(value) {
   if (!trimmed) {
     return "";
   }
-
   if (looksLikeUrl(trimmed)) {
     return trimmed;
   }
-
-  const bareDomainPattern =
-    /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:\/\S*)?$/i;
+  const bareDomainPattern = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:\/\S*)?$/i;
   if (/\s/.test(trimmed) || !bareDomainPattern.test(trimmed)) {
     return "";
   }
-
   const candidate = `https://${trimmed}`;
   return looksLikeUrl(candidate) ? candidate : "";
+}
+
+function escapeRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function collapseWhitespace(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function decodeHtmlEntities(value) {
+  const named = {
+    amp: "&",
+    apos: "'",
+    gt: ">",
+    lt: "<",
+    nbsp: " ",
+    quot: '"',
+  };
+  return String(value || "").replace(/&(#x?[0-9a-f]+|amp|apos|gt|lt|nbsp|quot);/gi, (match, entity) => {
+    const lower = entity.toLowerCase();
+    if (named[lower]) {
+      return named[lower];
+    }
+    if (lower.startsWith("#x")) {
+      const parsed = Number.parseInt(lower.slice(2), 16);
+      return Number.isFinite(parsed) ? String.fromCodePoint(parsed) : match;
+    }
+    if (lower.startsWith("#")) {
+      const parsed = Number.parseInt(lower.slice(1), 10);
+      return Number.isFinite(parsed) ? String.fromCodePoint(parsed) : match;
+    }
+    return match;
+  });
+}
+
+function stripTags(value) {
+  return collapseWhitespace(decodeHtmlEntities(String(value || "").replace(/<[^>]+>/g, " ")));
+}
+
+function normalizeSearchText(value) {
+  return collapseWhitespace(
+    String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " "),
+  );
+}
+
+function tokenizeSearchText(value) {
+  return normalizeSearchText(value)
+    .split(" ")
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+function uniqueBy(items, keyFn) {
+  const seen = new Set();
+  const results = [];
+  items.forEach((item) => {
+    const key = keyFn(item);
+    if (!key || seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    results.push(item);
+  });
+  return results;
+}
+
+function cleanExtractedUrl(rawUrl, baseUrl = "") {
+  const decoded = decodeHtmlEntities(String(rawUrl || "").trim())
+    .replace(/^\/\//, "https://")
+    .replace(/[)\],;'\"`]+$/g, "");
+  if (!decoded) {
+    return "";
+  }
+  try {
+    const parsed = baseUrl ? new URL(decoded, baseUrl) : new URL(decoded);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+    return parsed.toString();
+  } catch (_error) {
+    return "";
+  }
+}
+
+function domainFromUrl(value) {
+  try {
+    return new URL(String(value || "")).hostname.toLowerCase().replace(/^www\./, "");
+  } catch (_error) {
+    return "";
+  }
+}
+
+function matchesHost(host, suffixes) {
+  return suffixes.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
+}
+
+function isIgnoredInfrastructureUrl(value) {
+  return matchesHost(domainFromUrl(value), INFRASTRUCTURE_HOSTS);
+}
+
+function isFriendlyHostedDomain(value) {
+  return matchesHost(domainFromUrl(value), FRIENDLY_HOSTS);
+}
+
+function isPenalizedDomain(value) {
+  return matchesHost(domainFromUrl(value), PENALIZED_HOSTS);
+}
+
+function isDownloadUrl(value) {
+  const lower = String(value || "").toLowerCase();
+  if (DOWNLOAD_EXTENSIONS.some((extension) => lower.includes(extension))) {
+    return true;
+  }
+  return /(?:\/|=)(?:download|get|setup|installer)(?:[/?#]|$)/i.test(lower);
+}
+
+function extractMetaContent(html, key) {
+  const patterns = [
+    new RegExp(`<meta[^>]+(?:property|name|itemprop)=["']${escapeRegex(key)}["'][^>]+content=["']([^"']*)["']`, "i"),
+    new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name|itemprop)=["']${escapeRegex(key)}["']`, "i"),
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match && match[1]) {
+      return collapseWhitespace(decodeHtmlEntities(match[1]));
+    }
+  }
+  return "";
+}
+
+function extractPageTitle(html) {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return match ? stripTags(match[1]) : "";
+}
+
+function extractUrlsFromHtml(html, baseUrl) {
+  const decoded = decodeHtmlEntities(html);
+  const candidates = [];
+  const directPattern = /https?:\/\/[^\s"'<>\\]+/gi;
+  const attrPattern = /(?:href|src|data-url|data-src|data-game-url|data-iframe|data-embed|data-embed-url)=["']([^"']+)["']/gi;
+  let match = null;
+
+  while ((match = directPattern.exec(decoded))) {
+    const normalized = cleanExtractedUrl(match[0]);
+    if (normalized) {
+      candidates.push(normalized);
+    }
+  }
+
+  while ((match = attrPattern.exec(decoded))) {
+    const normalized = cleanExtractedUrl(match[1], baseUrl);
+    if (normalized) {
+      candidates.push(normalized);
+    }
+  }
+
+  return uniqueBy(candidates, (value) => value);
+}
+
+function scoreQueryMatch(query, title, url = "") {
+  const normalizedQuery = normalizeSearchText(query);
+  const normalizedTitle = normalizeSearchText(title);
+  if (!normalizedQuery || !normalizedTitle) {
+    return 0;
+  }
+
+  const queryTokens = tokenizeSearchText(query);
+  const titleTokens = new Set([...tokenizeSearchText(title), ...tokenizeSearchText(url)]);
+  const matchingTokens = queryTokens.filter((token) => titleTokens.has(token));
+  const numericQueryTokens = queryTokens.filter((token) => /^\d+$/.test(token));
+  const missingNumericTokens = numericQueryTokens.filter((token) => !titleTokens.has(token));
+  const compactQuery = normalizedQuery.replace(/\s+/g, "");
+  const compactCandidate = normalizeSearchText(`${title} ${url}`).replace(/\s+/g, "");
+
+  let score = matchingTokens.length * 24;
+  if (normalizedTitle === normalizedQuery) {
+    score += 170;
+  }
+  if (normalizedTitle.startsWith(normalizedQuery)) {
+    score += 75;
+  } else if (normalizedTitle.includes(normalizedQuery)) {
+    score += 60;
+  }
+  if (matchingTokens.length && matchingTokens.length === queryTokens.length) {
+    score += 55;
+  }
+  if (compactQuery && compactCandidate.includes(compactQuery)) {
+    score += 85;
+  }
+  score -= missingNumericTokens.length * 40;
+  if (normalizedQuery.includes(normalizedTitle) && normalizedTitle.length >= 5) {
+    score += 12;
+  }
+  return Math.max(score, 0);
+}
+
+function cleanDisplayTitle(query, rawTitle, fallbackTitle = "") {
+  const titles = [rawTitle, fallbackTitle]
+    .map((value) => collapseWhitespace(String(value || "")))
+    .filter(Boolean);
+  if (!titles.length) {
+    return "Untitled";
+  }
+
+  const normalizedQuery = normalizeSearchText(query);
+  const scored = titles
+    .map((title) => {
+      const parts = title.split(/\s+\|\s+|\s+-\s+/).map((part) => collapseWhitespace(part)).filter(Boolean);
+      const titleVariants = parts.length > 1 ? parts : [title];
+      let bestVariant = title;
+      let bestScore = -1;
+      titleVariants.forEach((variant) => {
+        const variantScore = scoreQueryMatch(query, variant, "");
+        if (variantScore > bestScore) {
+          bestScore = variantScore;
+          bestVariant = variant;
+        }
+      });
+
+      const lower = normalizeSearchText(bestVariant);
+      if (GENERIC_SITE_TITLES.has(lower) && parts.length > 1) {
+        return { score: -1, title };
+      }
+
+      return {
+        score: bestScore + (normalizeSearchText(title) === normalizedQuery ? 200 : 0),
+        title: bestVariant,
+      };
+    })
+    .sort((left, right) => right.score - left.score);
+
+  return scored[0]?.title || titles[0];
+}
+
+function buildReason(candidate) {
+  const reasons = [];
+  if (candidate.provider === "drive-site") {
+    reasons.push("matched drive-u-7-home-10 first");
+  } else if (candidate.provider === "web-search") {
+    reasons.push("matched web fallback");
+  }
+  if (candidate.hostedOnline) {
+    reasons.push("hosted online");
+  }
+  if (candidate.compatibilitySignals.length) {
+    reasons.push(candidate.compatibilitySignals.slice(0, 3).join(", "));
+  }
+  return reasons.join(" | ");
+}
+
+function summarizeCandidate(candidate) {
+  return {
+    query: candidate.query,
+    sourceUrl: candidate.sourceUrl,
+    displayName: candidate.displayName,
+    matchedName: candidate.displayName,
+    sourceMode: candidate.provider === "drive-site" ? "drive-site-search" : "web-search",
+    provider: candidate.provider,
+    confidence: candidate.confidence,
+    hostedOnline: candidate.hostedOnline,
+    reason: candidate.reason,
+    imageUrl: candidate.imageUrl,
+  };
+}
+
+function analyzeCandidateHtml(candidate, html) {
+  const htmlLower = html.toLowerCase();
+  const rawTitle =
+    extractMetaContent(html, "og:title") ||
+    extractMetaContent(html, "twitter:title") ||
+    extractPageTitle(html) ||
+    candidate.title;
+  const description =
+    extractMetaContent(html, "og:description") ||
+    extractMetaContent(html, "description") ||
+    extractMetaContent(html, "twitter:description");
+  const imageUrl = cleanExtractedUrl(
+    extractMetaContent(html, "og:image") || extractMetaContent(html, "twitter:image"),
+    candidate.url,
+  );
+  const externalUrls = extractUrlsFromHtml(html, candidate.url).filter((value) => !isIgnoredInfrastructureUrl(value));
+  const downloadableUrls = externalUrls.filter((value) => isDownloadUrl(value));
+  const compatibilitySignals = [];
+  let compatibilityScore = 0;
+
+  const addCompatibility = (condition, points, label) => {
+    if (!condition) {
+      return;
+    }
+    compatibilityScore += points;
+    compatibilitySignals.push(label);
+  };
+
+  addCompatibility(htmlLower.includes("createunityinstance"), 90, "Unity loader");
+  addCompatibility(/\.loader\.js(?:\.(?:unityweb|gz|br))?/i.test(html), 50, "loader.js");
+  addCompatibility(/\.framework\.js(?:\.(?:unityweb|gz|br))?/i.test(html), 35, "framework.js");
+  addCompatibility(/\.wasm(?:\.(?:unityweb|gz|br))?/i.test(html), 30, "wasm");
+  addCompatibility(/\.data(?:\.(?:unityweb|gz|br))?/i.test(html), 20, "data file");
+  addCompatibility(htmlLower.includes("innerframegapiinitialized") || htmlLower.includes("updateuserhtmlframe("), 40, "Google Sites embed");
+  addCompatibility(htmlLower.includes("googleusercontent.com/embeds/"), 20, "embed frame");
+  addCompatibility(htmlLower.includes("<iframe"), 16, "iframe");
+  addCompatibility(htmlLower.includes("<canvas"), 8, "canvas");
+  addCompatibility(externalUrls.length > 0, 10, "hosted asset");
+
+  let hostedOnlineScore = 0;
+  if (!downloadableUrls.length && (externalUrls.length > 0 || htmlLower.includes("<iframe") || htmlLower.includes("<canvas"))) {
+    hostedOnlineScore += 40;
+  }
+  if (isFriendlyHostedDomain(candidate.url) || externalUrls.some((value) => isFriendlyHostedDomain(value))) {
+    hostedOnlineScore += 24;
+  }
+  if (/unblocked|classroom|browser|html5|online/i.test(`${rawTitle} ${description}`)) {
+    hostedOnlineScore += 10;
+  }
+  if (downloadableUrls.length) {
+    hostedOnlineScore -= 55;
+  }
+  if (isPenalizedDomain(candidate.url)) {
+    hostedOnlineScore -= 12;
+    compatibilityScore -= 5;
+  }
+
+  const hostedOnline = hostedOnlineScore >= 20 && !downloadableUrls.length;
+  const displayName = cleanDisplayTitle(candidate.query, rawTitle, candidate.title);
+  const totalScore = candidate.textScore + compatibilityScore + hostedOnlineScore + (candidate.provider === "drive-site" ? 35 : 0);
+  const confidence = Math.max(0, Math.min(100, Math.round(totalScore / 3)));
+
+  const enriched = {
+    ...candidate,
+    sourceUrl: candidate.url,
+    displayName,
+    description,
+    imageUrl,
+    compatibilityScore,
+    compatibilitySignals,
+    hostedOnline,
+    hostedOnlineScore,
+    externalUrls: externalUrls.slice(0, 8),
+    downloadableUrls,
+    totalScore,
+    confidence,
+  };
+  enriched.reason = buildReason(enriched);
+  return enriched;
+}
+
+function makeRejectedCandidate(candidate, reason) {
+  return {
+    ...candidate,
+    sourceUrl: candidate.url,
+    displayName: candidate.title,
+    description: "",
+    imageUrl: "",
+    compatibilityScore: 0,
+    compatibilitySignals: [],
+    hostedOnline: false,
+    hostedOnlineScore: 0,
+    externalUrls: [],
+    downloadableUrls: [],
+    totalScore: candidate.textScore,
+    confidence: Math.max(0, Math.min(100, Math.round(candidate.textScore / 3))),
+    reason,
+  };
+}
+
+async function inspectCandidate(candidate) {
+  try {
+    const html = await fetchText(candidate.url, {}, `Inspect ${candidate.title}`);
+    return analyzeCandidateHtml(candidate, html);
+  } catch (_error) {
+    return makeRejectedCandidate(candidate, "could not inspect candidate");
+  }
+}
+
+function sortCandidates(candidates) {
+  return [...candidates].sort((left, right) => {
+    if (right.totalScore !== left.totalScore) {
+      return right.totalScore - left.totalScore;
+    }
+    return right.textScore - left.textScore;
+  });
+}
+
+function isAcceptableSearchResult(candidate) {
+  if (!candidate || !candidate.hostedOnline) {
+    return false;
+  }
+  if (candidate.provider === "drive-site") {
+    return candidate.textScore >= 60 && candidate.totalScore >= 120;
+  }
+  return candidate.textScore >= 55 && candidate.totalScore >= 115;
+}
+
+async function loadDriveSiteIndex() {
+  if (Date.now() - driveSiteIndexCache.loadedAt < SEARCH_INDEX_TTL_MS && driveSiteIndexCache.items.length) {
+    return driveSiteIndexCache.items;
+  }
+
+  const html = await fetchText(DRIVE_SITE_URL, {}, "Fetch drive-u-7-home-10 index");
+  const anchorPattern = /<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  const results = [];
+  let match = null;
+
+  while ((match = anchorPattern.exec(html))) {
+    const href = cleanExtractedUrl(match[1], DRIVE_SITE_URL);
+    if (!href || !href.includes(DRIVE_SITE_PREFIX)) {
+      continue;
+    }
+    const title = stripTags(match[2]);
+    if (!title || GENERIC_SITE_TITLES.has(normalizeSearchText(title))) {
+      continue;
+    }
+    results.push({
+      provider: "drive-site",
+      title,
+      url: href,
+    });
+  }
+
+  driveSiteIndexCache = {
+    loadedAt: Date.now(),
+    items: uniqueBy(results, (item) => item.url),
+  };
+  return driveSiteIndexCache.items;
+}
+
+async function searchDriveSite(query) {
+  const items = await loadDriveSiteIndex();
+  const ranked = items
+    .map((item) => ({
+      ...item,
+      query,
+      textScore: scoreQueryMatch(query, item.title, item.url),
+    }))
+    .filter((item) => item.textScore >= SEARCHABLE_SITE_MATCH_FLOOR)
+    .sort((left, right) => right.textScore - left.textScore)
+    .slice(0, MAX_SITE_CANDIDATES);
+
+  if (!ranked.length) {
+    return [];
+  }
+
+  const inspected = await Promise.all(ranked.map((candidate) => inspectCandidate(candidate)));
+  return sortCandidates(inspected);
+}
+
+function unwrapDuckDuckGoUrl(rawUrl) {
+  const normalized = rawUrl.startsWith("//") ? `https:${rawUrl}` : rawUrl;
+  try {
+    const parsed = new URL(normalized, DUCKDUCKGO_HTML_URL);
+    const unwrapped = parsed.searchParams.get("uddg");
+    return unwrapped ? decodeURIComponent(unwrapped) : parsed.toString();
+  } catch (_error) {
+    return "";
+  }
+}
+
+async function searchWebFallback(query) {
+  const resultPattern = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  const rawMatches = [];
+
+  for (const searchTerm of [query, `${query} online game unblocked`]) {
+    const searchUrl = new URL(DUCKDUCKGO_HTML_URL);
+    searchUrl.searchParams.set("q", searchTerm);
+    const html = await fetchText(searchUrl.toString(), {}, "Search web fallback");
+    let match = null;
+    resultPattern.lastIndex = 0;
+
+    while ((match = resultPattern.exec(html))) {
+      const resultUrl = unwrapDuckDuckGoUrl(match[1]);
+      const title = stripTags(match[2]);
+      if (!resultUrl || !title || isDownloadUrl(resultUrl) || isIgnoredInfrastructureUrl(resultUrl)) {
+        continue;
+      }
+      rawMatches.push({
+        provider: "web-search",
+        query,
+        title,
+        url: resultUrl,
+        textScore: scoreQueryMatch(query, title, resultUrl),
+      });
+    }
+  }
+
+  const ranked = uniqueBy(rawMatches, (item) => item.url)
+    .filter((item) => item.textScore >= 30 && !isPenalizedDomain(item.url))
+    .sort((left, right) => right.textScore - left.textScore)
+    .slice(0, MAX_WEB_CANDIDATES);
+
+  if (!ranked.length) {
+    return [];
+  }
+
+  const inspected = await Promise.all(ranked.map((candidate) => inspectCandidate(candidate)));
+  return sortCandidates(inspected);
+}
+
+async function findBestSearchResult(query) {
+  const driveCandidates = await searchDriveSite(query);
+  const bestDriveCandidate = driveCandidates[0] || null;
+  if (isAcceptableSearchResult(bestDriveCandidate)) {
+    return {
+      candidate: bestDriveCandidate,
+      alternatives: driveCandidates.slice(1, 4).map((item) => item.displayName || item.title),
+    };
+  }
+
+  const webCandidates = await searchWebFallback(query);
+  const bestWebCandidate = webCandidates[0] || null;
+  const combined = sortCandidates([bestDriveCandidate, bestWebCandidate].filter(Boolean));
+  const bestCandidate = combined[0] || null;
+
+  if (isAcceptableSearchResult(bestCandidate)) {
+    const alternatives = [...driveCandidates.slice(1, 3), ...webCandidates.slice(1, 3)]
+      .filter((item) => item.url !== bestCandidate.url)
+      .slice(0, 4)
+      .map((item) => item.displayName || item.title);
+    return {
+      candidate: bestCandidate,
+      alternatives,
+    };
+  }
+
+  return {
+    candidate: null,
+    alternatives: [...driveCandidates, ...webCandidates]
+      .slice(0, 4)
+      .map((item) => item.displayName || item.title),
+  };
+}
+
+function encodeBase64Utf8(value) {
+  const bytes = new TextEncoder().encode(String(value || ""));
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function decodeBase64Utf8(value) {
+  const normalized = String(value || "").replace(/\s+/g, "");
+  if (!normalized) {
+    return "";
+  }
+  const binary = atob(normalized);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+async function readGitHubTextFile(path, env) {
+  const url = `${githubApiBase(env)}/contents/${encodeGitHubPath(path)}?ref=${encodeURIComponent(env.GITHUB_REF || "main")}`;
+  const payload = await githubJsonOrNull(url, env, {}, "Read report file");
+  if (!payload) {
+    return {
+      sha: "",
+      text: "",
+    };
+  }
+  return {
+    sha: String(payload.sha || ""),
+    text: decodeBase64Utf8(payload.content || ""),
+  };
+}
+
+async function writeGitHubTextFile(path, text, message, env, sha = "") {
+  const url = `${githubApiBase(env)}/contents/${encodeGitHubPath(path)}`;
+  const body = {
+    message,
+    content: encodeBase64Utf8(text),
+    branch: env.GITHUB_REF || "main",
+  };
+  if (sha) {
+    body.sha = sha;
+  }
+
+  await githubJson(
+    url,
+    env,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+    "Write report file",
+  );
+}
+
+function sanitizeReportValue(value) {
+  return collapseWhitespace(String(value || "").replace(/[|\r\n]+/g, " "));
 }
 
 async function findRecentRun(env, submittedAtIso) {
   const runsUrl =
     `${githubApiBase(env)}/actions/workflows/${encodeURIComponent(workflowFile(env))}/runs` +
     `?event=workflow_dispatch&branch=${encodeURIComponent(env.GITHUB_REF || "main")}&per_page=10`;
-
   const submittedAt = Date.parse(submittedAtIso);
+
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const payload = await githubJson(runsUrl, env, {}, "List workflow runs");
     const runs = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : [];
@@ -207,6 +888,36 @@ async function handleConfig(request, env) {
   );
 }
 
+async function handleSearch(request, env) {
+  const url = new URL(request.url);
+  const query = collapseWhitespace(url.searchParams.get("query") || "");
+  if (!query) {
+    return json(
+      { error: "query is required." },
+      {
+        status: 400,
+        headers: corsHeaders(request, env),
+      },
+    );
+  }
+
+  const result = await findBestSearchResult(query);
+  if (!result.candidate) {
+    const alternatives = result.alternatives.length ? ` Closest matches: ${result.alternatives.join(", ")}.` : "";
+    return json(
+      { error: `No compatible hosted result was found for "${query}".${alternatives}` },
+      {
+        status: 404,
+        headers: corsHeaders(request, env),
+      },
+    );
+  }
+
+  return json(summarizeCandidate(result.candidate), {
+    headers: corsHeaders(request, env),
+  });
+}
+
 async function handleDispatch(request, env) {
   validateEnv(env);
   const body = await request.json().catch(() => null);
@@ -226,20 +937,25 @@ async function handleDispatch(request, env) {
 
   const dispatchUrl = `${githubApiBase(env)}/actions/workflows/${encodeURIComponent(workflowFile(env))}/dispatches`;
   const submittedAtIso = new Date().toISOString();
-  await githubNoContent(dispatchUrl, env, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      ref: env.GITHUB_REF || "main",
-      inputs: {
-        source_url: sourceUrl,
-        display_name: displayName,
-        request_id: requestId,
+  await githubNoContent(
+    dispatchUrl,
+    env,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    }),
-  }, "Dispatch workflow");
+      body: JSON.stringify({
+        ref: env.GITHUB_REF || "main",
+        inputs: {
+          source_url: sourceUrl,
+          display_name: displayName,
+          request_id: requestId,
+        },
+      }),
+    },
+    "Dispatch workflow",
+  );
 
   const run = await findRecentRun(env, submittedAtIso);
   return json(
@@ -272,12 +988,7 @@ async function handleStatus(request, env) {
     );
   }
 
-  const run = await githubJson(
-    `${githubApiBase(env)}/actions/runs/${encodeURIComponent(runId)}`,
-    env,
-    {},
-    "Get workflow run",
-  );
+  const run = await githubJson(`${githubApiBase(env)}/actions/runs/${encodeURIComponent(runId)}`, env, {}, "Get workflow run");
   const jobs = await githubJson(
     `${githubApiBase(env)}/actions/runs/${encodeURIComponent(runId)}/jobs?per_page=100`,
     env,
@@ -292,6 +1003,58 @@ async function handleStatus(request, env) {
       ref: env.GITHUB_REF || "main",
       run,
       jobs,
+    },
+    {
+      headers: corsHeaders(request, env),
+    },
+  );
+}
+
+async function handleReport(request, env) {
+  validateEnv(env);
+  const body = await request.json().catch(() => null);
+  const entryId = sanitizeReportValue(body?.entryId);
+  const title = sanitizeReportValue(body?.title);
+  const playPath = sanitizeReportValue(body?.playPath);
+  const sourceUrl = sanitizeReportValue(body?.sourceUrl);
+
+  if (!entryId && !title && !sourceUrl) {
+    return json(
+      { error: "entryId, title, or sourceUrl is required." },
+      {
+        status: 400,
+        headers: corsHeaders(request, env),
+      },
+    );
+  }
+
+  const existing = await readGitHubTextFile(REPORTS_FILE_PATH, env);
+  const lines = [existing.text.trimEnd()];
+  if (!existing.text.trim()) {
+    lines.length = 0;
+    lines.push(REPORT_FILE_HEADER.trimEnd());
+  }
+  lines.push([
+    new Date().toISOString(),
+    `id=${entryId || "-"}`,
+    `title=${title || "-"}`,
+    `play=${playPath || "-"}`,
+    `source=${sourceUrl || "-"}`,
+  ].join(" | "));
+
+  await writeGitHubTextFile(
+    REPORTS_FILE_PATH,
+    `${lines.filter(Boolean).join("\n")}\n`,
+    `Add not-working report for ${title || entryId || "generated game"}`,
+    env,
+    existing.sha,
+  );
+
+  return json(
+    {
+      ok: true,
+      filePath: REPORTS_FILE_PATH,
+      title: title || entryId || "generated game",
     },
     {
       headers: corsHeaders(request, env),
@@ -320,13 +1083,17 @@ export default {
       if (request.method === "GET" && url.pathname === "/config") {
         return await handleConfig(request, env);
       }
-
+      if (request.method === "GET" && url.pathname === "/search") {
+        return await handleSearch(request, env);
+      }
       if (request.method === "POST" && url.pathname === "/dispatch") {
         return await handleDispatch(request, env);
       }
-
       if (request.method === "GET" && url.pathname === "/status") {
         return await handleStatus(request, env);
+      }
+      if (request.method === "POST" && url.pathname === "/report") {
+        return await handleReport(request, env);
       }
 
       return json(

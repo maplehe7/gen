@@ -750,7 +750,7 @@ function progressFromRun(runPayload, jobsPayload) {
   };
 }
 
-function resolveSource(inputValue) {
+function resolveCatalogSource(inputValue) {
   const trimmed = String(inputValue || "").trim();
   if (!trimmed) {
     throw new Error("Enter a game URL or a catalog name.");
@@ -801,6 +801,58 @@ function resolveSource(inputValue) {
   }
 
   throw new Error("Enter a full game URL, a bare domain like example.com, or a name from game_catalog.json.");
+}
+
+async function searchForGameByName(query) {
+  return fetchJson(workerEndpoint(`/search?query=${encodeURIComponent(String(query || "").trim())}`));
+}
+
+async function resolveSource(inputValue) {
+  const trimmed = String(inputValue || "").trim();
+  if (!trimmed) {
+    throw new Error("Enter a game URL or a game name.");
+  }
+
+  const normalizedUrl = coerceInputToUrl(trimmed);
+  if (normalizedUrl) {
+    return {
+      sourceUrl: normalizedUrl,
+      displayName: deriveNameFromUrl(normalizedUrl),
+      sourceMode: "url",
+      matchedName: "",
+      provider: "direct-url",
+      confidence: 100,
+      hostedOnline: true,
+      resolutionReason: "",
+    };
+  }
+
+  try {
+    const result = await searchForGameByName(trimmed);
+    return {
+      sourceUrl: result?.sourceUrl || "",
+      displayName: result?.displayName || trimmed,
+      sourceMode: result?.sourceMode || "search",
+      matchedName: result?.matchedName || result?.displayName || trimmed,
+      provider: result?.provider || "search",
+      confidence: Number(result?.confidence) || 0,
+      hostedOnline: Boolean(result?.hostedOnline),
+      resolutionReason: String(result?.reason || "").trim(),
+    };
+  } catch (searchError) {
+    try {
+      const catalogResolved = resolveCatalogSource(trimmed);
+      return {
+        ...catalogResolved,
+        provider: "catalog",
+        confidence: 80,
+        hostedOnline: true,
+        resolutionReason: "Used local game catalog fallback.",
+      };
+    } catch (_catalogError) {
+      throw searchError;
+    }
+  }
 }
 
 async function fetchJson(url, options = {}) {
@@ -1114,7 +1166,8 @@ async function handleSubmit(event) {
       throw new Error("Cloudflare Worker config could not be loaded.");
     }
 
-    const resolved = resolveSource(sourceInput.value);
+    formMessage.textContent = "Searching for the best hosted match...";
+    const resolved = await resolveSource(sourceInput.value);
     const displayName = resolved.displayName;
     const requestId = createRequestId();
     const draftJob = {
@@ -1144,6 +1197,10 @@ async function handleSubmit(event) {
       error: "",
     };
 
+    if (resolved.resolutionReason) {
+      formMessage.textContent = `Matched ${displayName}: ${resolved.resolutionReason}`;
+    }
+
     const runInfo = await dispatchWorkflow(draftJob);
     const nextJob = {
       ...draftJob,
@@ -1162,7 +1219,9 @@ async function handleSubmit(event) {
     renderJobs();
 
     sourceInput.value = "";
-    formMessage.textContent = `Workflow started for ${displayName}`;
+    formMessage.textContent = resolved.resolutionReason
+      ? `Workflow started for ${displayName}. ${resolved.resolutionReason}`
+      : `Workflow started for ${displayName}`;
     await refreshJobStatuses();
   } catch (error) {
     formMessage.textContent = error.message;

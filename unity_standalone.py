@@ -6697,6 +6697,11 @@ def generate_index_html(
   <script>
     (function () {{
       const PRODUCT_NAME = {product_name_js};
+      const STORAGE_NAMESPACE =
+        typeof window.__unityStandaloneStorageNamespace === "string" &&
+        window.__unityStandaloneStorageNamespace
+          ? window.__unityStandaloneStorageNamespace
+          : PRODUCT_NAME || "global";
       const BUILD_KIND = {build_kind_js};
       const BUILD_DIR = "Build";
       const LOADER_FILE = {loader_name_js};
@@ -7496,7 +7501,14 @@ def generate_index_html(
       }}
 
       function getUnityCacheVersionStorageKey() {{
-        return "__unity_standalone_ls__:unity-cache-version:" + STORAGE_NAMESPACE;
+        const namespace =
+          typeof STORAGE_NAMESPACE === "string" && STORAGE_NAMESPACE
+            ? STORAGE_NAMESPACE
+            : typeof window.__unityStandaloneStorageNamespace === "string" &&
+              window.__unityStandaloneStorageNamespace
+              ? window.__unityStandaloneStorageNamespace
+              : PRODUCT_NAME || "global";
+        return "__unity_standalone_ls__:unity-cache-version:" + namespace;
       }}
 
       function canPersistUnityCacheVersion() {{

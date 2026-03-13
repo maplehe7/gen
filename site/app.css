@@ -150,6 +150,7 @@ body {
 }
 
 .gallery-card {
+  display: grid;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -179,6 +180,26 @@ body {
   padding: 10px;
   font-size: 0.95rem;
   word-break: break-word;
+}
+
+.report-button {
+  min-height: 38px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: #d83b32;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.report-button:hover {
+  background: #b92d26;
+}
+
+.report-button:disabled {
+  opacity: 0.8;
+  cursor: default;
 }
 
 .job-card {

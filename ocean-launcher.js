@@ -523,9 +523,21 @@
   const loaderStepEpoch = Date.now();
   let lastLoggedStep = "";
   let lastProgressBucket = -1;
+  function canonicalizeLocalPageUrl(value) {
+    try {
+      const parsed = new URL(value || window.location.href);
+      ["_", "ts", "v"].forEach(function (key) {
+        parsed.searchParams.delete(key);
+      });
+      return parsed.toString();
+    } catch (err) {
+      return String(value || window.location.href || "");
+    }
+  }
+  const LAUNCHER_PAGE_URL = canonicalizeLocalPageUrl(window.location.href);
   const requestedEmbedVariant = (function () {
     try {
-      const rawValue = new URL(window.location.href).searchParams.get("embedVariant") || "";
+      const rawValue = new URL(LAUNCHER_PAGE_URL).searchParams.get("embedVariant") || "";
       const normalized = rawValue.trim().toLowerCase();
       return normalized === "alt" ? "alt" : normalized === "primary" ? "primary" : "";
     } catch (err) {
@@ -534,7 +546,7 @@
   })();
   const requestedLaunchMode = (function () {
     try {
-      return new URL(window.location.href).searchParams.get("launchMode") || "";
+      return new URL(LAUNCHER_PAGE_URL).searchParams.get("launchMode") || "";
     } catch (err) {
       return "";
     }
@@ -568,7 +580,7 @@
       return "";
     }
     try {
-      return new URL(value, window.location.href).host || "";
+      return new URL(value, LAUNCHER_PAGE_URL).host || "";
     } catch (err) {
       return "";
     }
@@ -680,7 +692,7 @@
           " proto=" +
           window.location.protocol.replace(":", "") +
           " targetHost=" +
-          safeUrlHost(remoteUrl || embedUrl || window.location.href)
+          safeUrlHost(remoteUrl || embedUrl || LAUNCHER_PAGE_URL)
         );
       case "Launch requested":
         return "[launch] user-activation accepted target=" + launcherTargetKind();
@@ -732,7 +744,7 @@
         return true;
       }
       try {
-        return new URL(activeUrl, window.location.href).origin === window.location.origin;
+        return new URL(activeUrl, LAUNCHER_PAGE_URL).origin === window.location.origin;
       } catch (err) {
         return false;
       }
@@ -1145,7 +1157,7 @@
   }
 
   function buildLaunchUrl(mode) {
-    const targetUrl = new URL(window.location.href);
+    const targetUrl = new URL(LAUNCHER_PAGE_URL);
     targetUrl.searchParams.set("autostart", "1");
     targetUrl.searchParams.set("launchMode", mode);
     if (hasAlternateEmbedVariant()) {
@@ -1293,7 +1305,7 @@
   }
 
   function consumeAutoStartFlag() {
-    const currentUrl = new URL(window.location.href);
+    const currentUrl = new URL(LAUNCHER_PAGE_URL);
     const shouldAutoStart = currentUrl.searchParams.get("autostart") === "1";
     if (shouldAutoStart) {
       currentUrl.searchParams.delete("autostart");
@@ -1423,7 +1435,7 @@
     return new Promise(function (resolve, reject) {
       let settled = false;
       const frame = document.createElement("iframe");
-      const resolvedUrl = new URL(selectedEmbedUrl, window.location.href).toString();
+      const resolvedUrl = new URL(selectedEmbedUrl, LAUNCHER_PAGE_URL).toString();
       frame.className = "ocean-game-embed";
       frame.src = resolvedUrl;
       frame.title = embedTitle;

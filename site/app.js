@@ -910,7 +910,10 @@ function resolveCatalogSource(inputValue) {
 }
 
 async function searchForGameByName(query) {
-  return fetchJson(workerEndpoint(`/search?query=${encodeURIComponent(String(query || "").trim())}`));
+  const searchUrl = new URL(workerEndpoint("/search"));
+  searchUrl.searchParams.set("query", String(query || "").trim());
+  searchUrl.searchParams.set("_", String(Date.now()));
+  return fetchJson(searchUrl.toString());
 }
 
 async function resolveSource(inputValue) {
@@ -962,7 +965,15 @@ async function resolveSource(inputValue) {
 }
 
 async function fetchJson(url, options = {}) {
-  const response = await fetch(url, options);
+  const response = await fetch(url, {
+    cache: "no-store",
+    ...options,
+    headers: {
+      "Cache-Control": "no-store",
+      Pragma: "no-cache",
+      ...(options.headers || {}),
+    },
+  });
   let payload = null;
   if (response.status !== 204) {
     payload = await response.json().catch(() => null);

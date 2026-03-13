@@ -5486,7 +5486,20 @@ def generate_index_html(
       const FALSE = "false";
       const EMPTY = "";
       const ZERO = "0";
-      const LOCAL_PAGE_URL = window.__unityStandaloneLocalPageUrl || window.location.href;
+      function canonicalizeLocalPageUrl(value) {{
+        try {{
+          const parsed = new URL(value || window.location.href);
+          ["_", "ts", "v"].forEach(function (key) {{
+            parsed.searchParams.delete(key);
+          }});
+          return parsed.toString();
+        }} catch (err) {{
+          return String(value || window.location.href || "");
+        }}
+      }}
+      const LOCAL_PAGE_URL = canonicalizeLocalPageUrl(
+        window.__unityStandaloneLocalPageUrl || window.location.href
+      );
       const SOURCE_PAGE_URL = {source_page_url_js};
       const ENABLE_SOURCE_URL_SPOOF = {enable_source_url_spoof_js};
       const STORAGE_NAMESPACE =
@@ -6717,8 +6730,20 @@ def generate_index_html(
       const BUILD_CACHE_BUSTER = {asset_cache_buster_js};
       const ENTRY_PAGE_CONFIG = {page_config_js};
       const AUXILIARY_ASSET_REWRITES = {auxiliary_asset_rewrites_js};
-      const LOCAL_PAGE_URL =
-        window.__unityStandaloneLocalPageUrl || window.location.href;
+      function canonicalizeLocalPageUrl(value) {{
+        try {{
+          const parsed = new URL(value || window.location.href);
+          ["_", "ts", "v"].forEach(function (key) {{
+            parsed.searchParams.delete(key);
+          }});
+          return parsed.toString();
+        }} catch (err) {{
+          return String(value || window.location.href || "");
+        }}
+      }}
+      const LOCAL_PAGE_URL = canonicalizeLocalPageUrl(
+        window.__unityStandaloneLocalPageUrl || window.location.href
+      );
       const LOCAL_HOST_NAME = (function () {{
         try {{
           return new URL(LOCAL_PAGE_URL).hostname || "";

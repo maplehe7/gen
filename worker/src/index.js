@@ -1,5 +1,7 @@
 const JSON_HEADERS = {
   "content-type": "application/json; charset=UTF-8",
+  "cache-control": "no-store, max-age=0",
+  pragma: "no-cache",
 };
 
 const PREFERRED_SEARCH_SITES = [

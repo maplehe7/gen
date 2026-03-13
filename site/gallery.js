@@ -89,7 +89,10 @@ function forgetPendingDelete(entry) {
 }
 
 function playUrlForPath(playPath) {
-  return new URL(playPath, window.location.href).toString();
+  const url = new URL(playPath, window.location.href);
+  url.search = "";
+  url.hash = "";
+  return url.toString();
 }
 
 function thumbnailUrlForPath(thumbnailPath) {

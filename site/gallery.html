@@ -17,6 +17,12 @@
       </main>
     </div>
 
+    <button id="admin-toggle" class="admin-toggle" type="button" aria-label="Admin"></button>
+    <form id="admin-panel" class="admin-panel" hidden>
+      <input id="admin-code" type="password" autocomplete="off" placeholder="Admin code" />
+      <button class="job-link" type="submit">Save</button>
+    </form>
+
     <template id="gallery-template">
       <article class="gallery-card">
         <a class="gallery-link" target="_blank" rel="noreferrer">
@@ -24,6 +30,7 @@
           <h3 class="gallery-title"></h3>
         </a>
         <button class="report-button" type="button">Report Not Working</button>
+        <button class="delete-button" type="button" hidden>Delete</button>
       </article>
     </template>
 

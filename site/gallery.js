@@ -1,7 +1,12 @@
 const PLACEHOLDER_WORKER_URL = "PASTE_CLOUDFLARE_WORKER_URL_HERE";
+const ADMIN_KEY = "standalone-forge-admin";
 const galleryContainer = document.getElementById("gallery");
 const galleryTemplate = document.getElementById("gallery-template");
+const adminToggle = document.getElementById("admin-toggle");
+const adminPanel = document.getElementById("admin-panel");
+const adminCodeInput = document.getElementById("admin-code");
 const workerUrl = String(window.STANDALONE_FORGE_CONFIG?.workerUrl || "").trim().replace(/\/+$/, "");
+let galleryEntries = [];
 
 function playUrlForPath(playPath) {
   return new URL(playPath, window.location.href).toString();
@@ -13,6 +18,24 @@ function thumbnailUrlForPath(thumbnailPath) {
 
 function workerConfigured() {
   return Boolean(workerUrl && workerUrl !== PLACEHOLDER_WORKER_URL);
+}
+
+function adminEnabled() {
+  return window.localStorage.getItem(ADMIN_KEY) === "true";
+}
+
+function setAdminEnabled(enabled) {
+  window.localStorage.setItem(ADMIN_KEY, enabled ? "true" : "false");
+}
+
+function setAdminPanelVisible(visible) {
+  if (!adminPanel) {
+    return;
+  }
+  adminPanel.hidden = !visible;
+  if (visible) {
+    adminCodeInput?.focus();
+  }
 }
 
 async function fetchJson(url, options = {}) {
@@ -76,13 +99,42 @@ async function reportGame(entry, button) {
   }
 }
 
+async function deleteGame(entry, button) {
+  if (!workerConfigured()) {
+    throw new Error("Worker URL is not configured.");
+  }
+
+  button.disabled = true;
+  button.textContent = "Deleting...";
+
+  try {
+    await fetchJson(`${workerUrl}/delete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        entryId: entry.id || "",
+        requestId: `${entry.id || "delete"}-${Date.now()}`,
+      }),
+    });
+    galleryEntries = galleryEntries.filter((item) => String(item?.id || "") !== String(entry.id || ""));
+    renderGallery(galleryEntries);
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = "Delete";
+    window.alert(error.message);
+  }
+}
+
 function renderGallery(entries) {
   if (!galleryContainer || !galleryTemplate) {
     return;
   }
 
+  galleryEntries = Array.isArray(entries) ? [...entries] : [];
   galleryContainer.innerHTML = "";
-  if (!entries.length) {
+  if (!galleryEntries.length) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
     empty.textContent = "No generated games yet.";
@@ -90,13 +142,14 @@ function renderGallery(entries) {
     return;
   }
 
-  entries.forEach((entry) => {
+  galleryEntries.forEach((entry) => {
     const fragment = galleryTemplate.content.cloneNode(true);
     const card = fragment.querySelector(".gallery-card");
     const link = fragment.querySelector(".gallery-link");
     const thumb = fragment.querySelector(".gallery-thumb");
     const title = fragment.querySelector(".gallery-title");
     const reportButton = fragment.querySelector(".report-button");
+    const deleteButton = fragment.querySelector(".delete-button");
 
     card.id = `game-${entry.id || ""}`;
     link.href = playUrlForPath(entry.play_path || entry.folder || "");
@@ -112,13 +165,42 @@ function renderGallery(entries) {
       reportGame(entry, reportButton);
     });
 
+    if (deleteButton) {
+      deleteButton.hidden = !adminEnabled();
+      deleteButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        deleteGame(entry, deleteButton);
+      });
+    }
+
     galleryContainer.append(fragment);
   });
 
   scrollToSelectedCard();
 }
 
+function handleAdminSubmit(event) {
+  event.preventDefault();
+  const code = String(adminCodeInput?.value || "").trim().toLowerCase();
+  if (code !== "admin") {
+    window.alert("Wrong admin code.");
+    return;
+  }
+  setAdminEnabled(true);
+  if (adminCodeInput) {
+    adminCodeInput.value = "";
+  }
+  setAdminPanelVisible(false);
+  renderGallery(galleryEntries);
+}
+
 async function initGallery() {
+  adminToggle?.addEventListener("click", () => {
+    setAdminPanelVisible(adminPanel?.hidden ?? true);
+  });
+  adminPanel?.addEventListener("submit", handleAdminSubmit);
+
   try {
     renderGallery(await fetchPublishedGames());
   } catch (_error) {

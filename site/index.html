@@ -10,15 +10,36 @@
     <div class="page-shell">
       <main class="stack">
         <form id="export-form" class="export-form panel">
-          <input
-            id="source"
-            name="source"
-            type="text"
-            placeholder="Game URL or name"
-            autocomplete="off"
-            required
-          />
+          <div class="source-input-wrap">
+            <input
+              id="source"
+              name="source"
+              type="text"
+              placeholder="Game URL or name"
+              autocomplete="off"
+              required
+            />
+            <button
+              id="bulk-toggle"
+              class="bulk-toggle"
+              type="button"
+              aria-expanded="false"
+              aria-controls="bulk-panel"
+              title="Add multiple games"
+            >
+              ▼
+            </button>
+          </div>
           <button id="submit-button" class="submit-button" type="submit">Generate</button>
+          <div id="bulk-panel" class="bulk-panel" hidden>
+            <textarea
+              id="source-list"
+              name="source-list"
+              rows="6"
+              placeholder="One game name or URL per line"
+              spellcheck="false"
+            ></textarea>
+          </div>
         </form>
 
         <div class="stack compact-stack">

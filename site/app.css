@@ -67,6 +67,13 @@ body {
   align-items: center;
 }
 
+.source-input-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  min-width: 0;
+}
+
 .export-form input {
   width: 100%;
   min-width: 0;
@@ -79,13 +86,35 @@ body {
   font: inherit;
 }
 
+.bulk-panel {
+  grid-column: 1 / -1;
+}
+
+.bulk-panel textarea {
+  width: 100%;
+  min-height: 132px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
 .export-form input:focus {
   outline: 2px solid rgba(31, 111, 235, 0.18);
   border-color: var(--accent);
 }
 
+.bulk-panel textarea:focus {
+  outline: 2px solid rgba(31, 111, 235, 0.18);
+  border-color: var(--accent);
+}
+
 .submit-button,
-.job-link {
+.job-link,
+.bulk-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -98,6 +127,13 @@ body {
   font: inherit;
   text-decoration: none;
   cursor: pointer;
+}
+
+.bulk-toggle {
+  min-width: 40px;
+  padding: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .submit-button {
@@ -209,6 +245,75 @@ body {
   cursor: default;
 }
 
+.delete-button {
+  min-height: 38px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: #1a2530;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.delete-button:hover {
+  background: #0f1820;
+}
+
+.delete-button:disabled {
+  opacity: 0.75;
+  cursor: default;
+}
+
+.admin-toggle {
+  position: fixed;
+  left: 8px;
+  bottom: 8px;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+}
+
+.admin-toggle:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.admin-panel {
+  position: fixed;
+  left: 16px;
+  bottom: 28px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  width: min(320px, calc(100vw - 32px));
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  backdrop-filter: blur(6px);
+}
+
+.admin-panel input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+
+.admin-panel input:focus {
+  outline: 2px solid rgba(31, 111, 235, 0.18);
+  border-color: var(--accent);
+}
+
 .job-card {
   display: grid;
   gap: 10px;
@@ -289,6 +394,10 @@ body {
 
   .export-form {
     grid-template-columns: 1fr;
+  }
+
+  .source-input-wrap {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .job-topline,

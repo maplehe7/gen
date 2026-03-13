@@ -6,6 +6,7 @@ const DRIVE_SITE_URL = "https://sites.google.com/view/drive-u-7-home-10/";
 const DRIVE_SITE_PREFIX = "/view/drive-u-7-home-10/";
 const DUCKDUCKGO_HTML_URL = "https://html.duckduckgo.com/html/";
 const REPORTS_FILE_PATH = "reports/not-working.txt";
+const PUBLISHED_GAMES_FILE_PATH = "published_games.json";
 const SEARCH_INDEX_TTL_MS = 30 * 60 * 1000;
 const MAX_SITE_CANDIDATES = 6;
 const MAX_WEB_CANDIDATES = 6;
@@ -41,9 +42,12 @@ const PENALIZED_HOSTS = [
   "fandom.com",
   "itch.io",
   "poki.com",
+  "softonic.com",
   "reddit.com",
+  "store.epicgames.com",
   "steamcommunity.com",
   "store.steampowered.com",
+  "uptodown.com",
   "wikipedia.org",
   "y8.com",
   "youtube.com",
@@ -61,6 +65,12 @@ const WRAPPER_HOSTS = [
   "googleusercontent.com",
   "script.google.com",
   "sites.google.com",
+];
+const MEDIA_ONLY_HOSTS = [
+  "youtube.com",
+  "ytimg.com",
+  "youtu.be",
+  "vimeo.com",
 ];
 const GENERIC_SITE_TITLES = new Set(["classroom g+", "home", "search this site", "unblocked games"]);
 
@@ -141,6 +151,10 @@ function workerHeaders() {
 
 function workflowFile(env) {
   return String(env.GITHUB_WORKFLOW_FILE || "build-game.yml").trim() || "build-game.yml";
+}
+
+function pagesStateRef(env) {
+  return String(env.GITHUB_PAGES_REF || "pages-state").trim() || "pages-state";
 }
 
 function githubApiBase(env) {
@@ -437,6 +451,20 @@ function brandedHostScore(query, value) {
   return score;
 }
 
+function genericHostSuffixPenalty(query, value) {
+  const compactQuery = compactSearchText(query);
+  const hostStem = compactHostname(domainFromUrl(value));
+  if (!compactQuery || !hostStem || hostStem === compactQuery || !hostStem.includes(compactQuery)) {
+    return 0;
+  }
+
+  const suffix = hostStem.replace(compactQuery, "");
+  if (/^(online|lite|unblocked|free|play|playnow|game|games|app|download)+$/i.test(suffix)) {
+    return 48;
+  }
+  return 0;
+}
+
 function hasSuspiciousWrappedAsset(urls, html = "") {
   const haystack = `${urls.join(" ")} ${html}`.toLowerCase();
   return (
@@ -445,6 +473,31 @@ function hasSuspiciousWrappedAsset(urls, html = "") {
     /cdn\.jsdelivr\.net\/gh\//i.test(haystack) ||
     /preview\.editmysite\.com/i.test(haystack) ||
     /script\.google\.com\/macros\/s\//i.test(haystack)
+  );
+}
+
+function isMediaOnlyEmbedUrl(value) {
+  return matchesHost(domainFromUrl(value), MEDIA_ONLY_HOSTS);
+}
+
+function hasOnlyMediaEmbeds(urls) {
+  return Array.isArray(urls) && urls.length > 0 && urls.every((value) => isMediaOnlyEmbedUrl(value));
+}
+
+function looksLikeSoftwarePortal(candidate, rawTitle, description, html = "") {
+  const haystack = `${candidate?.url || ""} ${rawTitle} ${description} ${html}`.toLowerCase();
+  return (
+    /softonic|uptodown|filehippo|download latest version|download for windows|download for android|download on pc|windows 10|windows 11|app store|google play|microsoft store/i.test(
+      haystack,
+    ) ||
+    /free software download|latest version|license|security status/i.test(haystack)
+  );
+}
+
+function looksLikeAccessBlockedPage(rawTitle, description, html = "") {
+  const haystack = `${rawTitle} ${description} ${html}`.toLowerCase();
+  return /access denied|forbidden|you have been blocked|blocked by|disable ad blocker|ad blocker detected|temporarily unavailable/i.test(
+    haystack,
   );
 }
 
@@ -628,7 +681,11 @@ function analyzeCandidateHtml(candidate, html) {
     0,
   );
   const brandMatchScore = primaryBrandMatchScore + Math.round(externalBrandMatchScore * 0.35);
+  const genericSuffixPenalty = genericHostSuffixPenalty(candidate.query, candidate.url);
   const suspiciousWrapperAssets = hasSuspiciousWrappedAsset(externalUrls, htmlLower);
+  const softwarePortal = looksLikeSoftwarePortal(candidate, rawTitle, description, htmlLower);
+  const blockedPage = looksLikeAccessBlockedPage(rawTitle, description, htmlLower);
+  const mediaOnlyEmbeds = hasOnlyMediaEmbeds(externalUrls);
   const compatibilitySignals = [];
   let compatibilityScore = 0;
 
@@ -667,6 +724,9 @@ function analyzeCandidateHtml(candidate, html) {
   } else if (brandMatchScore >= 45) {
     hostedOnlineScore += 12;
   }
+  if (genericSuffixPenalty > 0) {
+    hostedOnlineScore -= genericSuffixPenalty;
+  }
   if (downloadableUrls.length) {
     hostedOnlineScore -= 55;
   }
@@ -685,6 +745,18 @@ function analyzeCandidateHtml(candidate, html) {
   if (suspiciousWrapperAssets) {
     hostedOnlineScore -= 30;
     compatibilityScore -= 45;
+  }
+  if (softwarePortal) {
+    hostedOnlineScore -= 80;
+    compatibilityScore -= 35;
+  }
+  if (blockedPage) {
+    hostedOnlineScore -= 70;
+    compatibilityScore -= 25;
+  }
+  if (mediaOnlyEmbeds) {
+    hostedOnlineScore -= 55;
+    compatibilityScore -= 30;
   }
   if (isPenalizedDomain(candidate.url)) {
     hostedOnlineScore -= 12;
@@ -713,6 +785,9 @@ function analyzeCandidateHtml(candidate, html) {
     compatibilitySignals,
     hostedOnline,
     hostedOnlineScore,
+    blockedPage,
+    mediaOnlyEmbeds,
+    softwarePortal,
     externalUrls: externalUrls.slice(0, 8),
     downloadableUrls,
     totalScore,
@@ -765,6 +840,9 @@ function isAcceptableSearchResult(candidate) {
   if (!candidate || !candidate.hostedOnline) {
     return false;
   }
+  if (candidate.softwarePortal || candidate.blockedPage || candidate.mediaOnlyEmbeds) {
+    return false;
+  }
   if (candidate.playableSignalScore < 20) {
     return false;
   }
@@ -778,11 +856,13 @@ function isAcceptableSearchResult(candidate) {
 }
 
 function isFallbackSearchResult(candidate) {
-  if (!candidate) {
+  if (!candidate || !candidate.hostedOnline) {
+    return false;
+  }
+  if (candidate.softwarePortal || candidate.blockedPage || candidate.mediaOnlyEmbeds) {
     return false;
   }
   if (
-    candidate.hostedOnline &&
     candidate.playableSignalScore >= 20 &&
     candidate.textScore >= 40 &&
     (candidate.brandMatchScore >= 45 || candidate.compatibilityScore >= 35)
@@ -902,20 +982,11 @@ async function searchWebFallback(query) {
 
 async function findBestSearchResult(query) {
   const driveCandidates = await searchDriveSite(query);
-  const bestDriveCandidate = driveCandidates[0] || null;
-  if (isAcceptableSearchResult(bestDriveCandidate)) {
-    return {
-      candidate: bestDriveCandidate,
-      alternatives: driveCandidates.slice(1, 4).map((item) => item.displayName || item.title),
-    };
-  }
-
   const webCandidates = await searchWebFallback(query);
-  const bestWebCandidate = webCandidates[0] || null;
-  const combined = sortCandidates([bestDriveCandidate, bestWebCandidate].filter(Boolean));
-  const bestCandidate = combined[0] || null;
+  const combined = sortCandidates([...driveCandidates, ...webCandidates]);
+  const bestCandidate = combined.find((candidate) => isAcceptableSearchResult(candidate)) || null;
 
-  if (isAcceptableSearchResult(bestCandidate)) {
+  if (bestCandidate) {
     const alternatives = [...driveCandidates.slice(1, 3), ...webCandidates.slice(1, 3)]
       .filter((item) => item.url !== bestCandidate.url)
       .slice(0, 4)
@@ -926,16 +997,17 @@ async function findBestSearchResult(query) {
     };
   }
 
-  if (isFallbackSearchResult(bestCandidate)) {
+  const fallbackCandidate = combined.find((candidate) => isFallbackSearchResult(candidate)) || null;
+  if (fallbackCandidate) {
     return {
       candidate: {
-        ...bestCandidate,
-        reason: bestCandidate.reason
-          ? `${bestCandidate.reason} | best available match`
+        ...fallbackCandidate,
+        reason: fallbackCandidate.reason
+          ? `${fallbackCandidate.reason} | best available match`
           : "best available match",
       },
       alternatives: [...driveCandidates.slice(1, 3), ...webCandidates.slice(1, 3)]
-        .filter((item) => item.url !== bestCandidate.url)
+        .filter((item) => item.url !== fallbackCandidate.url)
         .slice(0, 4)
         .map((item) => item.displayName || item.title),
     };
@@ -971,9 +1043,9 @@ function decodeBase64Utf8(value) {
   return new TextDecoder().decode(bytes);
 }
 
-async function readGitHubTextFile(path, env) {
-  const url = `${githubApiBase(env)}/contents/${encodeGitHubPath(path)}?ref=${encodeURIComponent(env.GITHUB_REF || "main")}`;
-  const payload = await githubJsonOrNull(url, env, {}, "Read report file");
+async function readGitHubTextFile(path, env, branch = env.GITHUB_REF || "main", label = "Read text file") {
+  const url = `${githubApiBase(env)}/contents/${encodeGitHubPath(path)}?ref=${encodeURIComponent(branch)}`;
+  const payload = await githubJsonOrNull(url, env, {}, label);
   if (!payload) {
     return {
       sha: "",
@@ -986,12 +1058,12 @@ async function readGitHubTextFile(path, env) {
   };
 }
 
-async function writeGitHubTextFile(path, text, message, env, sha = "") {
+async function writeGitHubTextFile(path, text, message, env, sha = "", branch = env.GITHUB_REF || "main", label = "Write text file") {
   const url = `${githubApiBase(env)}/contents/${encodeGitHubPath(path)}`;
   const body = {
     message,
     content: encodeBase64Utf8(text),
-    branch: env.GITHUB_REF || "main",
+    branch,
   };
   if (sha) {
     body.sha = sha;
@@ -1007,7 +1079,7 @@ async function writeGitHubTextFile(path, text, message, env, sha = "") {
       },
       body: JSON.stringify(body),
     },
-    "Write report file",
+    label,
   );
 }
 
@@ -1050,6 +1122,32 @@ async function findRecentRun(env, submittedAtIso, requestId = "") {
   }
 
   throw new Error("Workflow was dispatched, but no matching run was found yet.");
+}
+
+async function dispatchWorkflowRun(env, sourceUrl, displayName, requestId) {
+  const dispatchUrl = `${githubApiBase(env)}/actions/workflows/${encodeURIComponent(workflowFile(env))}/dispatches`;
+  const submittedAtIso = new Date().toISOString();
+  await githubNoContent(
+    dispatchUrl,
+    env,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ref: env.GITHUB_REF || "main",
+        inputs: {
+          source_url: sourceUrl,
+          display_name: displayName,
+          request_id: requestId,
+        },
+      }),
+    },
+    "Dispatch workflow",
+  );
+
+  return findRecentRun(env, submittedAtIso, requestId);
 }
 
 async function handleConfig(request, env) {
@@ -1114,29 +1212,7 @@ async function handleDispatch(request, env) {
     );
   }
 
-  const dispatchUrl = `${githubApiBase(env)}/actions/workflows/${encodeURIComponent(workflowFile(env))}/dispatches`;
-  const submittedAtIso = new Date().toISOString();
-  await githubNoContent(
-    dispatchUrl,
-    env,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        ref: env.GITHUB_REF || "main",
-        inputs: {
-          source_url: sourceUrl,
-          display_name: displayName,
-          request_id: requestId,
-        },
-      }),
-    },
-    "Dispatch workflow",
-  );
-
-  const run = await findRecentRun(env, submittedAtIso, requestId);
+  const run = await dispatchWorkflowRun(env, sourceUrl, displayName, requestId);
   return json(
     {
       owner: env.GITHUB_OWNER,
@@ -1146,6 +1222,81 @@ async function handleDispatch(request, env) {
       runUrl: run.url,
       htmlUrl: run.html_url,
       jobsUrl: run.jobs_url,
+    },
+    {
+      headers: corsHeaders(request, env),
+    },
+  );
+}
+
+async function handleDelete(request, env) {
+  validateEnv(env);
+  const body = await request.json().catch(() => null);
+  const entryId = sanitizeReportValue(body?.entryId);
+  const requestId = sanitizeReportValue(body?.requestId) || `delete-${entryId}-${Date.now()}`;
+  if (!entryId) {
+    return json(
+      { error: "entryId is required." },
+      {
+        status: 400,
+        headers: corsHeaders(request, env),
+      },
+    );
+  }
+
+  const branch = pagesStateRef(env);
+  const existing = await readGitHubTextFile(
+    PUBLISHED_GAMES_FILE_PATH,
+    env,
+    branch,
+    "Read published games catalog",
+  );
+  if (!existing.text.trim()) {
+    return json(
+      { error: "Published games catalog was not found on the Pages state branch." },
+      {
+        status: 404,
+        headers: corsHeaders(request, env),
+      },
+    );
+  }
+
+  let catalog = {};
+  try {
+    catalog = JSON.parse(existing.text);
+  } catch (_error) {
+    throw new Error("Published games catalog is invalid JSON.");
+  }
+
+  const games = Array.isArray(catalog?.games) ? catalog.games : [];
+  const nextGames = games.filter((game) => String(game?.id || "").trim() !== entryId);
+  if (nextGames.length === games.length) {
+    return json(
+      { error: `Game ${entryId} was not found.` },
+      {
+        status: 404,
+        headers: corsHeaders(request, env),
+      },
+    );
+  }
+
+  await writeGitHubTextFile(
+    PUBLISHED_GAMES_FILE_PATH,
+    `${JSON.stringify({ generated_at: new Date().toISOString(), games: nextGames }, null, 2)}\n`,
+    `Remove ${entryId} from published games`,
+    env,
+    existing.sha,
+    branch,
+    "Write published games catalog",
+  );
+
+  const run = await dispatchWorkflowRun(env, "", "", requestId);
+  return json(
+    {
+      ok: true,
+      entryId,
+      runId: run.id,
+      htmlUrl: run.html_url,
     },
     {
       headers: corsHeaders(request, env),
@@ -1227,6 +1378,8 @@ async function handleReport(request, env) {
     `Add not-working report for ${title || entryId || "generated game"}`,
     env,
     existing.sha,
+    env.GITHUB_REF || "main",
+    "Write report file",
   );
 
   return json(
@@ -1273,6 +1426,9 @@ export default {
       }
       if (request.method === "POST" && url.pathname === "/report") {
         return await handleReport(request, env);
+      }
+      if (request.method === "POST" && url.pathname === "/delete") {
+        return await handleDelete(request, env);
       }
 
       return json(

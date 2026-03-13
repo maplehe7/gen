@@ -16,7 +16,7 @@ on:
     inputs:
       source_url:
         description: "Game URL to export"
-        required: true
+        required: false
         type: string
       display_name:
         description: "Display name for the exported game"

@@ -45,6 +45,9 @@ const DEFAULT_WORKFLOW_DURATION_SECONDS = DEFAULT_WORKFLOW_STEP_ORDER.reduce(
 
 const form = document.getElementById("export-form");
 const sourceInput = document.getElementById("source");
+const bulkToggleButton = document.getElementById("bulk-toggle");
+const bulkPanel = document.getElementById("bulk-panel");
+const sourceListInput = document.getElementById("source-list");
 const repoTarget = document.getElementById("repo-target");
 const configWarning = document.getElementById("config-warning");
 const submitButton = document.getElementById("submit-button");
@@ -147,6 +150,76 @@ function createRequestId() {
     return window.crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function bulkModeEnabled() {
+  return Boolean(bulkPanel && !bulkPanel.hidden);
+}
+
+function setBulkMode(enabled) {
+  if (!bulkPanel || !bulkToggleButton || !sourceInput) {
+    return;
+  }
+
+  bulkPanel.hidden = !enabled;
+  bulkToggleButton.setAttribute("aria-expanded", enabled ? "true" : "false");
+  sourceInput.required = !enabled;
+
+  if (enabled) {
+    sourceListInput?.focus();
+  } else {
+    sourceInput.focus();
+  }
+}
+
+function collectRequestedSources() {
+  const values = [];
+  const primaryValue = String(sourceInput?.value || "").trim();
+  if (primaryValue) {
+    values.push(primaryValue);
+  }
+
+  if (bulkModeEnabled()) {
+    String(sourceListInput?.value || "")
+      .split(/\r?\n/g)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .forEach((item) => values.push(item));
+  }
+
+  const seen = new Set();
+  return values.filter((value) => {
+    const key = value.toLowerCase();
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function resetSourceInputs() {
+  if (sourceInput) {
+    sourceInput.value = "";
+  }
+  if (sourceListInput) {
+    sourceListInput.value = "";
+  }
+}
+
+function setFormBusy(isBusy) {
+  if (submitButton) {
+    submitButton.disabled = isBusy;
+  }
+  if (bulkToggleButton) {
+    bulkToggleButton.disabled = isBusy;
+  }
+  if (sourceInput) {
+    sourceInput.disabled = isBusy;
+  }
+  if (sourceListInput) {
+    sourceListInput.disabled = isBusy;
+  }
 }
 
 function visibleProgressPercent(job, nowMs = Date.now()) {
@@ -1192,25 +1265,17 @@ async function refreshJobStatuses() {
   renderPublished();
 }
 
-async function handleSubmit(event) {
-  event.preventDefault();
-  formMessage.textContent = "";
-  submitButton.disabled = true;
+async function queueSingleSource(rawInput, index, total) {
+  const inputValue = String(rawInput || "").trim();
+  const progressLabel = total > 1 ? `${index + 1} of ${total}` : "";
   let pendingRequestId = "";
 
-  try {
-    if (!workerConfigured(appConfig.workerUrl)) {
-      throw new Error("Paste your Cloudflare Worker URL into site/config.js first.");
-    }
-    if (!appConfig.owner || !appConfig.repo) {
-      await loadWorkerConfig();
-    }
-    if (!appConfig.owner || !appConfig.repo) {
-      throw new Error("Cloudflare Worker config could not be loaded.");
-    }
+  formMessage.textContent = progressLabel
+    ? `Searching ${progressLabel}: ${inputValue}`
+    : "Searching for the best hosted match...";
 
-    formMessage.textContent = "Searching for the best hosted match...";
-    const resolved = await resolveSource(sourceInput.value);
+  try {
+    const resolved = await resolveSource(inputValue);
     const displayName = resolved.displayName;
     const requestId = createRequestId();
     pendingRequestId = requestId;
@@ -1219,7 +1284,7 @@ async function handleSubmit(event) {
       owner: appConfig.owner,
       repo: appConfig.repo,
       ref: appConfig.ref,
-      sourceInput: sourceInput.value.trim(),
+      sourceInput: inputValue,
       sourceUrl: resolved.sourceUrl,
       displayName,
       sourceMode: resolved.sourceMode,
@@ -1244,12 +1309,8 @@ async function handleSubmit(event) {
     upsertJob(draftJob);
     renderJobs();
 
-    if (resolved.resolutionReason) {
-      formMessage.textContent = `Matched ${displayName}: ${resolved.resolutionReason}`;
-    }
-
     const runInfo = await dispatchWorkflow(draftJob);
-    const nextJob = {
+    upsertJob({
       ...draftJob,
       runId: runInfo.runId,
       runUrl: runInfo.runUrl || "",
@@ -1260,29 +1321,92 @@ async function handleSubmit(event) {
       phase: "Workflow queued",
       etaSeconds: draftJob.etaSeconds,
       etaUpdatedAt: Date.now(),
-    };
-
-    upsertJob(nextJob);
+    });
     renderJobs();
 
-    sourceInput.value = "";
-    formMessage.textContent = resolved.resolutionReason
-      ? `Workflow started for ${displayName}. ${resolved.resolutionReason}`
-      : `Workflow started for ${displayName}`;
-    await refreshJobStatuses();
+    return {
+      ok: true,
+      displayName,
+      resolutionReason: resolved.resolutionReason,
+    };
   } catch (error) {
     if (pendingRequestId) {
       jobs = jobs.filter((job) => String(job.requestId || "").trim() !== pendingRequestId);
       saveJobs();
       renderJobs();
     }
+    return {
+      ok: false,
+      inputValue,
+      error: error.message,
+    };
+  }
+}
+
+async function handleSubmit(event) {
+  event.preventDefault();
+  formMessage.textContent = "";
+  setFormBusy(true);
+
+  try {
+    if (!workerConfigured(appConfig.workerUrl)) {
+      throw new Error("Paste your Cloudflare Worker URL into site/config.js first.");
+    }
+    if (!appConfig.owner || !appConfig.repo) {
+      await loadWorkerConfig();
+    }
+    if (!appConfig.owner || !appConfig.repo) {
+      throw new Error("Cloudflare Worker config could not be loaded.");
+    }
+
+    const requestedSources = collectRequestedSources();
+    if (!requestedSources.length) {
+      throw new Error("Enter at least one game URL or name.");
+    }
+
+    const successes = [];
+    const failures = [];
+    for (const [index, inputValue] of requestedSources.entries()) {
+      const result = await queueSingleSource(inputValue, index, requestedSources.length);
+      if (result.ok) {
+        successes.push(result);
+      } else {
+        failures.push(result);
+      }
+    }
+
+    if (!successes.length) {
+      throw new Error(failures[0]?.error || "No workflows were queued.");
+    }
+
+    resetSourceInputs();
+    if (successes.length === 1 && !failures.length) {
+      const success = successes[0];
+      formMessage.textContent = success.resolutionReason
+        ? `Workflow started for ${success.displayName}. ${success.resolutionReason}`
+        : `Workflow started for ${success.displayName}`;
+    } else {
+      const successText = `Queued ${successes.length} game${successes.length === 1 ? "" : "s"}.`;
+      const failureText = failures.length
+        ? ` Failed: ${failures
+            .slice(0, 3)
+            .map((item) => `${item.inputValue} (${item.error})`)
+            .join("; ")}`
+        : "";
+      formMessage.textContent = `${successText}${failureText}`;
+    }
+    await refreshJobStatuses();
+  } catch (error) {
     formMessage.textContent = error.message;
   } finally {
-    submitButton.disabled = false;
+    setFormBusy(false);
   }
 }
 
 form.addEventListener("submit", handleSubmit);
+bulkToggleButton?.addEventListener("click", () => {
+  setBulkMode(!bulkModeEnabled());
+});
 
 async function init() {
   loadConfig();
@@ -1291,6 +1415,7 @@ async function init() {
   await loadCatalog();
   await loadPublishedCatalog();
   await loadWorkerConfig();
+  setBulkMode(false);
   renderJobs();
   renderPublished();
   await refreshJobStatuses();

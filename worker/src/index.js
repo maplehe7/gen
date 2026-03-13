@@ -647,6 +647,16 @@ function isAcceptableSearchResult(candidate) {
   return candidate.textScore >= 55 && candidate.totalScore >= 115;
 }
 
+function isFallbackSearchResult(candidate) {
+  if (!candidate) {
+    return false;
+  }
+  if (candidate.hostedOnline && candidate.textScore >= 40) {
+    return true;
+  }
+  return candidate.textScore >= 70 && candidate.compatibilityScore >= 30;
+}
+
 async function loadDriveSiteIndex() {
   if (Date.now() - driveSiteIndexCache.loadedAt < SEARCH_INDEX_TTL_MS && driveSiteIndexCache.items.length) {
     return driveSiteIndexCache.items;
@@ -774,6 +784,21 @@ async function findBestSearchResult(query) {
     return {
       candidate: bestCandidate,
       alternatives,
+    };
+  }
+
+  if (isFallbackSearchResult(bestCandidate)) {
+    return {
+      candidate: {
+        ...bestCandidate,
+        reason: bestCandidate.reason
+          ? `${bestCandidate.reason} | best available match`
+          : "best available match",
+      },
+      alternatives: [...driveCandidates.slice(1, 3), ...webCandidates.slice(1, 3)]
+        .filter((item) => item.url !== bestCandidate.url)
+        .slice(0, 4)
+        .map((item) => item.displayName || item.title),
     };
   }
 

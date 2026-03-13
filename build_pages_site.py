@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import mimetypes
 import os
 import re
 import shutil
@@ -11,7 +12,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.request import Request, urlopen
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -99,6 +101,113 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def sort_games_newest_first(games: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def sort_key(item: dict[str, Any]) -> float:
+        try:
+            return datetime.fromisoformat(str(item.get("generated_at", "")).replace("Z", "+00:00")).timestamp()
+        except (TypeError, ValueError):
+            return 0.0
+
+    return sorted(games, key=sort_key, reverse=True)
+
+
+def fetch_url_bytes(url: str, timeout: int = 20) -> tuple[bytes, str]:
+    request = Request(url, headers={"User-Agent": "standalone-forge-builder"})
+    with urlopen(request, timeout=timeout) as response:
+        return response.read(), str(response.headers.get("Content-Type") or "")
+
+
+def fetch_url_text(url: str, timeout: int = 20) -> str:
+    payload, content_type = fetch_url_bytes(url, timeout=timeout)
+    charset_match = re.search(r"charset=([a-zA-Z0-9._-]+)", content_type, re.IGNORECASE)
+    encoding = charset_match.group(1) if charset_match else "utf-8"
+    return payload.decode(encoding, errors="ignore")
+
+
+def extract_meta_content(html: str, key: str) -> str:
+    patterns = [
+        rf'<meta[^>]+(?:property|name)=["\']{re.escape(key)}["\'][^>]+content=["\']([^"\']+)["\']',
+        rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name)=["\']{re.escape(key)}["\']',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, html, re.IGNORECASE)
+        if match and match.group(1):
+            return match.group(1).strip()
+    return ""
+
+
+def guess_image_extension(image_url: str, content_type: str) -> str:
+    normalized_type = str(content_type or "").split(";", 1)[0].strip().lower()
+    guessed = mimetypes.guess_extension(normalized_type) if normalized_type else ""
+    if guessed == ".jpe":
+        guessed = ".jpg"
+    if guessed:
+        return guessed
+
+    suffix = Path(urlparse(image_url).path).suffix.lower()
+    if suffix in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}:
+        return ".jpg" if suffix == ".jpeg" else suffix
+    return ".jpg"
+
+
+def thumbnail_candidates_from_summary(source_url: str, summary: dict[str, Any]) -> list[str]:
+    candidates = []
+    if source_url:
+        candidates.append(source_url)
+    for key in ("source_page_url", "input_url", "resolved_entry_url", "root_url"):
+        value = str(summary.get(key, "")).strip()
+        if value:
+            candidates.append(value)
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not looks_like_url(candidate):
+            continue
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        normalized.append(candidate)
+    return normalized
+
+
+def fallback_thumbnail_for_folder(
+    dist_dir: Path,
+    folder_name: str,
+    source_url: str,
+    summary: dict[str, Any],
+) -> str:
+    for candidate_page_url in thumbnail_candidates_from_summary(source_url, summary):
+        try:
+            html = fetch_url_text(candidate_page_url)
+        except OSError:
+            continue
+
+        image_url = (
+            extract_meta_content(html, "og:image")
+            or extract_meta_content(html, "twitter:image")
+        ).strip()
+        if not image_url:
+            continue
+
+        absolute_image_url = urljoin(candidate_page_url, image_url)
+        if not looks_like_url(absolute_image_url):
+            continue
+
+        try:
+            image_bytes, content_type = fetch_url_bytes(absolute_image_url)
+        except OSError:
+            return absolute_image_url
+
+        extension = guess_image_extension(absolute_image_url, content_type)
+        output_path = dist_dir / "games" / folder_name / f"thumbnail{extension}"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(image_bytes)
+        return f"games/{folder_name}/thumbnail{extension}"
+
+    return ""
+
+
 def resolve_existing_folder_name(dist_dir: Path, source_url: str) -> str:
     catalog = load_json(dist_dir / "published_games.json")
     games = catalog.get("games")
@@ -159,27 +268,38 @@ def prepare_dist(state_dir: Path, dist_dir: Path) -> None:
         write_json(published_path, {"generated_at": "", "games": []})
 
 
-def capture_thumbnail_for_folder(dist_dir: Path, folder_name: str) -> str:
-    if not THUMBNAIL_SCRIPT_PATH.exists():
-        return ""
-
+def capture_thumbnail_for_folder(
+    dist_dir: Path,
+    folder_name: str,
+    source_url: str,
+    summary: dict[str, Any],
+) -> str:
     output_path = dist_dir / "games" / folder_name / "thumbnail.jpg"
-    command = [
-        sys.executable,
-        str(THUMBNAIL_SCRIPT_PATH),
-        "--site-root",
-        str(dist_dir),
-        "--game-path",
-        f"games/{folder_name}/",
-        "--output-path",
-        str(output_path),
-    ]
-    try:
-        subprocess.run(command, cwd=BASE_DIR, check=True)
-    except (OSError, subprocess.CalledProcessError):
-        return ""
+    if THUMBNAIL_SCRIPT_PATH.exists():
+        command = [
+            sys.executable,
+            str(THUMBNAIL_SCRIPT_PATH),
+            "--site-root",
+            str(dist_dir),
+            "--game-path",
+            f"games/{folder_name}/",
+            "--output-path",
+            str(output_path),
+        ]
+        try:
+            subprocess.run(command, cwd=BASE_DIR, check=True)
+        except (OSError, subprocess.CalledProcessError):
+            pass
 
-    return f"games/{folder_name}/thumbnail.jpg" if output_path.exists() else ""
+    if output_path.exists() and output_path.stat().st_size > 1024:
+        return f"games/{folder_name}/thumbnail.jpg"
+
+    return fallback_thumbnail_for_folder(
+        dist_dir=dist_dir,
+        folder_name=folder_name,
+        source_url=source_url,
+        summary=summary,
+    )
 
 
 def build_export(
@@ -212,7 +332,12 @@ def build_export(
 
     summary_path = target_dir / "standalone-build-info.json"
     summary = load_json(summary_path)
-    thumbnail_path = capture_thumbnail_for_folder(dist_dir, folder_name)
+    thumbnail_path = capture_thumbnail_for_folder(
+        dist_dir=dist_dir,
+        folder_name=folder_name,
+        source_url=source_url,
+        summary=summary,
+    )
     generated_at = iso_now()
     return {
         "id": folder_name,
@@ -251,7 +376,7 @@ def update_catalog(dist_dir: Path, new_entry: dict[str, Any]) -> None:
     if new_entry:
         normalized_games.insert(0, new_entry)
 
-    normalized_games.sort(key=lambda item: str(item.get("generated_at", "")), reverse=True)
+    normalized_games = sort_games_newest_first(normalized_games)
     write_json(
         catalog_path,
         {
@@ -283,7 +408,17 @@ def backfill_catalog_thumbnails(dist_dir: Path, limit: int = 6) -> None:
         if not folder_name:
             continue
 
-        thumbnail_path = capture_thumbnail_for_folder(dist_dir, folder_name)
+        summary_path = str(game.get("summary_path", "")).strip().replace("\\", "/")
+        summary = {}
+        if summary_path:
+            summary = load_json(dist_dir / summary_path)
+
+        thumbnail_path = capture_thumbnail_for_folder(
+            dist_dir=dist_dir,
+            folder_name=folder_name,
+            source_url=str(game.get("source_url", "")).strip(),
+            summary=summary,
+        )
         if not thumbnail_path:
             continue
 
@@ -296,7 +431,7 @@ def backfill_catalog_thumbnails(dist_dir: Path, limit: int = 6) -> None:
             catalog_path,
             {
                 "generated_at": iso_now(),
-                "games": games,
+                "games": sort_games_newest_first(games),
             },
         )
 
@@ -319,7 +454,8 @@ def main() -> int:
             request_id=request_id,
         )
         update_catalog(dist_dir, new_entry)
-        backfill_catalog_thumbnails(dist_dir)
+
+    backfill_catalog_thumbnails(dist_dir, limit=12)
 
     return 0
 

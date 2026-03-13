@@ -343,6 +343,24 @@ function jobSortTimestamp(job) {
   );
 }
 
+function jobSortPriority(job) {
+  const status = String(job?.status || "");
+  const conclusion = String(job?.conclusion || "");
+  if (status === "in_progress") {
+    return 0;
+  }
+  if (status === "queued") {
+    return 1;
+  }
+  if (status === "completed" && conclusion === "success") {
+    return 2;
+  }
+  if (status === "completed") {
+    return 4;
+  }
+  return 3;
+}
+
 function isTerminalJob(job) {
   const status = String(job?.status || "");
   return status === "completed" || status === "error";
@@ -397,6 +415,9 @@ function normalizeStoredJob(rawJob) {
   if (!normalized.sourceUrl) {
     return null;
   }
+  if (normalized.status === "completed" && normalized.conclusion && normalized.conclusion !== "success") {
+    return null;
+  }
 
   const ageMs = Date.now() - jobSortTimestamp(normalized);
   if (ageMs > jobRetentionMs(normalized)) {
@@ -422,7 +443,13 @@ function normalizeStoredJobs(rawJobs) {
   });
 
   return [...deduped.values()]
-    .sort((left, right) => jobSortTimestamp(right) - jobSortTimestamp(left))
+    .sort((left, right) => {
+      const priorityDelta = jobSortPriority(left) - jobSortPriority(right);
+      if (priorityDelta !== 0) {
+        return priorityDelta;
+      }
+      return jobSortTimestamp(right) - jobSortTimestamp(left);
+    })
     .slice(0, MAX_STORED_JOBS);
 }
 
@@ -904,7 +931,12 @@ async function loadCatalog() {
 async function loadPublishedCatalog() {
   try {
     const payload = await fetchJson(`./published_games.json?ts=${Date.now()}`);
-    publishedCatalog = Array.isArray(payload?.games) ? payload.games : [];
+    const games = Array.isArray(payload?.games) ? payload.games : [];
+    publishedCatalog = [...games].sort((left, right) => {
+      const leftTime = Date.parse(String(left?.generated_at || "")) || 0;
+      const rightTime = Date.parse(String(right?.generated_at || "")) || 0;
+      return rightTime - leftTime;
+    });
   } catch (_error) {
     publishedCatalog = [];
   }

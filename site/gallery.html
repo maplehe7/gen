@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Generated Games</title>
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <main class="stack">
+        <div class="mini-nav">
+          <a class="job-link secondary" href="./index.html">Back</a>
+        </div>
+
+        <div id="gallery" class="jobs-grid"></div>
+      </main>
+    </div>
+
+    <template id="gallery-template">
+      <article class="job-card">
+        <h3 class="job-title"></h3>
+        <p class="gallery-source"></p>
+        <p class="gallery-meta"></p>
+        <div class="job-actions"></div>
+      </article>
+    </template>
+
+    <script src="./gallery.js" defer></script>
+  </body>
+</html>

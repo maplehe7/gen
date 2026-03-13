@@ -9,48 +9,35 @@
   <body>
     <div class="page-shell">
       <main class="stack">
-        <section class="panel panel-form">
-          <form id="export-form" class="export-form">
-            <input
-              id="source"
-              name="source"
-              type="text"
-              placeholder="Game URL or name"
-              autocomplete="off"
-              required
-            />
-            <button id="submit-button" class="submit-button" type="submit">
-              Generate
-            </button>
-          </form>
+        <form id="export-form" class="export-form panel">
+          <input
+            id="source"
+            name="source"
+            type="text"
+            placeholder="Game URL or name"
+            autocomplete="off"
+            required
+          />
+          <button id="submit-button" class="submit-button" type="submit">Generate</button>
+        </form>
+
+        <div class="stack compact-stack">
           <p id="repo-target" class="status-chip"></p>
           <p id="config-warning" class="helper-text"></p>
           <p id="form-message" class="form-message" aria-live="polite"></p>
-        </section>
-
-        <section class="jobs-section">
-        <div class="section-head">
-          <h2>Recent Requests</h2>
+          <div class="mini-nav">
+            <a class="job-link secondary" href="./gallery.html">Gallery</a>
+          </div>
         </div>
+
         <div id="jobs" class="jobs-grid"></div>
-        </section>
-
-        <section class="jobs-section">
-        <div class="section-head">
-          <h2>Published Games</h2>
-        </div>
-        <div id="published-games" class="jobs-grid"></div>
-        </section>
       </main>
     </div>
 
     <template id="job-template">
       <article class="job-card">
         <div class="job-topline">
-          <div>
-            <p class="job-status"></p>
-            <h3 class="job-title"></h3>
-          </div>
+          <h3 class="job-title"></h3>
           <p class="job-percent"></p>
         </div>
 
@@ -59,55 +46,13 @@
         </div>
 
         <div class="job-meta">
+          <p class="job-status"></p>
           <p class="job-phase"></p>
           <p class="job-eta"></p>
         </div>
 
-        <dl class="job-facts">
-          <div>
-            <dt>Source</dt>
-            <dd class="job-source"></dd>
-          </div>
-          <div>
-            <dt>Request</dt>
-            <dd class="job-request"></dd>
-          </div>
-          <div>
-            <dt>Repository</dt>
-            <dd class="job-repo"></dd>
-          </div>
-        </dl>
-
         <div class="job-actions"></div>
         <p class="job-error"></p>
-      </article>
-    </template>
-
-    <template id="published-template">
-      <article class="job-card published-card">
-        <div class="job-topline">
-          <div>
-            <p class="job-status">Published</p>
-            <h3 class="job-title"></h3>
-          </div>
-        </div>
-
-        <dl class="job-facts">
-          <div>
-            <dt>Source</dt>
-            <dd class="job-source"></dd>
-          </div>
-          <div>
-            <dt>Folder</dt>
-            <dd class="job-folder"></dd>
-          </div>
-          <div>
-            <dt>Built</dt>
-            <dd class="job-built"></dd>
-          </div>
-        </dl>
-
-        <div class="job-actions"></div>
       </article>
     </template>
 

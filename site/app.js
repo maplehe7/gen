@@ -841,6 +841,9 @@ function upsertJob(nextJob) {
 }
 
 function renderActions(job, actionsRoot) {
+  if (!actionsRoot) {
+    return;
+  }
   actionsRoot.innerHTML = "";
 
   if (job.playPath) {
@@ -849,22 +852,15 @@ function renderActions(job, actionsRoot) {
     playLink.href = playUrlForPath(job.playPath);
     playLink.target = "_blank";
     playLink.rel = "noreferrer";
-    playLink.textContent = "Play build";
+    playLink.textContent = "Open game";
     actionsRoot.append(playLink);
-  }
-
-  if (job.htmlUrl) {
-    const workflowLink = document.createElement("a");
-    workflowLink.className = "job-link secondary";
-    workflowLink.href = job.htmlUrl;
-    workflowLink.target = "_blank";
-    workflowLink.rel = "noreferrer";
-    workflowLink.textContent = "Open workflow";
-    actionsRoot.append(workflowLink);
   }
 }
 
 function renderJobs() {
+  if (!jobsContainer || !jobTemplate) {
+    return;
+  }
   jobsContainer.innerHTML = "";
 
   if (!jobs.length) {
@@ -887,9 +883,6 @@ function renderJobs() {
     const fill = fragment.querySelector(".meter-fill");
     const phase = fragment.querySelector(".job-phase");
     const eta = fragment.querySelector(".job-eta");
-    const source = fragment.querySelector(".job-source");
-    const request = fragment.querySelector(".job-request");
-    const repo = fragment.querySelector(".job-repo");
     const error = fragment.querySelector(".job-error");
     const actions = fragment.querySelector(".job-actions");
 
@@ -902,9 +895,6 @@ function renderJobs() {
     fill.style.width = `${progressPercent.toFixed(1)}%`;
     phase.textContent = job.phase || "Queued";
     eta.textContent = visibleEtaLabel(job, nowMs);
-    source.textContent = job.sourceUrl;
-    request.textContent = job.requestId;
-    repo.textContent = `${job.owner}/${job.repo}@${job.ref}`;
     error.textContent = job.error || "";
     renderActions(job, actions);
 
@@ -913,6 +903,9 @@ function renderJobs() {
 }
 
 function renderPublished() {
+  if (!publishedContainer || !publishedTemplate) {
+    return;
+  }
   publishedContainer.innerHTML = "";
 
   if (!publishedCatalog.length) {
@@ -937,18 +930,8 @@ function renderPublished() {
     playLink.href = playUrlForPath(entry.play_path || entry.folder || "");
     playLink.target = "_blank";
     playLink.rel = "noreferrer";
-    playLink.textContent = "Play build";
+    playLink.textContent = "Open game";
     actions.append(playLink);
-
-    if (entry.source_url) {
-      const sourceLink = document.createElement("a");
-      sourceLink.className = "job-link secondary";
-      sourceLink.href = entry.source_url;
-      sourceLink.target = "_blank";
-      sourceLink.rel = "noreferrer";
-      sourceLink.textContent = "Open source";
-      actions.append(sourceLink);
-    }
 
     publishedContainer.append(fragment);
   });

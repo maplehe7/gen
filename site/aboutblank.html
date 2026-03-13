@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>About Blank Launcher</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+        background: transparent;
+        font: 14px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      #launch-button {
+        padding: 12px 18px;
+        border: 1px solid rgba(255, 255, 255, 0.7);
+        border-radius: 999px;
+        background: transparent;
+        color: #ffffff;
+        font: inherit;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+      }
+
+      #launch-button:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+    </style>
+  </head>
+  <body>
+    <button id="launch-button" type="button">Launch in about:blank</button>
+
+    <script>
+      (function () {
+        const launchButton = document.getElementById("launch-button");
+        const startUrl = "https://maplehe7.github.io/gen/gallery.html";
+
+        function buildBlankShell(url) {
+          const escapedUrl = JSON.stringify(url);
+          return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gallery</title>
+    <style>
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #05070f;
+      }
+      iframe {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: #05070f;
+      }
+    </style>
+  </head>
+  <body>
+    <iframe id="app-frame" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+    <script>
+      (function () {
+        const iframe = document.getElementById("app-frame");
+        const startUrl = ${escapedUrl};
+        try {
+          window.opener = null;
+        } catch (_error) {}
+
+        function navigateInsideFrame(rawUrl, baseUrl) {
+          if (!rawUrl) {
+            return;
+          }
+          try {
+            const nextUrl = new URL(rawUrl, baseUrl || startUrl);
+            if (/^(javascript|mailto|tel):/i.test(nextUrl.protocol)) {
+              return;
+            }
+            iframe.src = nextUrl.toString();
+          } catch (_error) {}
+        }
+
+        function patchFrameLinks(frameWindow, frameDocument) {
+          if (!frameWindow || !frameDocument || frameDocument.__aboutBlankPatched) {
+            return;
+          }
+
+          frameDocument.__aboutBlankPatched = true;
+          frameDocument.addEventListener(
+            "click",
+            function (event) {
+              const anchor = event.target && event.target.closest ? event.target.closest("a[href]") : null;
+              if (!anchor) {
+                return;
+              }
+              const href = String(anchor.getAttribute("href") || "").trim();
+              if (!href || href.startsWith("#")) {
+                return;
+              }
+              event.preventDefault();
+              event.stopPropagation();
+              navigateInsideFrame(anchor.href, frameWindow.location.href);
+            },
+            true
+          );
+
+          frameDocument.querySelectorAll("a[href]").forEach(function (anchor) {
+            anchor.target = "_self";
+            anchor.rel = "";
+          });
+
+          try {
+            frameWindow.open = function (rawUrl) {
+              navigateInsideFrame(rawUrl, frameWindow.location.href);
+              return frameWindow;
+            };
+          } catch (_error) {}
+        }
+
+        function syncFrameTitle(frameDocument) {
+          const title = String(frameDocument && frameDocument.title ? frameDocument.title : "").trim();
+          document.title = title || "Gallery";
+        }
+
+        iframe.addEventListener("load", function () {
+          try {
+            const frameWindow = iframe.contentWindow;
+            const frameDocument = frameWindow && frameWindow.document;
+            if (!frameWindow || !frameDocument) {
+              return;
+            }
+            frameDocument.location.href;
+            patchFrameLinks(frameWindow, frameDocument);
+            syncFrameTitle(frameDocument);
+          } catch (_error) {}
+        });
+
+        navigateInsideFrame(startUrl, startUrl);
+      })();
+    <\/script>
+  </body>
+</html>`;
+        }
+
+        launchButton?.addEventListener("click", function () {
+          const popup = window.open("about:blank", "_blank");
+          if (!popup) {
+            return;
+          }
+          popup.document.open();
+          popup.document.write(buildBlankShell(startUrl));
+          popup.document.close();
+        });
+      })();
+    </script>
+  </body>
+</html>

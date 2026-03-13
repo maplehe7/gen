@@ -1,3 +1,3 @@
 window.STANDALONE_FORGE_CONFIG = {
-  workerUrl: "PASTE_CLOUDFLARE_WORKER_URL_HERE",
+  workerUrl: "https://standalone-forge-proxy.maplehe7.workers.dev",
 };

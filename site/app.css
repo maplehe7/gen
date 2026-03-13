@@ -61,16 +61,15 @@ body {
 }
 
 .export-form {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
+  padding-top: 18px;
 }
 
 .source-input-wrap {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
   min-width: 0;
 }
 
@@ -113,8 +112,7 @@ body {
 }
 
 .submit-button,
-.job-link,
-.bulk-toggle {
+.job-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -129,11 +127,26 @@ body {
   cursor: pointer;
 }
 
-.bulk-toggle {
-  min-width: 40px;
+.bulk-corner-toggle {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 10px;
+  height: 10px;
   padding: 0;
-  font-size: 0.9rem;
-  font-weight: 700;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(8, 93, 155, 0.3);
+  cursor: pointer;
+}
+
+.bulk-corner-toggle:hover {
+  background: rgba(8, 93, 155, 0.55);
+}
+
+.bulk-corner-toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .submit-button {
@@ -157,8 +170,6 @@ body {
 }
 
 .status-chip,
-.helper-text,
-.form-message,
 .job-status,
 .job-phase,
 .job-eta,
@@ -166,6 +177,13 @@ body {
 .gallery-meta {
   margin: 0;
   color: var(--muted);
+}
+
+.status-chip,
+.helper-text,
+.form-message {
+  color: rgba(255, 255, 255, 0.97);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
 }
 
 .status-chip:empty,
@@ -397,7 +415,7 @@ body {
   }
 
   .source-input-wrap {
-    grid-template-columns: minmax(0, 1fr) auto;
+    min-width: 0;
   }
 
   .job-topline,

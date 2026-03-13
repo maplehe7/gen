@@ -968,11 +968,6 @@ async function fetchJson(url, options = {}) {
   const response = await fetch(url, {
     cache: "no-store",
     ...options,
-    headers: {
-      "Cache-Control": "no-store",
-      Pragma: "no-cache",
-      ...(options.headers || {}),
-    },
   });
   let payload = null;
   if (response.status !== 204) {

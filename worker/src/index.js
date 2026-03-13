@@ -117,6 +117,7 @@ function normalizeOriginList(value) {
 
 function corsHeaders(request, env) {
   const requestOrigin = request.headers.get("Origin") || "";
+  const requestedHeaders = request.headers.get("Access-Control-Request-Headers") || "";
   const allowedOrigins = normalizeOriginList(env.ALLOWED_ORIGIN);
   const allowAny = allowedOrigins.includes("*");
   const matchedOrigin = allowAny
@@ -127,7 +128,7 @@ function corsHeaders(request, env) {
 
   return {
     "Access-Control-Allow-Origin": matchedOrigin,
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": requestedHeaders || "Content-Type, Cache-Control, Pragma",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   };
 }

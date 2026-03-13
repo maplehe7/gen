@@ -145,6 +145,54 @@ function deriveNameFromUrl(value) {
   }
 }
 
+function titleCaseWords(value) {
+  return String(value || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function normalizeSearchVariantKey(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function buildSearchQueryVariants(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const variants = [
+    trimmed,
+    trimmed.replace(/[_\-–—:|/\\]+/g, " ").replace(/\s+/g, " ").trim(),
+    titleCaseWords(trimmed),
+    trimmed.toLowerCase(),
+    trimmed.replace(/\b(game|online|unblocked|play|classic|free)\b/gi, " ").replace(/\s+/g, " ").trim(),
+  ];
+
+  return variants.filter(Boolean).filter((variant, index, items) => {
+    const key = normalizeSearchVariantKey(variant);
+    return key && items.findIndex((item) => normalizeSearchVariantKey(item) === key) === index;
+  });
+}
+
+function extractClosestMatchesFromError(message) {
+  const text = String(message || "");
+  const match = text.match(/Closest matches:\s*(.+?)\.?$/i);
+  if (!match || !match[1]) {
+    return [];
+  }
+  return match[1]
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function createRequestId() {
   if (window.crypto && typeof window.crypto.randomUUID === "function") {
     return window.crypto.randomUUID();
@@ -936,31 +984,61 @@ async function resolveSource(inputValue) {
     };
   }
 
-  try {
-    const result = await searchForGameByName(trimmed);
-    return {
-      sourceUrl: result?.sourceUrl || "",
-      displayName: result?.displayName || trimmed,
-      sourceMode: result?.sourceMode || "search",
-      matchedName: result?.matchedName || result?.displayName || trimmed,
-      provider: result?.provider || "search",
-      confidence: Number(result?.confidence) || 0,
-      hostedOnline: Boolean(result?.hostedOnline),
-      resolutionReason: String(result?.reason || "").trim(),
-    };
-  } catch (searchError) {
+  const attemptedQueries = [];
+  let lastSearchError = null;
+  for (const variant of buildSearchQueryVariants(trimmed)) {
     try {
-      const catalogResolved = resolveCatalogSource(trimmed);
+      const result = await searchForGameByName(variant);
       return {
-        ...catalogResolved,
-        provider: "catalog",
-        confidence: 80,
-        hostedOnline: true,
-        resolutionReason: "Used local game catalog fallback.",
+        sourceUrl: result?.sourceUrl || "",
+        displayName: result?.displayName || trimmed,
+        sourceMode: result?.sourceMode || "search",
+        matchedName: result?.matchedName || result?.displayName || trimmed,
+        provider: result?.provider || "search",
+        confidence: Number(result?.confidence) || 0,
+        hostedOnline: Boolean(result?.hostedOnline),
+        resolutionReason: String(result?.reason || "").trim(),
       };
-    } catch (_catalogError) {
-      throw searchError;
+    } catch (searchError) {
+      lastSearchError = searchError;
+      attemptedQueries.push(variant);
     }
+  }
+
+  if (lastSearchError) {
+    const closestMatches = extractClosestMatchesFromError(lastSearchError.message).filter(
+      (candidate) => !attemptedQueries.some((attempt) => normalizeSearchVariantKey(attempt) === normalizeSearchVariantKey(candidate)),
+    );
+    for (const candidate of closestMatches.slice(0, 3)) {
+      try {
+        const result = await searchForGameByName(candidate);
+        return {
+          sourceUrl: result?.sourceUrl || "",
+          displayName: result?.displayName || candidate,
+          sourceMode: result?.sourceMode || "search",
+          matchedName: result?.matchedName || result?.displayName || candidate,
+          provider: result?.provider || "search",
+          confidence: Number(result?.confidence) || 0,
+          hostedOnline: Boolean(result?.hostedOnline),
+          resolutionReason: String(result?.reason || "").trim(),
+        };
+      } catch (_closestError) {
+        // Keep falling through to catalog and then the original error.
+      }
+    }
+  }
+
+  try {
+    const catalogResolved = resolveCatalogSource(trimmed);
+    return {
+      ...catalogResolved,
+      provider: "catalog",
+      confidence: 80,
+      hostedOnline: true,
+      resolutionReason: "Used local game catalog fallback.",
+    };
+  } catch (_catalogError) {
+    throw lastSearchError || new Error("No compatible hosted result was found.");
   }
 }
 

@@ -19,11 +19,13 @@ const PREFERRED_SEARCH_SITES = [
   },
 ];
 const DUCKDUCKGO_HTML_URL = "https://html.duckduckgo.com/html/";
+const BING_SEARCH_URL = "https://www.bing.com/search";
+const BRAVE_SEARCH_URL = "https://search.brave.com/search";
 const REPORTS_FILE_PATH = "reports/not-working.txt";
 const PUBLISHED_GAMES_FILE_PATH = "published_games.json";
 const SEARCH_INDEX_TTL_MS = 30 * 60 * 1000;
-const MAX_SITE_CANDIDATES = 6;
-const MAX_WEB_CANDIDATES = 6;
+const MAX_SITE_CANDIDATES = 8;
+const MAX_WEB_CANDIDATES = 10;
 const SEARCHABLE_SITE_MATCH_FLOOR = 28;
 const REPORT_FILE_HEADER = "# Not Working Game Reports\n";
 const DOWNLOAD_EXTENSIONS = [".apk", ".dmg", ".exe", ".iso", ".msi", ".pkg", ".rar", ".zip", ".7z"];
@@ -396,6 +398,60 @@ function domainFromUrl(value) {
 
 function compactSearchText(value) {
   return normalizeSearchText(value).replace(/\s+/g, "");
+}
+
+function titleCaseWords(value) {
+  return collapseWhitespace(String(value || ""))
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function buildQueryVariants(query) {
+  const trimmed = collapseWhitespace(query);
+  if (!trimmed) {
+    return [];
+  }
+
+  const variants = [
+    trimmed,
+    collapseWhitespace(trimmed.replace(/[_\-–—:|/\\]+/g, " ")),
+    titleCaseWords(trimmed),
+    trimmed.toLowerCase(),
+  ];
+
+  const strippedGameWords = collapseWhitespace(
+    trimmed.replace(/\b(game|online|unblocked|play|classic|free)\b/gi, " "),
+  );
+  if (strippedGameWords) {
+    variants.push(strippedGameWords);
+  }
+
+  const beforeSeparator = collapseWhitespace(trimmed.split(/[:|\-–—]/)[0] || "");
+  if (beforeSeparator) {
+    variants.push(beforeSeparator);
+  }
+
+  return uniqueBy(
+    variants
+      .map((value) => collapseWhitespace(value))
+      .filter(Boolean),
+    (value) => normalizeSearchText(value),
+  ).slice(0, 6);
+}
+
+function buildWebSearchTerms(query) {
+  const variants = buildQueryVariants(query);
+  const terms = [];
+  variants.forEach((variant) => {
+    terms.push(variant);
+    terms.push(`"${variant}" game`);
+    terms.push(`${variant} online game`);
+    terms.push(`${variant} browser game`);
+    terms.push(`${variant} unblocked game`);
+  });
+  return uniqueBy(terms.filter(Boolean), (value) => normalizeSearchText(value)).slice(0, 12);
 }
 
 function compactHostname(value) {
@@ -920,6 +976,25 @@ function isClosestPlayableSearchResult(candidate) {
   );
 }
 
+function isSafeBestEffortSearchResult(candidate) {
+  if (!candidate) {
+    return false;
+  }
+  if (candidate.softwarePortal || candidate.blockedPage || candidate.mediaOnlyEmbeds) {
+    return false;
+  }
+  if (candidate.downloadableUrls?.length) {
+    return false;
+  }
+  if (candidate.playableSignalScore < 10) {
+    return false;
+  }
+  if (candidate.textScore < 28) {
+    return false;
+  }
+  return candidate.totalScore >= 75 || candidate.brandMatchScore >= 45;
+}
+
 async function loadDriveSiteIndex(siteConfig) {
   const cacheEntry = driveSiteIndexCache[siteConfig.id] || {
     loadedAt: 0,
@@ -960,16 +1035,27 @@ async function loadDriveSiteIndex(siteConfig) {
 }
 
 async function searchDriveSite(query) {
+  const queryVariants = buildQueryVariants(query);
   const siteItems = await Promise.all(
     PREFERRED_SEARCH_SITES.map(async (siteConfig) => {
       const items = await loadDriveSiteIndex(siteConfig);
-      return items
-        .map((item) => ({
-          ...item,
-          query,
-          textScore: scoreQueryMatch(query, item.title, item.url),
-        }))
-        .filter((item) => item.textScore >= SEARCHABLE_SITE_MATCH_FLOOR)
+      const ranked = [];
+      queryVariants.forEach((variant) => {
+        items.forEach((item) => {
+          const variantScore = scoreQueryMatch(variant, item.title, item.url);
+          const queryScore = scoreQueryMatch(query, item.title, item.url);
+          const textScore = Math.max(queryScore, variantScore);
+          if (textScore < SEARCHABLE_SITE_MATCH_FLOOR) {
+            return;
+          }
+          ranked.push({
+            ...item,
+            query,
+            textScore,
+          });
+        });
+      });
+      return uniqueBy(ranked, (item) => item.url)
         .sort((left, right) => right.textScore - left.textScore)
         .slice(0, MAX_SITE_CANDIDATES);
     }),
@@ -995,30 +1081,155 @@ function unwrapDuckDuckGoUrl(rawUrl) {
   }
 }
 
-async function searchWebFallback(query) {
-  const resultPattern = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
-  const rawMatches = [];
+function decodeBase64Loose(value) {
+  try {
+    const normalized = String(value || "")
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4 || 4)) % 4);
+    return atob(padded);
+  } catch (_error) {
+    return "";
+  }
+}
 
-  for (const searchTerm of [query, `${query} online game unblocked`]) {
+function unwrapBingUrl(rawUrl) {
+  const normalized = rawUrl.startsWith("//") ? `https:${rawUrl}` : rawUrl;
+  try {
+    const parsed = new URL(normalized, BING_SEARCH_URL);
+    if (parsed.hostname === "www.bing.com" && parsed.pathname.startsWith("/ck/")) {
+      const encodedTarget = parsed.searchParams.get("u") || "";
+      if (/^a1/i.test(encodedTarget)) {
+        const decoded = decodeBase64Loose(encodedTarget.slice(2));
+        const cleanDecoded = cleanExtractedUrl(decoded);
+        if (cleanDecoded) {
+          return cleanDecoded;
+        }
+      }
+    }
+    return parsed.toString();
+  } catch (_error) {
+    return "";
+  }
+}
+
+function extractDuckDuckGoMatches(html, query) {
+  const resultPattern = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  const matches = [];
+  let match = null;
+  resultPattern.lastIndex = 0;
+
+  while ((match = resultPattern.exec(html))) {
+    const resultUrl = unwrapDuckDuckGoUrl(match[1]);
+    const title = stripTags(match[2]);
+    if (!resultUrl || !title || isDownloadUrl(resultUrl) || isIgnoredInfrastructureUrl(resultUrl)) {
+      continue;
+    }
+    matches.push({
+      provider: "web-search",
+      query,
+      title,
+      url: resultUrl,
+      textScore: scoreQueryMatch(query, title, resultUrl),
+    });
+  }
+
+  return matches;
+}
+
+function extractBingMatches(html, query) {
+  const resultPattern = /<li class="b_algo"[\s\S]*?<h2[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>\s*<\/h2>/gi;
+  const matches = [];
+  let match = null;
+  resultPattern.lastIndex = 0;
+
+  while ((match = resultPattern.exec(html))) {
+    const resultUrl = unwrapBingUrl(decodeHtmlEntities(match[1]));
+    const title = stripTags(match[2]);
+    if (!resultUrl || !title || isDownloadUrl(resultUrl) || isIgnoredInfrastructureUrl(resultUrl)) {
+      continue;
+    }
+    matches.push({
+      provider: "web-search",
+      query,
+      title,
+      url: resultUrl,
+      textScore: scoreQueryMatch(query, title, resultUrl),
+    });
+  }
+
+  return matches;
+}
+
+function extractBraveMatches(html, query) {
+  const resultPattern =
+    /<div class="snippet[\s\S]*?data-type="web"[\s\S]*?<a href="([^"]+)"[^>]*class="[^"]*\bl1\b[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
+  const matches = [];
+  let match = null;
+  resultPattern.lastIndex = 0;
+
+  while ((match = resultPattern.exec(html))) {
+    const resultUrl = cleanExtractedUrl(decodeHtmlEntities(match[1]));
+    const title = stripTags(match[2]);
+    if (!resultUrl || !title || isDownloadUrl(resultUrl) || isIgnoredInfrastructureUrl(resultUrl)) {
+      continue;
+    }
+    matches.push({
+      provider: "web-search",
+      query,
+      title,
+      url: resultUrl,
+      textScore: scoreQueryMatch(query, title, resultUrl),
+    });
+  }
+
+  return matches;
+}
+
+async function searchWebFallback(query) {
+  const rawMatches = [];
+  const searchTerms = buildWebSearchTerms(query);
+
+  for (const searchTerm of searchTerms.slice(0, 5)) {
     const searchUrl = new URL(DUCKDUCKGO_HTML_URL);
     searchUrl.searchParams.set("q", searchTerm);
-    const html = await fetchText(searchUrl.toString(), {}, "Search web fallback");
-    let match = null;
-    resultPattern.lastIndex = 0;
+    try {
+      const html = await fetchText(searchUrl.toString(), {}, "Search web fallback");
+      rawMatches.push(...extractDuckDuckGoMatches(html, query));
+    } catch (_error) {
+      // DuckDuckGo blocks aggressively; fall through to the next provider.
+    }
+    if (rawMatches.length >= MAX_WEB_CANDIDATES * 2) {
+      break;
+    }
+  }
 
-    while ((match = resultPattern.exec(html))) {
-      const resultUrl = unwrapDuckDuckGoUrl(match[1]);
-      const title = stripTags(match[2]);
-      if (!resultUrl || !title || isDownloadUrl(resultUrl) || isIgnoredInfrastructureUrl(resultUrl)) {
-        continue;
-      }
-      rawMatches.push({
-        provider: "web-search",
-        query,
-        title,
-        url: resultUrl,
-        textScore: scoreQueryMatch(query, title, resultUrl),
-      });
+  for (const searchTerm of searchTerms.slice(0, 5)) {
+    const searchUrl = new URL(BING_SEARCH_URL);
+    searchUrl.searchParams.set("q", searchTerm);
+    try {
+      const html = await fetchText(searchUrl.toString(), {}, "Search Bing fallback");
+      rawMatches.push(...extractBingMatches(html, query));
+    } catch (_error) {
+      // Continue; another search term or provider may still return results.
+    }
+    if (rawMatches.length >= MAX_WEB_CANDIDATES * 3) {
+      break;
+    }
+  }
+
+  for (const searchTerm of searchTerms.slice(0, 5)) {
+    const searchUrl = new URL(BRAVE_SEARCH_URL);
+    searchUrl.searchParams.set("q", searchTerm);
+    searchUrl.searchParams.set("source", "web");
+    try {
+      const html = await fetchText(searchUrl.toString(), {}, "Search Brave fallback");
+      rawMatches.push(...extractBraveMatches(html, query));
+    } catch (_error) {
+      // Continue; another search term or provider may still return results.
+    }
+    if (rawMatches.length >= MAX_WEB_CANDIDATES * 4) {
+      break;
     }
   }
 
@@ -1071,6 +1282,20 @@ async function findBestSearchResult(query) {
           : "closest playable match",
       },
       alternatives: listAlternativeNames(combined, closestPlayableCandidate.url),
+    };
+  }
+
+  const bestEffortCandidate = combined.find((candidate) => isSafeBestEffortSearchResult(candidate)) || null;
+  if (bestEffortCandidate) {
+    return {
+      candidate: {
+        ...bestEffortCandidate,
+        hostedOnline: true,
+        reason: bestEffortCandidate.reason
+          ? `${bestEffortCandidate.reason} | safe closest match`
+          : "safe closest match",
+      },
+      alternatives: listAlternativeNames(combined, bestEffortCandidate.url),
     };
   }
 

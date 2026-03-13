@@ -1,11 +1,11 @@
 :root {
-  --bg: #f3f3f3;
-  --panel: #ffffff;
-  --border: #d7d7d7;
-  --text: #111111;
-  --muted: #666666;
-  --accent: #1f6feb;
-  --accent-strong: #0f4fb8;
+  --bg: linear-gradient(180deg, #0b3b66 0%, #11649a 36%, #1d8eb8 72%, #89d5e6 100%);
+  --panel: rgba(255, 255, 255, 0.94);
+  --border: rgba(10, 53, 87, 0.16);
+  --text: #0a2135;
+  --muted: #35556f;
+  --accent: #0d6fb8;
+  --accent-strong: #085d9b;
   --error: #c0362c;
 }
 
@@ -23,12 +23,17 @@ body {
   background: var(--bg);
   color: var(--text);
   font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background-attachment: fixed;
 }
 
 .page-shell {
   width: min(100%, 720px);
   margin: 0 auto;
   padding: 12px;
+}
+
+.gallery-shell {
+  width: min(100%, 1280px);
 }
 
 .stack {
@@ -46,6 +51,7 @@ body {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 6px;
+  backdrop-filter: blur(6px);
 }
 
 .panel,
@@ -145,15 +151,15 @@ body {
 
 .gallery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
 }
 
 .gallery-card {
   display: grid;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 12px;
   overflow: hidden;
 }
 
@@ -170,15 +176,16 @@ body {
 .gallery-thumb {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 16 / 10;
   object-fit: cover;
-  background: #e9e9e9;
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .gallery-title {
   margin: 0;
-  padding: 10px;
-  font-size: 0.95rem;
+  padding: 14px 14px 12px;
+  font-size: 1.05rem;
+  font-weight: 700;
   word-break: break-word;
 }
 
@@ -291,5 +298,6 @@ body {
 
   .gallery-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
   }
 }

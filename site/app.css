@@ -283,25 +283,27 @@ body {
 
 .admin-toggle {
   position: fixed;
-  left: 8px;
-  bottom: 8px;
-  width: 12px;
-  height: 12px;
+  left: 4px;
+  bottom: 4px;
+  width: 7px;
+  height: 7px;
   padding: 0;
   border: 0;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
   cursor: pointer;
+  opacity: 0.42;
 }
 
 .admin-toggle:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.34);
+  opacity: 0.72;
 }
 
 .admin-panel {
   position: fixed;
-  left: 16px;
-  bottom: 28px;
+  left: 12px;
+  bottom: 18px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;

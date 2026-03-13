@@ -2,8 +2,20 @@ const JSON_HEADERS = {
   "content-type": "application/json; charset=UTF-8",
 };
 
-const DRIVE_SITE_URL = "https://sites.google.com/view/drive-u-7-home-10/";
-const DRIVE_SITE_PREFIX = "/view/drive-u-7-home-10/";
+const PREFERRED_SEARCH_SITES = [
+  {
+    id: "drive-u-7-home-10",
+    label: "drive-u-7-home-10",
+    url: "https://sites.google.com/view/drive-u-7-home-10/",
+    prefix: "/view/drive-u-7-home-10/",
+  },
+  {
+    id: "classroom6x",
+    label: "classroom6x",
+    url: "https://sites.google.com/view/classroom6x/",
+    prefix: "/view/classroom6x/",
+  },
+];
 const DUCKDUCKGO_HTML_URL = "https://html.duckduckgo.com/html/";
 const REPORTS_FILE_PATH = "reports/not-working.txt";
 const PUBLISHED_GAMES_FILE_PATH = "published_games.json";
@@ -74,10 +86,15 @@ const MEDIA_ONLY_HOSTS = [
 ];
 const GENERIC_SITE_TITLES = new Set(["classroom g+", "home", "search this site", "unblocked games"]);
 
-let driveSiteIndexCache = {
-  loadedAt: 0,
-  items: [],
-};
+let driveSiteIndexCache = Object.fromEntries(
+  PREFERRED_SEARCH_SITES.map((site) => [
+    site.id,
+    {
+      loadedAt: 0,
+      items: [],
+    },
+  ]),
+);
 
 function json(payload, init = {}) {
   return new Response(JSON.stringify(payload), {
@@ -630,7 +647,7 @@ function cleanDisplayTitle(query, rawTitle, fallbackTitle = "") {
 function buildReason(candidate) {
   const reasons = [];
   if (candidate.provider === "drive-site") {
-    reasons.push("matched drive-u-7-home-10 first");
+    reasons.push(`matched ${candidate.searchSiteLabel || "drive-u-7-home-10"} first`);
   } else if (candidate.provider === "web-search") {
     reasons.push("matched web fallback");
   }
@@ -836,6 +853,15 @@ function sortCandidates(candidates) {
   });
 }
 
+function listAlternativeNames(candidates, selectedUrl = "", limit = 4) {
+  return uniqueBy(
+    (Array.isArray(candidates) ? candidates : []).filter((item) => item?.url && item.url !== selectedUrl),
+    (item) => item.url,
+  )
+    .slice(0, limit)
+    .map((item) => item.displayName || item.title);
+}
+
 function isAcceptableSearchResult(candidate) {
   if (!candidate || !candidate.hostedOnline) {
     return false;
@@ -876,19 +902,38 @@ function isFallbackSearchResult(candidate) {
   );
 }
 
-async function loadDriveSiteIndex() {
-  if (Date.now() - driveSiteIndexCache.loadedAt < SEARCH_INDEX_TTL_MS && driveSiteIndexCache.items.length) {
-    return driveSiteIndexCache.items;
+function isClosestPlayableSearchResult(candidate) {
+  if (!candidate || !candidate.hostedOnline) {
+    return false;
+  }
+  if (candidate.softwarePortal || candidate.blockedPage || candidate.mediaOnlyEmbeds) {
+    return false;
+  }
+  return (
+    candidate.playableSignalScore >= 20 &&
+    candidate.textScore >= 35 &&
+    candidate.totalScore >= 90 &&
+    (candidate.brandMatchScore >= 20 || candidate.compatibilityScore >= 20)
+  );
+}
+
+async function loadDriveSiteIndex(siteConfig) {
+  const cacheEntry = driveSiteIndexCache[siteConfig.id] || {
+    loadedAt: 0,
+    items: [],
+  };
+  if (Date.now() - cacheEntry.loadedAt < SEARCH_INDEX_TTL_MS && cacheEntry.items.length) {
+    return cacheEntry.items;
   }
 
-  const html = await fetchText(DRIVE_SITE_URL, {}, "Fetch drive-u-7-home-10 index");
+  const html = await fetchText(siteConfig.url, {}, `Fetch ${siteConfig.label} index`);
   const anchorPattern = /<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
   const results = [];
   let match = null;
 
   while ((match = anchorPattern.exec(html))) {
-    const href = cleanExtractedUrl(match[1], DRIVE_SITE_URL);
-    if (!href || !href.includes(DRIVE_SITE_PREFIX)) {
+    const href = cleanExtractedUrl(match[1], siteConfig.url);
+    if (!href || !href.includes(siteConfig.prefix)) {
       continue;
     }
     const title = stripTags(match[2]);
@@ -897,29 +942,36 @@ async function loadDriveSiteIndex() {
     }
     results.push({
       provider: "drive-site",
+      searchSiteId: siteConfig.id,
+      searchSiteLabel: siteConfig.label,
       title,
       url: href,
     });
   }
 
-  driveSiteIndexCache = {
+  driveSiteIndexCache[siteConfig.id] = {
     loadedAt: Date.now(),
     items: uniqueBy(results, (item) => item.url),
   };
-  return driveSiteIndexCache.items;
+  return driveSiteIndexCache[siteConfig.id].items;
 }
 
 async function searchDriveSite(query) {
-  const items = await loadDriveSiteIndex();
-  const ranked = items
-    .map((item) => ({
-      ...item,
-      query,
-      textScore: scoreQueryMatch(query, item.title, item.url),
-    }))
-    .filter((item) => item.textScore >= SEARCHABLE_SITE_MATCH_FLOOR)
-    .sort((left, right) => right.textScore - left.textScore)
-    .slice(0, MAX_SITE_CANDIDATES);
+  const siteItems = await Promise.all(
+    PREFERRED_SEARCH_SITES.map(async (siteConfig) => {
+      const items = await loadDriveSiteIndex(siteConfig);
+      return items
+        .map((item) => ({
+          ...item,
+          query,
+          textScore: scoreQueryMatch(query, item.title, item.url),
+        }))
+        .filter((item) => item.textScore >= SEARCHABLE_SITE_MATCH_FLOOR)
+        .sort((left, right) => right.textScore - left.textScore)
+        .slice(0, MAX_SITE_CANDIDATES);
+    }),
+  );
+  const ranked = siteItems.flat().sort((left, right) => right.textScore - left.textScore).slice(0, MAX_SITE_CANDIDATES);
 
   if (!ranked.length) {
     return [];
@@ -987,13 +1039,9 @@ async function findBestSearchResult(query) {
   const bestCandidate = combined.find((candidate) => isAcceptableSearchResult(candidate)) || null;
 
   if (bestCandidate) {
-    const alternatives = [...driveCandidates.slice(1, 3), ...webCandidates.slice(1, 3)]
-      .filter((item) => item.url !== bestCandidate.url)
-      .slice(0, 4)
-      .map((item) => item.displayName || item.title);
     return {
       candidate: bestCandidate,
-      alternatives,
+      alternatives: listAlternativeNames(combined, bestCandidate.url),
     };
   }
 
@@ -1006,18 +1054,26 @@ async function findBestSearchResult(query) {
           ? `${fallbackCandidate.reason} | best available match`
           : "best available match",
       },
-      alternatives: [...driveCandidates.slice(1, 3), ...webCandidates.slice(1, 3)]
-        .filter((item) => item.url !== fallbackCandidate.url)
-        .slice(0, 4)
-        .map((item) => item.displayName || item.title),
+      alternatives: listAlternativeNames(combined, fallbackCandidate.url),
+    };
+  }
+
+  const closestPlayableCandidate = combined.find((candidate) => isClosestPlayableSearchResult(candidate)) || null;
+  if (closestPlayableCandidate) {
+    return {
+      candidate: {
+        ...closestPlayableCandidate,
+        reason: closestPlayableCandidate.reason
+          ? `${closestPlayableCandidate.reason} | closest playable match`
+          : "closest playable match",
+      },
+      alternatives: listAlternativeNames(combined, closestPlayableCandidate.url),
     };
   }
 
   return {
     candidate: null,
-    alternatives: [...driveCandidates, ...webCandidates]
-      .slice(0, 4)
-      .map((item) => item.displayName || item.title),
+    alternatives: listAlternativeNames(combined),
   };
 }
 

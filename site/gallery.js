@@ -277,6 +277,7 @@ function handleAdminSubmit(event) {
 }
 
 async function initGallery() {
+  setAdminPanelVisible(false);
   adminToggle?.addEventListener("click", () => {
     setAdminPanelVisible(adminPanel?.hidden ?? true);
   });

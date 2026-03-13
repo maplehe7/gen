@@ -60,6 +60,7 @@ function githubHeaders(env) {
   return {
     Authorization: `Bearer ${env.GITHUB_TOKEN}`,
     Accept: "application/vnd.github+json",
+    "User-Agent": "standalone-forge-proxy",
     "X-GitHub-Api-Version": "2022-11-28",
   };
 }
@@ -99,7 +100,10 @@ async function githubJson(url, env, init = {}, label = "GitHub request") {
   }
 
   if (!response.ok) {
-    const message = payload?.message || `${label} failed with status ${response.status}`;
+    const message =
+      payload?.message ||
+      payload?.raw ||
+      `${label} failed with status ${response.status}`;
     throw new Error(`${label} failed with status ${response.status}: ${message}`);
   }
 
@@ -125,7 +129,10 @@ async function githubNoContent(url, env, init = {}, label = "GitHub request") {
         payload = { raw: text };
       }
     }
-    const message = payload?.message || `${label} failed with status ${response.status}`;
+    const message =
+      payload?.message ||
+      payload?.raw ||
+      `${label} failed with status ${response.status}`;
     throw new Error(`${label} failed with status ${response.status}: ${message}`);
   }
 }

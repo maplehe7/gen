@@ -48,6 +48,20 @@ const PENALIZED_HOSTS = [
   "y8.com",
   "youtube.com",
 ];
+const PORTAL_HOSTS = [
+  "coolmathgames.com",
+  "drifted.com",
+  "gamepix.com",
+  "hoodamath.com",
+  "hooplandgame.com",
+  "mathplayground.com",
+  "mortgagecalculator.org",
+];
+const WRAPPER_HOSTS = [
+  "googleusercontent.com",
+  "script.google.com",
+  "sites.google.com",
+];
 const GENERIC_SITE_TITLES = new Set(["classroom g+", "home", "search this site", "unblocked games"]);
 
 let driveSiteIndexCache = {
@@ -346,6 +360,30 @@ function domainFromUrl(value) {
   }
 }
 
+function compactSearchText(value) {
+  return normalizeSearchText(value).replace(/\s+/g, "");
+}
+
+function compactHostname(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/^www\./, "")
+    .split(".")
+    .slice(0, -1)
+    .join("")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function compactUrlPath(value) {
+  try {
+    return new URL(String(value || ""))
+      .pathname.toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+  } catch (_error) {
+    return "";
+  }
+}
+
 function matchesHost(host, suffixes) {
   return suffixes.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
 }
@@ -360,6 +398,54 @@ function isFriendlyHostedDomain(value) {
 
 function isPenalizedDomain(value) {
   return matchesHost(domainFromUrl(value), PENALIZED_HOSTS);
+}
+
+function isPortalDomain(value) {
+  return matchesHost(domainFromUrl(value), PORTAL_HOSTS);
+}
+
+function isWrapperDomain(value) {
+  return matchesHost(domainFromUrl(value), WRAPPER_HOSTS);
+}
+
+function brandedHostScore(query, value) {
+  const compactQuery = compactSearchText(query);
+  if (!compactQuery || compactQuery.length < 4) {
+    return 0;
+  }
+
+  const hostScoreSource = compactHostname(domainFromUrl(value));
+  const pathScoreSource = compactUrlPath(value);
+  let score = 0;
+
+  if (hostScoreSource === compactQuery) {
+    score += 160;
+  } else if (hostScoreSource.startsWith(compactQuery) || hostScoreSource.endsWith(compactQuery)) {
+    score += 125;
+  } else if (hostScoreSource.includes(compactQuery)) {
+    score += 95;
+  } else if (compactQuery.includes(hostScoreSource) && hostScoreSource.length >= 5) {
+    score += 35;
+  }
+
+  if (pathScoreSource === compactQuery) {
+    score += 26;
+  } else if (pathScoreSource.includes(compactQuery)) {
+    score += 18;
+  }
+
+  return score;
+}
+
+function hasSuspiciousWrappedAsset(urls, html = "") {
+  const haystack = `${urls.join(" ")} ${html}`.toLowerCase();
+  return (
+    /\.xml(?:[?#\s]|$)/i.test(haystack) ||
+    /streamingassets\//i.test(haystack) ||
+    /cdn\.jsdelivr\.net\/gh\//i.test(haystack) ||
+    /preview\.editmysite\.com/i.test(haystack) ||
+    /script\.google\.com\/macros\/s\//i.test(haystack)
+  );
 }
 
 function isDownloadUrl(value) {
@@ -536,6 +622,13 @@ function analyzeCandidateHtml(candidate, html) {
   );
   const externalUrls = extractUrlsFromHtml(html, candidate.url).filter((value) => !isIgnoredInfrastructureUrl(value));
   const downloadableUrls = externalUrls.filter((value) => isDownloadUrl(value));
+  const primaryBrandMatchScore = brandedHostScore(candidate.query, candidate.url);
+  const externalBrandMatchScore = externalUrls.reduce(
+    (best, value) => Math.max(best, brandedHostScore(candidate.query, value)),
+    0,
+  );
+  const brandMatchScore = primaryBrandMatchScore + Math.round(externalBrandMatchScore * 0.35);
+  const suspiciousWrapperAssets = hasSuspiciousWrappedAsset(externalUrls, htmlLower);
   const compatibilitySignals = [];
   let compatibilityScore = 0;
 
@@ -552,11 +645,12 @@ function analyzeCandidateHtml(candidate, html) {
   addCompatibility(/\.framework\.js(?:\.(?:unityweb|gz|br))?/i.test(html), 35, "framework.js");
   addCompatibility(/\.wasm(?:\.(?:unityweb|gz|br))?/i.test(html), 30, "wasm");
   addCompatibility(/\.data(?:\.(?:unityweb|gz|br))?/i.test(html), 20, "data file");
-  addCompatibility(htmlLower.includes("innerframegapiinitialized") || htmlLower.includes("updateuserhtmlframe("), 40, "Google Sites embed");
-  addCompatibility(htmlLower.includes("googleusercontent.com/embeds/"), 20, "embed frame");
+  addCompatibility(htmlLower.includes("innerframegapiinitialized") || htmlLower.includes("updateuserhtmlframe("), 8, "Google Sites embed");
+  addCompatibility(htmlLower.includes("googleusercontent.com/embeds/"), 4, "embed frame");
   addCompatibility(htmlLower.includes("<iframe"), 16, "iframe");
   addCompatibility(htmlLower.includes("<canvas"), 8, "canvas");
   addCompatibility(externalUrls.length > 0, 10, "hosted asset");
+  const playableSignalScore = compatibilityScore;
 
   let hostedOnlineScore = 0;
   if (!downloadableUrls.length && (externalUrls.length > 0 || htmlLower.includes("<iframe") || htmlLower.includes("<canvas"))) {
@@ -568,8 +662,29 @@ function analyzeCandidateHtml(candidate, html) {
   if (/unblocked|classroom|browser|html5|online/i.test(`${rawTitle} ${description}`)) {
     hostedOnlineScore += 10;
   }
+  if (brandMatchScore >= 95) {
+    hostedOnlineScore += 24;
+  } else if (brandMatchScore >= 45) {
+    hostedOnlineScore += 12;
+  }
   if (downloadableUrls.length) {
     hostedOnlineScore -= 55;
+  }
+  if (isWrapperDomain(candidate.url)) {
+    hostedOnlineScore -= 40;
+    compatibilityScore -= 10;
+  }
+  if (isPortalDomain(candidate.url)) {
+    hostedOnlineScore -= 18;
+    compatibilityScore -= 6;
+  }
+  if (candidate.provider === "drive-site" && !externalUrls.some((value) => brandedHostScore(candidate.query, value) >= 80)) {
+    hostedOnlineScore -= 55;
+    compatibilityScore -= 15;
+  }
+  if (suspiciousWrapperAssets) {
+    hostedOnlineScore -= 30;
+    compatibilityScore -= 45;
   }
   if (isPenalizedDomain(candidate.url)) {
     hostedOnlineScore -= 12;
@@ -578,7 +693,12 @@ function analyzeCandidateHtml(candidate, html) {
 
   const hostedOnline = hostedOnlineScore >= 20 && !downloadableUrls.length;
   const displayName = cleanDisplayTitle(candidate.query, rawTitle, candidate.title);
-  const totalScore = candidate.textScore + compatibilityScore + hostedOnlineScore + (candidate.provider === "drive-site" ? 35 : 0);
+  const totalScore =
+    candidate.textScore +
+    compatibilityScore +
+    hostedOnlineScore +
+    brandMatchScore +
+    (candidate.provider === "drive-site" ? 12 : 0);
   const confidence = Math.max(0, Math.min(100, Math.round(totalScore / 3)));
 
   const enriched = {
@@ -587,6 +707,8 @@ function analyzeCandidateHtml(candidate, html) {
     displayName,
     description,
     imageUrl,
+    brandMatchScore,
+    playableSignalScore,
     compatibilityScore,
     compatibilitySignals,
     hostedOnline,
@@ -607,6 +729,8 @@ function makeRejectedCandidate(candidate, reason) {
     displayName: candidate.title,
     description: "",
     imageUrl: "",
+    brandMatchScore: brandedHostScore(candidate.query, candidate.url),
+    playableSignalScore: 0,
     compatibilityScore: 0,
     compatibilitySignals: [],
     hostedOnline: false,
@@ -641,6 +765,12 @@ function isAcceptableSearchResult(candidate) {
   if (!candidate || !candidate.hostedOnline) {
     return false;
   }
+  if (candidate.playableSignalScore < 20) {
+    return false;
+  }
+  if (candidate.brandMatchScore < 55 && candidate.compatibilityScore < 45) {
+    return false;
+  }
   if (candidate.provider === "drive-site") {
     return candidate.textScore >= 60 && candidate.totalScore >= 120;
   }
@@ -651,10 +781,19 @@ function isFallbackSearchResult(candidate) {
   if (!candidate) {
     return false;
   }
-  if (candidate.hostedOnline && candidate.textScore >= 40) {
+  if (
+    candidate.hostedOnline &&
+    candidate.playableSignalScore >= 20 &&
+    candidate.textScore >= 40 &&
+    (candidate.brandMatchScore >= 45 || candidate.compatibilityScore >= 35)
+  ) {
     return true;
   }
-  return candidate.textScore >= 70 && candidate.compatibilityScore >= 30;
+  return (
+    candidate.playableSignalScore >= 20 &&
+    candidate.textScore >= 70 &&
+    (candidate.brandMatchScore >= 55 || candidate.compatibilityScore >= 35)
+  );
 }
 
 async function loadDriveSiteIndex() {
@@ -876,21 +1015,36 @@ function sanitizeReportValue(value) {
   return collapseWhitespace(String(value || "").replace(/[|\r\n]+/g, " "));
 }
 
-async function findRecentRun(env, submittedAtIso) {
+async function findRecentRun(env, submittedAtIso, requestId = "") {
   const runsUrl =
     `${githubApiBase(env)}/actions/workflows/${encodeURIComponent(workflowFile(env))}/runs` +
     `?event=workflow_dispatch&branch=${encodeURIComponent(env.GITHUB_REF || "main")}&per_page=10`;
   const submittedAt = Date.parse(submittedAtIso);
+  const normalizedRequestId = String(requestId || "").trim();
 
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const payload = await githubJson(runsUrl, env, {}, "List workflow runs");
     const runs = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : [];
-    const match = runs.find((run) => {
+    if (normalizedRequestId) {
+      const exactMatch = runs.find((run) => {
+        const displayTitle = String(run?.display_title || "").trim();
+        const runName = String(run?.name || "").trim();
+        return displayTitle === normalizedRequestId || runName === normalizedRequestId;
+      });
+      if (exactMatch) {
+        return exactMatch;
+      }
+    }
+
+    const recentRuns = runs.filter((run) => {
       const createdAt = Date.parse(run.created_at || "");
-      return Number.isFinite(createdAt) && createdAt >= submittedAt - 120000;
+      return Number.isFinite(createdAt) && createdAt >= submittedAt - 5000;
     });
-    if (match) {
-      return match;
+    if (!normalizedRequestId && recentRuns.length) {
+      return recentRuns[0];
+    }
+    if (normalizedRequestId && attempt >= 4 && recentRuns.length) {
+      return recentRuns[0];
     }
     await sleep(1500);
   }
@@ -982,7 +1136,7 @@ async function handleDispatch(request, env) {
     "Dispatch workflow",
   );
 
-  const run = await findRecentRun(env, submittedAtIso);
+  const run = await findRecentRun(env, submittedAtIso, requestId);
   return json(
     {
       owner: env.GITHUB_OWNER,

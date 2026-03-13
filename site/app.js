@@ -11,6 +11,7 @@ const MAX_RECORDED_RUNS = 40;
 const MAX_STORED_JOBS = 20;
 const ACTIVE_JOB_RETENTION_MS = 2 * 24 * 60 * 60 * 1000;
 const TERMINAL_JOB_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
+const FAILED_JOB_GRACE_MS = 30 * 1000;
 const MIN_HISTORY_DURATION_SECONDS = 1;
 const MAX_HISTORY_DURATION_SECONDS = 900;
 const DEFAULT_STEP_DURATIONS = {
@@ -366,6 +367,10 @@ function isTerminalJob(job) {
   return status === "completed" || status === "error";
 }
 
+function isFailedJob(job) {
+  return String(job?.status || "") === "completed" && String(job?.conclusion || "") && String(job?.conclusion || "") !== "success";
+}
+
 function jobRetentionMs(job) {
   return isTerminalJob(job) ? TERMINAL_JOB_RETENTION_MS : ACTIVE_JOB_RETENTION_MS;
 }
@@ -397,6 +402,7 @@ function serializeJobForStorage(job) {
     playPath: stringValue(job.playPath),
     entryId: stringValue(job.entryId),
     error: stringValue(job.error),
+    failedAt: isFailedJob(job) ? timestampMs(job.failedAt || job.lastServerUpdateAt || job.progressUpdatedAt || Date.now()) : 0,
     lastServerUpdateAt: timestampMs(job.lastServerUpdateAt || job.progressUpdatedAt || Date.now()),
     lastSyncAttemptAt: timestampMs(job.lastSyncAttemptAt || job.progressUpdatedAt || Date.now()),
     syncFailureCount: Math.max(Number(job.syncFailureCount) || 0, 0),
@@ -415,7 +421,7 @@ function normalizeStoredJob(rawJob) {
   if (!normalized.sourceUrl) {
     return null;
   }
-  if (normalized.status === "completed" && normalized.conclusion && normalized.conclusion !== "success") {
+  if (isFailedJob(normalized) && Date.now() - timestampMs(normalized.failedAt || Date.now()) > FAILED_JOB_GRACE_MS) {
     return null;
   }
 
@@ -1029,7 +1035,7 @@ function renderActions(job, actionsRoot) {
   }
   actionsRoot.innerHTML = "";
 
-  if (job.playPath) {
+  if (job.playPath || (job.status === "completed" && job.conclusion === "success")) {
     const galleryLink = document.createElement("a");
     galleryLink.className = "job-link";
     galleryLink.href = galleryUrlForEntry(job.entryId || "");
@@ -1068,7 +1074,7 @@ function renderJobs() {
     const actions = fragment.querySelector(".job-actions");
 
     card.classList.toggle("is-completed", job.status === "completed" && job.conclusion === "success");
-    card.classList.toggle("is-error", job.status === "completed" && job.conclusion && job.conclusion !== "success");
+    card.classList.toggle("is-error", isFailedJob(job));
 
     status.textContent = formatStatus(job.status);
     title.textContent = job.displayName;
@@ -1157,6 +1163,10 @@ async function refreshJobStatuses() {
           etaLabel: derived.etaLabel,
           playPath: entry?.play_path || job.playPath || "",
           entryId: entry?.id || job.entryId || "",
+          failedAt:
+            derived.conclusion && derived.conclusion !== "success"
+              ? timestampMs(job.failedAt || Date.now())
+              : 0,
           lastServerUpdateAt: Date.now(),
           lastSyncAttemptAt: Date.now(),
           syncFailureCount: 0,
@@ -1186,6 +1196,7 @@ async function handleSubmit(event) {
   event.preventDefault();
   formMessage.textContent = "";
   submitButton.disabled = true;
+  let pendingRequestId = "";
 
   try {
     if (!workerConfigured(appConfig.workerUrl)) {
@@ -1202,6 +1213,7 @@ async function handleSubmit(event) {
     const resolved = await resolveSource(sourceInput.value);
     const displayName = resolved.displayName;
     const requestId = createRequestId();
+    pendingRequestId = requestId;
     const draftJob = {
       requestId,
       owner: appConfig.owner,
@@ -1228,6 +1240,9 @@ async function handleSubmit(event) {
       playPath: "",
       error: "",
     };
+
+    upsertJob(draftJob);
+    renderJobs();
 
     if (resolved.resolutionReason) {
       formMessage.textContent = `Matched ${displayName}: ${resolved.resolutionReason}`;
@@ -1256,6 +1271,11 @@ async function handleSubmit(event) {
       : `Workflow started for ${displayName}`;
     await refreshJobStatuses();
   } catch (error) {
+    if (pendingRequestId) {
+      jobs = jobs.filter((job) => String(job.requestId || "").trim() !== pendingRequestId);
+      saveJobs();
+      renderJobs();
+    }
     formMessage.textContent = error.message;
   } finally {
     submitButton.disabled = false;

@@ -11,17 +11,19 @@ const MAX_RECORDED_RUNS = 40;
 const MAX_STORED_JOBS = 20;
 const ACTIVE_JOB_RETENTION_MS = 2 * 24 * 60 * 60 * 1000;
 const TERMINAL_JOB_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
+const MIN_HISTORY_DURATION_SECONDS = 1;
+const MAX_HISTORY_DURATION_SECONDS = 900;
 const DEFAULT_STEP_DURATIONS = {
-  "Checkout source": 8,
-  "Restore previous Pages state": 8,
-  "Setup Python": 12,
-  "Install dependencies": 10,
-  "Resolve workflow inputs": 4,
-  "Build or update Pages site": 95,
-  "Persist Pages state branch": 14,
-  "Configure GitHub Pages": 6,
-  "Upload Pages artifact": 12,
-  "Deploy to GitHub Pages": 24,
+  "Checkout source": 2,
+  "Restore previous Pages state": 2,
+  "Setup Python": 3,
+  "Install dependencies": 4,
+  "Resolve workflow inputs": 1,
+  "Build or update Pages site": 12,
+  "Persist Pages state branch": 4,
+  "Configure GitHub Pages": 2,
+  "Upload Pages artifact": 3,
+  "Deploy to GitHub Pages": 6,
 };
 const DEFAULT_WORKFLOW_STEP_ORDER = [
   "Checkout source",
@@ -35,6 +37,10 @@ const DEFAULT_WORKFLOW_STEP_ORDER = [
   "Upload Pages artifact",
   "Deploy to GitHub Pages",
 ];
+const DEFAULT_WORKFLOW_DURATION_SECONDS = DEFAULT_WORKFLOW_STEP_ORDER.reduce(
+  (sum, name) => sum + (DEFAULT_STEP_DURATIONS[name] || DEFAULT_STEP_SECONDS),
+  0,
+);
 
 const form = document.getElementById("export-form");
 const sourceInput = document.getElementById("source");
@@ -52,6 +58,7 @@ let publishedCatalog = [];
 let jobs = [];
 let jobHistory = {
   stepDurations: {},
+  totalDurations: [],
   recordedRunIds: [],
 };
 let appConfig = {
@@ -255,15 +262,14 @@ function loadJobHistory() {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(JOB_HISTORY_KEY) || "{}");
     jobHistory = {
-      stepDurations:
-        parsed && typeof parsed.stepDurations === "object" && parsed.stepDurations
-          ? parsed.stepDurations
-          : {},
+      stepDurations: sanitizeStepDurations(parsed?.stepDurations),
+      totalDurations: sanitizeDurationList(parsed?.totalDurations),
       recordedRunIds: Array.isArray(parsed?.recordedRunIds) ? parsed.recordedRunIds : [],
     };
   } catch (_error) {
     jobHistory = {
       stepDurations: {},
+      totalDurations: [],
       recordedRunIds: [],
     };
   }
@@ -271,6 +277,44 @@ function loadJobHistory() {
 
 function saveJobHistory() {
   window.localStorage.setItem(JOB_HISTORY_KEY, JSON.stringify(jobHistory));
+}
+
+function sanitizeDurationValue(value) {
+  const numeric = Math.round(Number(value));
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  if (numeric < MIN_HISTORY_DURATION_SECONDS || numeric > MAX_HISTORY_DURATION_SECONDS) {
+    return null;
+  }
+  return numeric;
+}
+
+function sanitizeDurationList(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+  return values
+    .map(sanitizeDurationValue)
+    .filter((value) => Number.isFinite(value))
+    .slice(-MAX_HISTORY_SAMPLES);
+}
+
+function sanitizeStepDurations(stepDurations) {
+  if (!stepDurations || typeof stepDurations !== "object") {
+    return {};
+  }
+
+  const sanitized = {};
+  Object.entries(stepDurations).forEach(([name, values]) => {
+    const normalizedName = String(name || "").trim();
+    const sanitizedValues = sanitizeDurationList(values);
+    if (!normalizedName || !sanitizedValues.length) {
+      return;
+    }
+    sanitized[normalizedName] = sanitizedValues;
+  });
+  return sanitized;
 }
 
 function stringValue(value, fallback = "") {
@@ -428,6 +472,19 @@ function stepDurationSeconds(step) {
   return Math.max((end - start) / 1000, 1);
 }
 
+function runTotalDurationSeconds(runPayload) {
+  const start =
+    Date.parse(String(runPayload?.created_at || "")) ||
+    Date.parse(String(runPayload?.run_started_at || ""));
+  const end =
+    Date.parse(String(runPayload?.updated_at || "")) ||
+    Date.parse(String(runPayload?.completed_at || ""));
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return null;
+  }
+  return Math.max((end - start) / 1000, 1);
+}
+
 function median(values) {
   if (!Array.isArray(values) || !values.length) {
     return null;
@@ -455,6 +512,24 @@ function expectedSecondsForStep(name) {
     return historicalMedian;
   }
   return DEFAULT_STEP_DURATIONS[stepName] || DEFAULT_STEP_SECONDS;
+}
+
+function expectedWorkflowSeconds() {
+  const historicalMedian = median(jobHistory.totalDurations);
+  if (Number.isFinite(historicalMedian)) {
+    return historicalMedian;
+  }
+  return DEFAULT_WORKFLOW_DURATION_SECONDS;
+}
+
+function runElapsedSeconds(runPayload) {
+  const createdAt =
+    Date.parse(String(runPayload?.created_at || "")) ||
+    Date.parse(String(runPayload?.run_started_at || ""));
+  if (!Number.isFinite(createdAt)) {
+    return 0;
+  }
+  return Math.max((Date.now() - createdAt) / 1000, 0);
 }
 
 function workflowStepNames(steps) {
@@ -532,7 +607,12 @@ function estimateRemainingSeconds(runPayload, jobsPayload) {
     remainingSeconds += 8;
   }
 
-  return remainingSeconds;
+  const totalRemaining = Math.max(expectedWorkflowSeconds() - runElapsedSeconds(runPayload), 1);
+  if (!steps.length) {
+    return totalRemaining;
+  }
+
+  return Math.max(totalRemaining, Math.min(remainingSeconds, totalRemaining + 20));
 }
 
 function estimateProgressPercent(runPayload, jobsPayload) {
@@ -595,10 +675,20 @@ function recordSuccessfulRunHistory(runPayload, jobsPayload) {
     }
 
     const current = Array.isArray(jobHistory.stepDurations[name]) ? jobHistory.stepDurations[name] : [];
-    current.push(Math.round(duration));
-    jobHistory.stepDurations[name] = current.slice(-MAX_HISTORY_SAMPLES);
+    const sanitizedDuration = sanitizeDurationValue(duration);
+    if (!Number.isFinite(sanitizedDuration)) {
+      return;
+    }
+    current.push(sanitizedDuration);
+    jobHistory.stepDurations[name] = sanitizeDurationList(current);
     recordedAny = true;
   });
+
+  const totalDuration = sanitizeDurationValue(runTotalDurationSeconds(runPayload));
+  if (Number.isFinite(totalDuration)) {
+    jobHistory.totalDurations = sanitizeDurationList([...jobHistory.totalDurations, totalDuration]);
+    recordedAny = true;
+  }
 
   if (!recordedAny) {
     return;

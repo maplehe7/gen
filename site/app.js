@@ -377,6 +377,7 @@ function serializeJobForStorage(job) {
     jobsUrl: stringValue(job.jobsUrl),
     htmlUrl: stringValue(job.htmlUrl),
     playPath: stringValue(job.playPath),
+    entryId: stringValue(job.entryId),
     error: stringValue(job.error),
     lastServerUpdateAt: timestampMs(job.lastServerUpdateAt || job.progressUpdatedAt || Date.now()),
     lastSyncAttemptAt: timestampMs(job.lastSyncAttemptAt || job.progressUpdatedAt || Date.now()),
@@ -881,6 +882,14 @@ function playUrlForPath(playPath) {
   return new URL(playPath, window.location.href).toString();
 }
 
+function galleryUrlForEntry(entryId = "") {
+  const target = new URL("./gallery.html", window.location.href);
+  if (entryId) {
+    target.hash = entryId;
+  }
+  return target.toString();
+}
+
 function publishedEntryForJob(job) {
   const jobSourceUrl = normalizeUrl(job.sourceUrl || "");
   return publishedCatalog.find(
@@ -937,13 +946,11 @@ function renderActions(job, actionsRoot) {
   actionsRoot.innerHTML = "";
 
   if (job.playPath) {
-    const playLink = document.createElement("a");
-    playLink.className = "job-link";
-    playLink.href = playUrlForPath(job.playPath);
-    playLink.target = "_blank";
-    playLink.rel = "noreferrer";
-    playLink.textContent = "Open game";
-    actionsRoot.append(playLink);
+    const galleryLink = document.createElement("a");
+    galleryLink.className = "job-link";
+    galleryLink.href = galleryUrlForEntry(job.entryId || "");
+    galleryLink.textContent = "Open gallery";
+    actionsRoot.append(galleryLink);
   }
 }
 
@@ -1065,6 +1072,7 @@ async function refreshJobStatuses() {
           etaUpdatedAt: Date.now(),
           etaLabel: derived.etaLabel,
           playPath: entry?.play_path || job.playPath || "",
+          entryId: entry?.id || job.entryId || "",
           lastServerUpdateAt: Date.now(),
           lastSyncAttemptAt: Date.now(),
           syncFailureCount: 0,

@@ -143,6 +143,44 @@ body {
   gap: 10px;
 }
 
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.gallery-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.gallery-card.is-selected {
+  border-color: var(--accent);
+}
+
+.gallery-link {
+  display: grid;
+  color: inherit;
+  text-decoration: none;
+}
+
+.gallery-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: #e9e9e9;
+}
+
+.gallery-title {
+  margin: 0;
+  padding: 10px;
+  font-size: 0.95rem;
+  word-break: break-word;
+}
+
 .job-card {
   display: grid;
   gap: 10px;
@@ -228,5 +266,9 @@ body {
   .job-topline,
   .job-meta {
     flex-direction: column;
+  }
+
+  .gallery-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

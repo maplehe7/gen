@@ -1,28 +1,36 @@
 const galleryContainer = document.getElementById("gallery");
 const galleryTemplate = document.getElementById("gallery-template");
 
-function formatDate(value) {
-  if (!value) {
-    return "Unknown";
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Unknown";
-  }
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
-}
-
 function playUrlForPath(playPath) {
   return new URL(playPath, window.location.href).toString();
+}
+
+function thumbnailUrlForPath(thumbnailPath) {
+  return new URL(thumbnailPath, window.location.href).toString();
 }
 
 async function fetchPublishedGames() {
   const response = await fetch(`./published_games.json?ts=${Date.now()}`);
   const payload = await response.json().catch(() => ({}));
-  return Array.isArray(payload?.games) ? payload.games : [];
+  const games = Array.isArray(payload?.games) ? payload.games : [];
+  return games.sort((left, right) => {
+    const leftTime = Date.parse(String(left?.generated_at || "")) || 0;
+    const rightTime = Date.parse(String(right?.generated_at || "")) || 0;
+    return rightTime - leftTime;
+  });
+}
+
+function scrollToSelectedCard() {
+  const entryId = decodeURIComponent(window.location.hash.replace(/^#/, "").trim());
+  if (!entryId) {
+    return;
+  }
+  const card = document.getElementById(`game-${entryId}`);
+  if (!card) {
+    return;
+  }
+  card.classList.add("is-selected");
+  card.scrollIntoView({ block: "center" });
 }
 
 function renderGallery(entries) {
@@ -41,21 +49,23 @@ function renderGallery(entries) {
 
   entries.forEach((entry) => {
     const fragment = galleryTemplate.content.cloneNode(true);
-    fragment.querySelector(".job-title").textContent = entry.title || entry.id || "Untitled";
-    fragment.querySelector(".gallery-source").textContent = entry.source_url || "";
-    fragment.querySelector(".gallery-meta").textContent = formatDate(entry.generated_at);
+    const card = fragment.querySelector(".gallery-card");
+    const link = fragment.querySelector(".gallery-link");
+    const thumb = fragment.querySelector(".gallery-thumb");
+    const title = fragment.querySelector(".gallery-title");
 
-    const actions = fragment.querySelector(".job-actions");
-    const openLink = document.createElement("a");
-    openLink.className = "job-link";
-    openLink.href = playUrlForPath(entry.play_path || entry.folder || "");
-    openLink.target = "_blank";
-    openLink.rel = "noreferrer";
-    openLink.textContent = "Open game";
-    actions.append(openLink);
+    card.id = `game-${entry.id || ""}`;
+    link.href = playUrlForPath(entry.play_path || entry.folder || "");
+    title.textContent = entry.title || entry.id || "Untitled";
+    thumb.alt = title.textContent;
+    thumb.src = entry.thumbnail_path
+      ? thumbnailUrlForPath(entry.thumbnail_path)
+      : "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 360'%3E%3Crect width='640' height='360' fill='%23e9e9e9'/%3E%3C/svg%3E";
 
     galleryContainer.append(fragment);
   });
+
+  scrollToSelectedCard();
 }
 
 async function initGallery() {

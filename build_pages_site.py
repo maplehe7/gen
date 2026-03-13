@@ -18,6 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent
 SITE_SOURCE_DIR = BASE_DIR / "site"
 CATALOG_SOURCE_PATH = BASE_DIR / "game_catalog.json"
 EXPORTER_PATH = Path(os.environ.get("UNITY_EXPORTER_PATH") or (BASE_DIR / "unity_standalone.py"))
+THUMBNAIL_SCRIPT_PATH = BASE_DIR / "capture_game_thumbnail.py"
 
 
 def parse_args() -> argparse.Namespace:
@@ -158,6 +159,29 @@ def prepare_dist(state_dir: Path, dist_dir: Path) -> None:
         write_json(published_path, {"generated_at": "", "games": []})
 
 
+def capture_thumbnail_for_folder(dist_dir: Path, folder_name: str) -> str:
+    if not THUMBNAIL_SCRIPT_PATH.exists():
+        return ""
+
+    output_path = dist_dir / "games" / folder_name / "thumbnail.jpg"
+    command = [
+        sys.executable,
+        str(THUMBNAIL_SCRIPT_PATH),
+        "--site-root",
+        str(dist_dir),
+        "--game-path",
+        f"games/{folder_name}/",
+        "--output-path",
+        str(output_path),
+    ]
+    try:
+        subprocess.run(command, cwd=BASE_DIR, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+
+    return f"games/{folder_name}/thumbnail.jpg" if output_path.exists() else ""
+
+
 def build_export(
     dist_dir: Path,
     source_url: str,
@@ -188,6 +212,7 @@ def build_export(
 
     summary_path = target_dir / "standalone-build-info.json"
     summary = load_json(summary_path)
+    thumbnail_path = capture_thumbnail_for_folder(dist_dir, folder_name)
     generated_at = iso_now()
     return {
         "id": folder_name,
@@ -196,6 +221,7 @@ def build_export(
         "source_url": source_url,
         "folder": f"games/{folder_name}",
         "play_path": f"games/{folder_name}/",
+        "thumbnail_path": thumbnail_path,
         "summary_path": f"games/{folder_name}/standalone-build-info.json",
         "generated_at": generated_at,
         "summary": summary,
@@ -235,6 +261,46 @@ def update_catalog(dist_dir: Path, new_entry: dict[str, Any]) -> None:
     )
 
 
+def backfill_catalog_thumbnails(dist_dir: Path, limit: int = 6) -> None:
+    catalog_path = dist_dir / "published_games.json"
+    catalog = load_json(catalog_path)
+    games = catalog.get("games")
+    if not isinstance(games, list):
+        return
+
+    updated = False
+    remaining = max(limit, 0)
+    for game in games:
+        if remaining <= 0 or not isinstance(game, dict):
+            continue
+        if str(game.get("thumbnail_path", "")).strip():
+            continue
+
+        folder = str(game.get("folder", "")).strip().replace("\\", "/")
+        if not folder.startswith("games/"):
+            continue
+        folder_name = folder.split("/", 1)[1]
+        if not folder_name:
+            continue
+
+        thumbnail_path = capture_thumbnail_for_folder(dist_dir, folder_name)
+        if not thumbnail_path:
+            continue
+
+        game["thumbnail_path"] = thumbnail_path
+        updated = True
+        remaining -= 1
+
+    if updated:
+        write_json(
+            catalog_path,
+            {
+                "generated_at": iso_now(),
+                "games": games,
+            },
+        )
+
+
 def main() -> int:
     args = parse_args()
     state_dir = Path(args.state_dir).resolve()
@@ -253,6 +319,7 @@ def main() -> int:
             request_id=request_id,
         )
         update_catalog(dist_dir, new_entry)
+        backfill_catalog_thumbnails(dist_dir)
 
     return 0
 

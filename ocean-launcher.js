@@ -517,6 +517,7 @@
   let launchPanelHideTimer = 0;
   let fakeProgressTimer = 0;
   let fakeProgressValue = 0;
+  let currentProgressValue = 0;
   let handoffPollTimer = 0;
   const stepLogEntries = [];
   const loaderStepEpoch = Date.now();
@@ -832,8 +833,30 @@
     }
   }
 
+  function hasEmbeddedOceanProgress(frameDocument) {
+    if (!frameDocument) {
+      return false;
+    }
+    const root = frameDocument.documentElement || null;
+    const body = frameDocument.body || null;
+    const loadState =
+      (root && root.getAttribute("data-ocean-unity-state")) ||
+      (body && body.getAttribute("data-ocean-unity-state")) ||
+      "";
+    if (loadState) {
+      return true;
+    }
+    return Boolean(
+      frameDocument.getElementById("progressTrack") &&
+        frameDocument.getElementById("progressFill")
+    );
+  }
+
   function syncEmbeddedRuntimeProgress(frameDocument) {
     if (!frameDocument) {
+      return;
+    }
+    if (!hasEmbeddedOceanProgress(frameDocument)) {
       return;
     }
     const embeddedLoadingScreen = frameDocument.getElementById("loadingScreen");
@@ -956,9 +979,14 @@
     logLoaderStep(text);
   }
 
-  function setProgress(progress) {
+  function setProgress(progress, options) {
+    const force = Boolean(options && options.force);
     const numeric = Number(progress);
-    const safeProgress = Number.isFinite(numeric) ? Math.min(1, Math.max(0, numeric)) : 0;
+    let safeProgress = Number.isFinite(numeric) ? Math.min(1, Math.max(0, numeric)) : 0;
+    if (!force) {
+      safeProgress = Math.max(safeProgress, currentProgressValue);
+    }
+    currentProgressValue = safeProgress;
     const percent = Math.round(safeProgress * 100);
     progressFill.style.width = percent + "%";
     loadingScreen.setAttribute("data-progress", String(percent));
@@ -1148,13 +1176,14 @@
     showLaunchPanel();
     setProgressVisibility(false);
     fakeProgressValue = 0;
-    setProgress(0);
+    currentProgressValue = 0;
+    setProgress(0, { force: true });
     setStatus(resolvedInitialStatusText);
   }
 
   function startFakeProgress() {
     clearFakeProgressTimer();
-    fakeProgressValue = 0.02;
+    fakeProgressValue = Math.max(currentProgressValue, 0.02);
     setProgress(fakeProgressValue);
     fakeProgressTimer = window.setInterval(function () {
       if (fakeProgressValue >= 0.92) {
@@ -1168,7 +1197,7 @@
       } else {
         fakeProgressValue += 0.018;
       }
-      fakeProgressValue = Math.min(fakeProgressValue, 0.92);
+      fakeProgressValue = Math.min(Math.max(fakeProgressValue, currentProgressValue), 0.92);
       const percent = setProgress(fakeProgressValue);
       setStatus("Loading " + percent + "%");
     }, 140);
@@ -1457,7 +1486,8 @@
       logLoaderStep("Launch requested");
       loadingScreen.classList.add("is-loading");
       setProgressVisibility(true);
-      setProgress(0);
+      currentProgressValue = 0;
+      setProgress(0, { force: true });
       setStatus("Preparing launch");
       startFakeProgress();
 
@@ -1505,7 +1535,8 @@
   }
 
   setProgressVisibility(false);
-  setProgress(0);
+  currentProgressValue = 0;
+  setProgress(0, { force: true });
   logLoaderStep("Shell initialized");
   setStatus(resolvedInitialStatusText);
 

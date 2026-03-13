@@ -1,5 +1,7 @@
 const PLACEHOLDER_WORKER_URL = "PASTE_CLOUDFLARE_WORKER_URL_HERE";
 const ADMIN_KEY = "standalone-forge-admin";
+const PENDING_DELETES_KEY = "standalone-forge-pending-deletes";
+const PENDING_DELETE_TTL_MS = 24 * 60 * 60 * 1000;
 const galleryContainer = document.getElementById("gallery");
 const galleryTemplate = document.getElementById("gallery-template");
 const adminToggle = document.getElementById("admin-toggle");
@@ -7,6 +9,84 @@ const adminPanel = document.getElementById("admin-panel");
 const adminCodeInput = document.getElementById("admin-code");
 const workerUrl = String(window.STANDALONE_FORGE_CONFIG?.workerUrl || "").trim().replace(/\/+$/, "");
 let galleryEntries = [];
+
+function normalizeValue(value) {
+  return String(value || "").trim();
+}
+
+function entryDeleteKey(entry) {
+  return (
+    normalizeValue(entry?.id) ||
+    normalizeValue(entry?.play_path) ||
+    normalizeValue(entry?.folder) ||
+    normalizeValue(entry?.source_url)
+  );
+}
+
+function loadPendingDeletes() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(PENDING_DELETES_KEY) || "{}");
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+    return parsed;
+  } catch (_error) {
+    return {};
+  }
+}
+
+function savePendingDeletes(pendingDeletes) {
+  window.localStorage.setItem(PENDING_DELETES_KEY, JSON.stringify(pendingDeletes || {}));
+}
+
+function prunePendingDeletes(rawGames, pendingDeletes) {
+  const activeGames = Array.isArray(rawGames) ? rawGames : [];
+  const nextDeletes = {};
+  const liveKeys = new Set(activeGames.map((entry) => entryDeleteKey(entry)).filter(Boolean));
+  const now = Date.now();
+
+  Object.entries(pendingDeletes || {}).forEach(([key, timestamp]) => {
+    const ageMs = now - Number(timestamp || 0);
+    if (!key || ageMs > PENDING_DELETE_TTL_MS) {
+      return;
+    }
+    if (!liveKeys.has(key)) {
+      return;
+    }
+    nextDeletes[key] = Number(timestamp || now);
+  });
+
+  return nextDeletes;
+}
+
+function hidePendingDeletedEntries(rawGames) {
+  const pendingDeletes = prunePendingDeletes(rawGames, loadPendingDeletes());
+  savePendingDeletes(pendingDeletes);
+  return (Array.isArray(rawGames) ? rawGames : []).filter((entry) => !pendingDeletes[entryDeleteKey(entry)]);
+}
+
+function rememberPendingDelete(entry) {
+  const key = entryDeleteKey(entry);
+  if (!key) {
+    return;
+  }
+  const pendingDeletes = loadPendingDeletes();
+  pendingDeletes[key] = Date.now();
+  savePendingDeletes(pendingDeletes);
+}
+
+function forgetPendingDelete(entry) {
+  const key = entryDeleteKey(entry);
+  if (!key) {
+    return;
+  }
+  const pendingDeletes = loadPendingDeletes();
+  if (!pendingDeletes[key]) {
+    return;
+  }
+  delete pendingDeletes[key];
+  savePendingDeletes(pendingDeletes);
+}
 
 function playUrlForPath(playPath) {
   return new URL(playPath, window.location.href).toString();
@@ -49,7 +129,7 @@ async function fetchJson(url, options = {}) {
 
 async function fetchPublishedGames() {
   const payload = await fetchJson(`./published_games.json?ts=${Date.now()}`);
-  const games = Array.isArray(payload?.games) ? payload.games : [];
+  const games = hidePendingDeletedEntries(Array.isArray(payload?.games) ? payload.games : []);
   return games.sort((left, right) => {
     const leftTime = Date.parse(String(left?.generated_at || "")) || 0;
     const rightTime = Date.parse(String(right?.generated_at || "")) || 0;
@@ -118,7 +198,8 @@ async function deleteGame(entry, button) {
         requestId: `${entry.id || "delete"}-${Date.now()}`,
       }),
     });
-    galleryEntries = galleryEntries.filter((item) => String(item?.id || "") !== String(entry.id || ""));
+    rememberPendingDelete(entry);
+    galleryEntries = galleryEntries.filter((item) => entryDeleteKey(item) !== entryDeleteKey(entry));
     renderGallery(galleryEntries);
   } catch (error) {
     button.disabled = false;
@@ -202,7 +283,9 @@ async function initGallery() {
   adminPanel?.addEventListener("submit", handleAdminSubmit);
 
   try {
-    renderGallery(await fetchPublishedGames());
+    const entries = await fetchPublishedGames();
+    entries.forEach((entry) => forgetPendingDelete(entry));
+    renderGallery(entries);
   } catch (_error) {
     renderGallery([]);
   }

@@ -6780,6 +6780,7 @@ def generate_index_html(
       let started = false;
       let loadingScreenDismissed = false;
       let launchPanelHideTimer = 0;
+      let currentProgressValue = 0;
       let legacyConfigUrl = "";
       let loaderScriptPromise = null;
       let buildWarmupStarted = false;
@@ -7209,9 +7210,14 @@ def generate_index_html(
         ROOT.setAttribute("data-ocean-unity-state", value);
       }}
 
-      function setProgress(progress) {{
+      function setProgress(progress, options) {{
+        const force = Boolean(options && options.force);
         const numeric = Number(progress);
-        const safeProgress = Number.isFinite(numeric) ? Math.min(1, Math.max(0, numeric)) : 0;
+        let safeProgress = Number.isFinite(numeric) ? Math.min(1, Math.max(0, numeric)) : 0;
+        if (!force) {{
+          safeProgress = Math.max(safeProgress, currentProgressValue);
+        }}
+        currentProgressValue = safeProgress;
         const percent = Math.round(safeProgress * 100);
         if (progressFill) {{
           progressFill.style.width = percent + "%";
@@ -8087,7 +8093,8 @@ def generate_index_html(
         }}
         releaseLegacyConfigUrl();
         setProgressVisibility(EMBEDDED_MODE);
-        setProgress(0);
+        currentProgressValue = 0;
+        setProgress(0, {{ force: true }});
         setLoadState("idle");
         setStatus(initialStatusText);
       }}
@@ -8871,7 +8878,8 @@ def generate_index_html(
           loadingScreen.classList.add("is-loading");
         }}
         setProgressVisibility(true);
-        setProgress(0);
+        currentProgressValue = 0;
+        setProgress(0, {{ force: true }});
         setStatus("Loading 0%");
 
         ensureStorageAccess().finally(function () {{
@@ -8899,7 +8907,8 @@ def generate_index_html(
       }}
 
       setProgressVisibility(EMBEDDED_MODE);
-      setProgress(0);
+      currentProgressValue = 0;
+      setProgress(0, {{ force: true }});
       setLoadState("idle");
       logLoaderStep("Shell initialized");
       updateLaunchModeUi();

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -10,7 +11,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -43,6 +44,23 @@ def looks_like_url(value: str) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
+def normalize_source_url(value: str) -> str:
+    parsed = urlparse(value.strip())
+    path = parsed.path or "/"
+    if path != "/":
+        path = path.rstrip("/") or "/"
+    return urlunparse(
+        (
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            path,
+            parsed.params,
+            parsed.query,
+            "",
+        )
+    )
+
+
 def derive_name_from_url(value: str) -> str:
     parsed = urlparse(value)
     tail = Path(parsed.path.rstrip("/")).name
@@ -55,6 +73,14 @@ def slugify(value: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9]+", "-", (value or "").strip().lower())
     cleaned = cleaned.strip("-")
     return cleaned or "game"
+
+
+def stable_folder_name_for_source(source_url: str) -> str:
+    normalized_source = normalize_source_url(source_url)
+    parsed = urlparse(normalized_source)
+    source_label = derive_name_from_url(normalized_source) or parsed.netloc or "game"
+    source_hash = hashlib.sha1(normalized_source.encode("utf-8")).hexdigest()[:10]
+    return f"{slugify(source_label)}-{source_hash}"
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -70,6 +96,33 @@ def load_json(path: Path) -> dict[str, Any]:
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def resolve_existing_folder_name(dist_dir: Path, source_url: str) -> str:
+    catalog = load_json(dist_dir / "published_games.json")
+    games = catalog.get("games")
+    if not isinstance(games, list):
+        return ""
+
+    normalized_source = normalize_source_url(source_url)
+    for game in games:
+        if not isinstance(game, dict):
+            continue
+        existing_source = str(game.get("source_url", "")).strip()
+        if not existing_source:
+            continue
+        if normalize_source_url(existing_source) != normalized_source:
+            continue
+
+        folder = str(game.get("folder", "")).strip().replace("\\", "/")
+        if folder.startswith("games/") and "/" not in folder[len("games/") :]:
+            return folder.split("/", 1)[1]
+
+        entry_id = str(game.get("id", "")).strip()
+        if entry_id:
+            return entry_id
+
+    return ""
 
 
 def reset_directory(path: Path) -> None:
@@ -118,9 +171,9 @@ def build_export(
         raise ValueError(f"Invalid source URL: {source_url}")
 
     resolved_name = display_name.strip() or derive_name_from_url(source_url)
-    base_slug = slugify(resolved_name)
-    suffix = request_id[:8] if request_id else datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-    folder_name = f"{base_slug}-{suffix}"
+    folder_name = resolve_existing_folder_name(dist_dir, source_url) or stable_folder_name_for_source(
+        source_url
+    )
     target_dir = dist_dir / "games" / folder_name
 
     command = [
@@ -156,10 +209,18 @@ def update_catalog(dist_dir: Path, new_entry: dict[str, Any]) -> None:
     if not isinstance(games, list):
         games = []
 
+    new_source_url = str(new_entry.get("source_url", "")).strip()
+    normalized_new_source = normalize_source_url(new_source_url) if new_source_url else ""
     normalized_games = [
         game
         for game in games
-        if isinstance(game, dict) and str(game.get("id", "")).strip() != str(new_entry.get("id", "")).strip()
+        if isinstance(game, dict)
+        and str(game.get("id", "")).strip() != str(new_entry.get("id", "")).strip()
+        and (
+            not normalized_new_source
+            or not str(game.get("source_url", "")).strip()
+            or normalize_source_url(str(game.get("source_url", "")).strip()) != normalized_new_source
+        )
     ]
     if new_entry:
         normalized_games.insert(0, new_entry)

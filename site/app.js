@@ -1,9 +1,40 @@
 const JOBS_KEY = "standalone-forge-pages-jobs";
+const JOB_HISTORY_KEY = "standalone-forge-pages-job-history";
+const JOB_STORAGE_VERSION = 2;
 const WORKFLOW_FILE = "build-game.yml";
 const DEFAULT_STEP_SECONDS = 55;
 const PLACEHOLDER_WORKER_URL = "PASTE_CLOUDFLARE_WORKER_URL_HERE";
 const STATUS_REFRESH_MS = 8000;
 const PROGRESS_RENDER_MS = 400;
+const MAX_HISTORY_SAMPLES = 20;
+const MAX_RECORDED_RUNS = 40;
+const MAX_STORED_JOBS = 20;
+const ACTIVE_JOB_RETENTION_MS = 2 * 24 * 60 * 60 * 1000;
+const TERMINAL_JOB_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
+const DEFAULT_STEP_DURATIONS = {
+  "Checkout source": 8,
+  "Restore previous Pages state": 8,
+  "Setup Python": 12,
+  "Install dependencies": 10,
+  "Resolve workflow inputs": 4,
+  "Build or update Pages site": 95,
+  "Persist Pages state branch": 14,
+  "Configure GitHub Pages": 6,
+  "Upload Pages artifact": 12,
+  "Deploy to GitHub Pages": 24,
+};
+const DEFAULT_WORKFLOW_STEP_ORDER = [
+  "Checkout source",
+  "Restore previous Pages state",
+  "Setup Python",
+  "Install dependencies",
+  "Resolve workflow inputs",
+  "Build or update Pages site",
+  "Persist Pages state branch",
+  "Configure GitHub Pages",
+  "Upload Pages artifact",
+  "Deploy to GitHub Pages",
+];
 
 const form = document.getElementById("export-form");
 const sourceInput = document.getElementById("source");
@@ -19,6 +50,10 @@ const publishedTemplate = document.getElementById("published-template");
 let catalogEntries = [];
 let publishedCatalog = [];
 let jobs = [];
+let jobHistory = {
+  stepDurations: {},
+  recordedRunIds: [],
+};
 let appConfig = {
   workerUrl: "",
   owner: "",
@@ -126,6 +161,22 @@ function visibleProgressPercent(job, nowMs = Date.now()) {
   return actual;
 }
 
+function visibleEtaLabel(job, nowMs = Date.now()) {
+  if (job.status === "completed") {
+    return job.conclusion === "success" ? "Completed" : "Stopped";
+  }
+
+  const etaSeconds = Number(job.etaSeconds);
+  if (!Number.isFinite(etaSeconds) || etaSeconds <= 0) {
+    return job.etaLabel || "Calculating...";
+  }
+
+  const updatedAt = timestampMs(job.etaUpdatedAt || job.progressUpdatedAt || job.submittedAt);
+  const elapsedSeconds = Math.max((nowMs - updatedAt) / 1000, 0);
+  const floorSeconds = job.status === "queued" ? 6 : 1;
+  return formatDuration(Math.max(etaSeconds - elapsedSeconds, floorSeconds));
+}
+
 function workerConfigured(workerUrl) {
   const normalized = normalizeUrl(workerUrl);
   return Boolean(normalized && normalized !== PLACEHOLDER_WORKER_URL && looksLikeUrl(normalized));
@@ -179,14 +230,155 @@ function loadConfig() {
 
 function loadJobs() {
   try {
-    jobs = JSON.parse(window.localStorage.getItem(JOBS_KEY) || "[]");
+    const parsed = JSON.parse(window.localStorage.getItem(JOBS_KEY) || "[]");
+    const storedJobs = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.jobs) ? parsed.jobs : [];
+    jobs = normalizeStoredJobs(storedJobs);
   } catch (_error) {
     jobs = [];
   }
+  saveJobs();
 }
 
 function saveJobs() {
-  window.localStorage.setItem(JOBS_KEY, JSON.stringify(jobs));
+  jobs = normalizeStoredJobs(jobs);
+  window.localStorage.setItem(
+    JOBS_KEY,
+    JSON.stringify({
+      version: JOB_STORAGE_VERSION,
+      savedAt: nowIso(),
+      jobs: jobs.map(serializeJobForStorage),
+    }),
+  );
+}
+
+function loadJobHistory() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(JOB_HISTORY_KEY) || "{}");
+    jobHistory = {
+      stepDurations:
+        parsed && typeof parsed.stepDurations === "object" && parsed.stepDurations
+          ? parsed.stepDurations
+          : {},
+      recordedRunIds: Array.isArray(parsed?.recordedRunIds) ? parsed.recordedRunIds : [],
+    };
+  } catch (_error) {
+    jobHistory = {
+      stepDurations: {},
+      recordedRunIds: [],
+    };
+  }
+}
+
+function saveJobHistory() {
+  window.localStorage.setItem(JOB_HISTORY_KEY, JSON.stringify(jobHistory));
+}
+
+function stringValue(value, fallback = "") {
+  return typeof value === "string" ? value : fallback;
+}
+
+function dedupeJobKey(job) {
+  const requestId = stringValue(job?.requestId).trim();
+  const runId = String(job?.runId || "").trim();
+  const submittedAt = stringValue(job?.submittedAt).trim();
+  const sourceUrl = stringValue(job?.sourceUrl).trim();
+  if (requestId) {
+    return `request:${requestId}`;
+  }
+  if (runId) {
+    return `run:${runId}`;
+  }
+  return `fallback:${sourceUrl}:${submittedAt}`;
+}
+
+function jobSortTimestamp(job) {
+  return Math.max(
+    timestampMs(job?.lastServerUpdateAt),
+    timestampMs(job?.progressUpdatedAt),
+    timestampMs(job?.submittedAt),
+  );
+}
+
+function isTerminalJob(job) {
+  const status = String(job?.status || "");
+  return status === "completed" || status === "error";
+}
+
+function jobRetentionMs(job) {
+  return isTerminalJob(job) ? TERMINAL_JOB_RETENTION_MS : ACTIVE_JOB_RETENTION_MS;
+}
+
+function serializeJobForStorage(job) {
+  return {
+    requestId: stringValue(job.requestId),
+    owner: stringValue(job.owner),
+    repo: stringValue(job.repo),
+    ref: stringValue(job.ref, "main"),
+    sourceInput: stringValue(job.sourceInput),
+    sourceUrl: stringValue(job.sourceUrl),
+    displayName: stringValue(job.displayName, "game"),
+    sourceMode: stringValue(job.sourceMode),
+    matchedName: stringValue(job.matchedName),
+    submittedAt: stringValue(job.submittedAt, nowIso()),
+    status: stringValue(job.status, "queued"),
+    conclusion: stringValue(job.conclusion),
+    progressPercent: clampPercent(job.progressPercent),
+    progressUpdatedAt: timestampMs(job.progressUpdatedAt || Date.now()),
+    phase: stringValue(job.phase),
+    etaLabel: stringValue(job.etaLabel),
+    etaSeconds: Number.isFinite(Number(job.etaSeconds)) ? Number(job.etaSeconds) : 0,
+    etaUpdatedAt: timestampMs(job.etaUpdatedAt || job.progressUpdatedAt || Date.now()),
+    runId: String(job.runId || "").trim(),
+    runUrl: stringValue(job.runUrl),
+    jobsUrl: stringValue(job.jobsUrl),
+    htmlUrl: stringValue(job.htmlUrl),
+    playPath: stringValue(job.playPath),
+    error: stringValue(job.error),
+    lastServerUpdateAt: timestampMs(job.lastServerUpdateAt || job.progressUpdatedAt || Date.now()),
+    lastSyncAttemptAt: timestampMs(job.lastSyncAttemptAt || job.progressUpdatedAt || Date.now()),
+    syncFailureCount: Math.max(Number(job.syncFailureCount) || 0, 0),
+  };
+}
+
+function normalizeStoredJob(rawJob) {
+  if (!rawJob || typeof rawJob !== "object") {
+    return null;
+  }
+
+  const normalized = serializeJobForStorage(rawJob);
+  if (!normalized.requestId && !normalized.runId) {
+    return null;
+  }
+  if (!normalized.sourceUrl) {
+    return null;
+  }
+
+  const ageMs = Date.now() - jobSortTimestamp(normalized);
+  if (ageMs > jobRetentionMs(normalized)) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function normalizeStoredJobs(rawJobs) {
+  const deduped = new Map();
+  (Array.isArray(rawJobs) ? rawJobs : []).forEach((rawJob) => {
+    const normalized = normalizeStoredJob(rawJob);
+    if (!normalized) {
+      return;
+    }
+
+    const key = dedupeJobKey(normalized);
+    const current = deduped.get(key);
+    if (!current || jobSortTimestamp(normalized) >= jobSortTimestamp(current)) {
+      deduped.set(key, normalized);
+    }
+  });
+
+  return [...deduped.values()]
+    .sort((left, right) => jobSortTimestamp(right) - jobSortTimestamp(left))
+    .slice(0, MAX_STORED_JOBS);
 }
 
 function formatStatus(status) {
@@ -224,6 +416,198 @@ function formatDate(value) {
   }).format(date);
 }
 
+function stepDurationSeconds(step) {
+  if (!step?.started_at || !step?.completed_at) {
+    return null;
+  }
+  const start = Date.parse(step.started_at);
+  const end = Date.parse(step.completed_at);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return null;
+  }
+  return Math.max((end - start) / 1000, 1);
+}
+
+function median(values) {
+  if (!Array.isArray(values) || !values.length) {
+    return null;
+  }
+  const sorted = values
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .sort((left, right) => left - right);
+  if (!sorted.length) {
+    return null;
+  }
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function expectedSecondsForStep(name) {
+  const stepName = String(name || "").trim();
+  const historyValues = Array.isArray(jobHistory.stepDurations?.[stepName])
+    ? jobHistory.stepDurations[stepName]
+    : [];
+  const historicalMedian = median(historyValues);
+  if (Number.isFinite(historicalMedian)) {
+    return historicalMedian;
+  }
+  return DEFAULT_STEP_DURATIONS[stepName] || DEFAULT_STEP_SECONDS;
+}
+
+function workflowStepNames(steps) {
+  const names = [];
+  const seen = new Set();
+
+  (steps || []).forEach((step) => {
+    const name = String(step?.name || "").trim();
+    if (!name || seen.has(name)) {
+      return;
+    }
+    seen.add(name);
+    names.push(name);
+  });
+
+  DEFAULT_WORKFLOW_STEP_ORDER.forEach((name) => {
+    if (!seen.has(name)) {
+      seen.add(name);
+      names.push(name);
+    }
+  });
+
+  return names;
+}
+
+function remainingSecondsForActiveStep(stepName, step) {
+  const expected = expectedSecondsForStep(stepName);
+  const startedAt = Date.parse(String(step?.started_at || ""));
+  const elapsed = Number.isFinite(startedAt) ? Math.max((Date.now() - startedAt) / 1000, 0) : 0;
+
+  if (elapsed <= 0) {
+    return expected;
+  }
+  if (elapsed < expected) {
+    return expected - elapsed;
+  }
+
+  return Math.max(Math.min(expected * 0.3, 35), Math.min(elapsed * 0.2, 45), 10);
+}
+
+function estimateRemainingSeconds(runPayload, jobsPayload) {
+  const status = String(runPayload?.status || "queued");
+  if (status === "completed") {
+    return 0;
+  }
+
+  const steps = actionableStepsFromJobs(jobsPayload);
+  const byName = new Map(steps.map((step) => [String(step.name || "").trim(), step]));
+  const plannedNames = workflowStepNames(steps);
+
+  if (!plannedNames.length) {
+    return DEFAULT_WORKFLOW_STEP_ORDER.reduce((sum, name) => sum + expectedSecondsForStep(name), 0);
+  }
+
+  let remainingSeconds = 0;
+  plannedNames.forEach((name) => {
+    const step = byName.get(name);
+    if (!step) {
+      remainingSeconds += expectedSecondsForStep(name);
+      return;
+    }
+
+    const stepStatus = String(step.status || "");
+    if (stepStatus === "completed") {
+      return;
+    }
+    if (stepStatus === "in_progress") {
+      remainingSeconds += remainingSecondsForActiveStep(name, step);
+      return;
+    }
+    remainingSeconds += expectedSecondsForStep(name);
+  });
+
+  if (status === "queued") {
+    remainingSeconds += 8;
+  }
+
+  return remainingSeconds;
+}
+
+function estimateProgressPercent(runPayload, jobsPayload) {
+  const status = String(runPayload?.status || "queued");
+  const conclusion = String(runPayload?.conclusion || "");
+  if (status === "completed") {
+    return conclusion === "success" ? 100 : 100;
+  }
+
+  const steps = actionableStepsFromJobs(jobsPayload);
+  const byName = new Map(steps.map((step) => [String(step.name || "").trim(), step]));
+  const plannedNames = workflowStepNames(steps);
+  const totalExpected = plannedNames.reduce((sum, name) => sum + expectedSecondsForStep(name), 0);
+  if (!totalExpected) {
+    return status === "queued" ? 8 : 18;
+  }
+
+  let completedEquivalent = 0;
+  plannedNames.forEach((name) => {
+    const step = byName.get(name);
+    const expected = expectedSecondsForStep(name);
+    if (!step) {
+      return;
+    }
+
+    const stepStatus = String(step.status || "");
+    if (stepStatus === "completed") {
+      completedEquivalent += expected;
+      return;
+    }
+
+    if (stepStatus === "in_progress") {
+      const startedAt = Date.parse(String(step.started_at || ""));
+      const elapsed = Number.isFinite(startedAt) ? Math.max((Date.now() - startedAt) / 1000, 0) : 0;
+      completedEquivalent += Math.min(expected * 0.9, elapsed);
+    }
+  });
+
+  const weightedPercent = Math.round((completedEquivalent / totalExpected) * 100);
+  if (status === "queued") {
+    return Math.max(8, Math.min(weightedPercent, 14));
+  }
+  return Math.max(12, Math.min(weightedPercent, 96));
+}
+
+function recordSuccessfulRunHistory(runPayload, jobsPayload) {
+  const runId = String(runPayload?.id || "").trim();
+  const conclusion = String(runPayload?.conclusion || "");
+  if (!runId || conclusion !== "success" || jobHistory.recordedRunIds.includes(runId)) {
+    return;
+  }
+
+  const steps = actionableStepsFromJobs(jobsPayload);
+  let recordedAny = false;
+  steps.forEach((step) => {
+    const name = String(step?.name || "").trim();
+    const duration = stepDurationSeconds(step);
+    if (!name || !Number.isFinite(duration)) {
+      return;
+    }
+
+    const current = Array.isArray(jobHistory.stepDurations[name]) ? jobHistory.stepDurations[name] : [];
+    current.push(Math.round(duration));
+    jobHistory.stepDurations[name] = current.slice(-MAX_HISTORY_SAMPLES);
+    recordedAny = true;
+  });
+
+  if (!recordedAny) {
+    return;
+  }
+
+  jobHistory.recordedRunIds = [...jobHistory.recordedRunIds, runId].slice(-MAX_RECORDED_RUNS);
+  saveJobHistory();
+}
+
 function actionableStepsFromJobs(payload) {
   const jobsPayload = Array.isArray(payload?.jobs) ? payload.jobs : [];
   const steps = [];
@@ -244,35 +628,10 @@ function actionableStepsFromJobs(payload) {
   return steps;
 }
 
-function estimateFromSteps(steps, status) {
-  if (status === "completed") {
-    return "Completed";
-  }
-
-  const completedSteps = steps.filter((step) => step.status === "completed");
-  const durations = completedSteps
-    .map((step) => {
-      if (!step.started_at || !step.completed_at) return null;
-      const start = Date.parse(step.started_at);
-      const end = Date.parse(step.completed_at);
-      if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
-      return Math.max((end - start) / 1000, 1);
-    })
-    .filter(Boolean);
-
-  const averageStepSeconds = durations.length
-    ? durations.reduce((sum, duration) => sum + duration, 0) / durations.length
-    : DEFAULT_STEP_SECONDS;
-
-  const remainingSteps = Math.max(steps.length - completedSteps.length, status === "queued" ? 5 : 1);
-  return formatDuration(averageStepSeconds * remainingSteps);
-}
-
 function progressFromRun(runPayload, jobsPayload) {
   const status = String(runPayload?.status || "queued");
   const conclusion = String(runPayload?.conclusion || "");
   const steps = actionableStepsFromJobs(jobsPayload);
-  const completedSteps = steps.filter((step) => step.status === "completed").length;
   const activeStep = steps.find((step) => step.status === "in_progress");
   const lastCompletedStep = [...steps].reverse().find((step) => step.status === "completed");
 
@@ -280,15 +639,13 @@ function progressFromRun(runPayload, jobsPayload) {
   let phase = "Queued in GitHub Actions";
 
   if (status === "in_progress") {
-    progressPercent = steps.length
-      ? Math.max(12, Math.min(96, Math.round(10 + (completedSteps / steps.length) * 85)))
-      : 40;
+    progressPercent = estimateProgressPercent(runPayload, jobsPayload);
     phase = activeStep?.name || lastCompletedStep?.name || "Starting runner";
   } else if (status === "completed") {
     progressPercent = conclusion === "success" ? 100 : Math.max(20, progressPercent);
     phase = conclusion === "success" ? "Published to GitHub Pages" : "Build failed";
   } else if (status === "queued") {
-    progressPercent = 8;
+    progressPercent = estimateProgressPercent(runPayload, jobsPayload);
     phase = "Waiting for an available runner";
   }
 
@@ -297,7 +654,8 @@ function progressFromRun(runPayload, jobsPayload) {
     conclusion,
     progressPercent,
     phase,
-    etaLabel: estimateFromSteps(steps, status === "completed" ? "completed" : status),
+    etaSeconds: estimateRemainingSeconds(runPayload, jobsPayload),
+    etaLabel: status === "completed" ? "Completed" : formatDuration(estimateRemainingSeconds(runPayload, jobsPayload)),
   };
 }
 
@@ -434,10 +792,11 @@ function playUrlForPath(playPath) {
 }
 
 function publishedEntryForJob(job) {
+  const jobSourceUrl = normalizeUrl(job.sourceUrl || "");
   return publishedCatalog.find(
     (entry) =>
       String(entry.request_id || "") === String(job.requestId || "") ||
-      String(entry.source_url || "") === String(job.sourceUrl || ""),
+      normalizeUrl(entry.source_url || "") === jobSourceUrl,
   );
 }
 
@@ -460,13 +819,24 @@ async function getRunStatus(runId) {
 }
 
 function upsertJob(nextJob) {
-  const index = jobs.findIndex((job) => job.requestId === nextJob.requestId);
-  if (index >= 0) {
-    jobs[index] = nextJob;
-  } else {
-    jobs.unshift(nextJob);
+  const normalizedJob = normalizeStoredJob(nextJob);
+  if (!normalizedJob) {
+    return;
   }
-  jobs = jobs.slice(0, 12);
+
+  const index = jobs.findIndex(
+    (job) =>
+      stringValue(job.requestId).trim() === normalizedJob.requestId ||
+      (normalizedJob.runId && String(job.runId || "").trim() === normalizedJob.runId),
+  );
+  if (index >= 0) {
+    jobs[index] = {
+      ...jobs[index],
+      ...normalizedJob,
+    };
+  } else {
+    jobs.unshift(normalizedJob);
+  }
   saveJobs();
 }
 
@@ -506,6 +876,7 @@ function renderJobs() {
   }
 
   jobs.forEach((job) => {
+    const nowMs = Date.now();
     const progressPercent = visibleProgressPercent(job);
     const roundedProgress = Math.round(progressPercent);
     const fragment = jobTemplate.content.cloneNode(true);
@@ -530,8 +901,7 @@ function renderJobs() {
     percent.textContent = `${roundedProgress}%`;
     fill.style.width = `${progressPercent.toFixed(1)}%`;
     phase.textContent = job.phase || "Queued";
-    eta.textContent =
-      job.status === "completed" && job.conclusion === "success" ? "Completed" : job.etaLabel;
+    eta.textContent = visibleEtaLabel(job, nowMs);
     source.textContent = job.sourceUrl;
     request.textContent = job.requestId;
     repo.textContent = `${job.owner}/${job.repo}@${job.ref}`;
@@ -600,6 +970,7 @@ async function refreshJobStatuses() {
 
       try {
         const payload = await getRunStatus(job.runId);
+        recordSuccessfulRunHistory(payload.run, payload.jobs);
         const derived = progressFromRun(payload.run, payload.jobs);
         const entry = derived.conclusion === "success" ? publishedEntryForJob(job) : null;
 
@@ -617,8 +988,13 @@ async function refreshJobStatuses() {
           progressPercent: derived.progressPercent,
           progressUpdatedAt: Date.now(),
           phase: derived.phase,
+          etaSeconds: derived.etaSeconds,
+          etaUpdatedAt: Date.now(),
           etaLabel: derived.etaLabel,
           playPath: entry?.play_path || job.playPath || "",
+          lastServerUpdateAt: Date.now(),
+          lastSyncAttemptAt: Date.now(),
+          syncFailureCount: 0,
           error:
             derived.conclusion && derived.conclusion !== "success"
               ? `Workflow finished with conclusion: ${derived.conclusion}`
@@ -627,6 +1003,8 @@ async function refreshJobStatuses() {
       } catch (error) {
         return {
           ...job,
+          lastSyncAttemptAt: Date.now(),
+          syncFailureCount: Math.max(Number(job.syncFailureCount) || 0, 0) + 1,
           error: error.message,
         };
       }
@@ -675,6 +1053,8 @@ async function handleSubmit(event) {
       progressUpdatedAt: Date.now(),
       phase: "Dispatching workflow",
       etaLabel: "Calculating...",
+      etaSeconds: 0,
+      etaUpdatedAt: Date.now(),
       runId: "",
       runUrl: "",
       jobsUrl: "",
@@ -693,6 +1073,8 @@ async function handleSubmit(event) {
       progressPercent: 10,
       progressUpdatedAt: Date.now(),
       phase: "Workflow queued",
+      etaSeconds: draftJob.etaSeconds,
+      etaUpdatedAt: Date.now(),
     };
 
     upsertJob(nextJob);
@@ -713,6 +1095,7 @@ form.addEventListener("submit", handleSubmit);
 async function init() {
   loadConfig();
   loadJobs();
+  loadJobHistory();
   await loadCatalog();
   await loadPublishedCatalog();
   await loadWorkerConfig();

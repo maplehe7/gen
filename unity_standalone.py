@@ -4732,7 +4732,13 @@ def generate_crazygames_sdk_stub() -> str:
   var environment = sdk.environment = sdk.environment || {};
   var game = sdk.game = sdk.game || {};
   var user = sdk.user = sdk.user || {};
-  var storagePrefix = "__unity_standalone_crazygames__:";
+  var storageNamespace =
+    typeof window.__unityStandaloneStorageNamespace === "string" &&
+    window.__unityStandaloneStorageNamespace
+      ? window.__unityStandaloneStorageNamespace
+      : "global";
+  var storagePrefix = "__unity_standalone_crazygames__:" + storageNamespace + ":";
+  var legacyStoragePrefix = "__unity_standalone_crazygames__:";
   var authListeners = [];
 
   function resolved(value) {
@@ -4748,17 +4754,39 @@ def generate_crazygames_sdk_stub() -> str:
     } catch (_err) {}
   }
 
-  function readStorageValue(key) {
+  function storageLookupKeys(key) {
     var normalized = String(key == null ? "" : key);
+    var keys = [
+      storagePrefix + normalized,
+      legacyStoragePrefix + normalized
+    ];
+    if (normalized) {
+      keys.push(normalized);
+    }
+    return keys.filter(function (value, index) {
+      return keys.indexOf(value) === index;
+    });
+  }
+
+  function readStorageValue(key) {
     try {
-      var prefixed = window.localStorage.getItem(storagePrefix + normalized);
-      if (prefixed !== null) {
-        return prefixed;
+      var keys = storageLookupKeys(key);
+      for (var index = 0; index < keys.length; index += 1) {
+        var currentKey = keys[index];
+        var value = window.localStorage.getItem(currentKey);
+        if (value !== null) {
+          if (currentKey !== storagePrefix + String(key == null ? "" : key)) {
+            try {
+              window.localStorage.setItem(storagePrefix + String(key == null ? "" : key), value);
+            } catch (_migrationErr) {}
+          }
+          return value;
+        }
       }
-      return window.localStorage.getItem(normalized);
     } catch (_err) {
       return null;
     }
+    return null;
   }
 
   function writeStorageValue(key, value) {
@@ -4766,16 +4794,15 @@ def generate_crazygames_sdk_stub() -> str:
     var stringValue = String(value == null ? "" : value);
     try {
       window.localStorage.setItem(storagePrefix + normalized, stringValue);
-      window.localStorage.setItem(normalized, stringValue);
     } catch (_err) {}
     return stringValue;
   }
 
   function removeStorageValue(key) {
-    var normalized = String(key == null ? "" : key);
     try {
-      window.localStorage.removeItem(storagePrefix + normalized);
-      window.localStorage.removeItem(normalized);
+      storageLookupKeys(key).forEach(function (lookupKey) {
+        window.localStorage.removeItem(lookupKey);
+      });
     } catch (_err) {}
   }
 
@@ -4813,7 +4840,7 @@ def generate_crazygames_sdk_stub() -> str:
   data.clear = function () {
     try {
       Object.keys(window.localStorage).forEach(function (key) {
-        if (key.indexOf(storagePrefix) === 0) {
+        if (key.indexOf(storagePrefix) === 0 || key.indexOf(legacyStoragePrefix) === 0) {
           window.localStorage.removeItem(key);
         }
       });
@@ -4975,6 +5002,16 @@ def generate_index_html(
     allowed_launch_modes_js = json.dumps(allowed_launch_modes, ensure_ascii=False)
     recommended_launch_mode_js = json.dumps(recommended_launch_mode, ensure_ascii=False)
     embedded_mode_js = "true" if embedded_mode else "false"
+    storage_namespace_seed = (
+        str(source_page_url or "").strip()
+        or str(original_folder_url or "").strip()
+        or str(product_name or "").strip()
+        or "unity-standalone"
+    )
+    storage_namespace_js = json.dumps(
+        hashlib.sha256(storage_namespace_seed.encode("utf-8")).hexdigest()[:16],
+        ensure_ascii=False,
+    )
     embedded_body_attr = ' data-ocean-embedded="1"' if embedded_mode else ""
     auxiliary_asset_rewrites_js = json.dumps(
         auxiliary_asset_rewrites or {},
@@ -5438,6 +5475,10 @@ def generate_index_html(
     </div>
   </div>
 
+  <script>
+    window.__unityStandaloneStorageNamespace = {storage_namespace_js};
+    window.__unityStandaloneSourcePageUrl = {source_page_url_js};
+  </script>
 {support_script_tags}
   <script>
     (function () {{
@@ -5448,13 +5489,20 @@ def generate_index_html(
       const LOCAL_PAGE_URL = window.__unityStandaloneLocalPageUrl || window.location.href;
       const SOURCE_PAGE_URL = {source_page_url_js};
       const ENABLE_SOURCE_URL_SPOOF = {enable_source_url_spoof_js};
+      const STORAGE_NAMESPACE =
+        typeof window.__unityStandaloneStorageNamespace === "string" &&
+        window.__unityStandaloneStorageNamespace
+          ? window.__unityStandaloneStorageNamespace
+          : "global";
       const SCRIPT_SRC_REDIRECTS = {{
         "/vs/crazygames-sdk-v2.js": "./vs/crazygames-sdk-v2.js",
         "https://sdk.crazygames.com/crazygames-sdk-v2.js": "./vs/crazygames-sdk-v2.js",
         "https://sdk.crazygames.com/crazygames-sdk-v3.js": "./vs/crazygames-sdk-v3.js",
       }};
-      const STORAGE_PREFIX = "__unity_standalone_ls__:";
-      const LEGACY_STORAGE_PREFIX = "__pg_standalone_ls__:";
+      const STORAGE_PREFIX = "__unity_standalone_ls__:" + STORAGE_NAMESPACE + ":";
+      const LEGACY_STORAGE_PREFIX = "__pg_standalone_ls__:" + STORAGE_NAMESPACE + ":";
+      const GLOBAL_STORAGE_PREFIX = "__unity_standalone_ls__:";
+      const GLOBAL_LEGACY_STORAGE_PREFIX = "__pg_standalone_ls__:";
       const AD_STATE_LOADING = "loading";
       const AD_STATE_OPENED = "opened";
       const AD_STATE_CLOSED = "closed";
@@ -5581,6 +5629,27 @@ def generate_index_html(
       }};
       const legacyStorageKey = function (key) {{
         return LEGACY_STORAGE_PREFIX + String(key);
+      }};
+      const globalStorageKey = function (key) {{
+        return GLOBAL_STORAGE_PREFIX + String(key);
+      }};
+      const globalLegacyStorageKey = function (key) {{
+        return GLOBAL_LEGACY_STORAGE_PREFIX + String(key);
+      }};
+      const storageLookupKeys = function (key) {{
+        const normalized = String(key);
+        const keys = [
+          storageKey(normalized),
+          legacyStorageKey(normalized),
+          globalStorageKey(normalized),
+          globalLegacyStorageKey(normalized),
+        ];
+        if (normalized) {{
+          keys.push(normalized);
+        }}
+        return keys.filter(function (value, index) {{
+          return keys.indexOf(value) === index;
+        }});
       }};
 
       function buildMadHookSettings() {{
@@ -5735,23 +5804,34 @@ def generate_index_html(
             return EMPTY;
           }}
           try {{
-            const value = window.localStorage.getItem(storageKey(key));
-            if (value != null) {{
-              return value;
+            const lookupKeys = storageLookupKeys(key);
+            for (let index = 0; index < lookupKeys.length; index += 1) {{
+              const lookupKey = lookupKeys[index];
+              const value = window.localStorage.getItem(lookupKey);
+              if (value != null) {{
+                if (lookupKey !== storageKey(key)) {{
+                  try {{
+                    window.localStorage.setItem(storageKey(key), value);
+                  }} catch (migrationErr) {{
+                    // Ignore storage migration failures.
+                  }}
+                }}
+                return value;
+              }}
             }}
-            const legacyValue = window.localStorage.getItem(legacyStorageKey(key));
-            return legacyValue == null ? EMPTY : legacyValue;
           }} catch (err) {{
             return EMPTY;
           }}
+          return EMPTY;
         }},
         deleteStorageData: (key) => {{
           if (!refreshStorageAvailability()) {{
             return;
           }}
           try {{
-            window.localStorage.removeItem(storageKey(key));
-            window.localStorage.removeItem(legacyStorageKey(key));
+            storageLookupKeys(key).forEach(function (lookupKey) {{
+              window.localStorage.removeItem(lookupKey);
+            }});
           }} catch (err) {{
             console.warn("deleteStorageData failed:", err);
           }}
@@ -7416,7 +7496,7 @@ def generate_index_html(
       }}
 
       function getUnityCacheVersionStorageKey() {{
-        return "__unity_standalone_ls__:unity-cache-version:" + PRODUCT_NAME;
+        return "__unity_standalone_ls__:unity-cache-version:" + STORAGE_NAMESPACE;
       }}
 
       function canPersistUnityCacheVersion() {{

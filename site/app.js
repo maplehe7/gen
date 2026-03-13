@@ -1,7 +1,7 @@
 const JOBS_KEY = "standalone-forge-pages-jobs";
 const WORKFLOW_FILE = "build-game.yml";
 const DEFAULT_STEP_SECONDS = 55;
-const PLACEHOLDER_TOKEN = "PASTE_FINE_GRAINED_PAT_HERE";
+const PLACEHOLDER_WORKER_URL = "PASTE_CLOUDFLARE_WORKER_URL_HERE";
 
 const form = document.getElementById("export-form");
 const sourceInput = document.getElementById("source");
@@ -18,36 +18,15 @@ let catalogEntries = [];
 let publishedCatalog = [];
 let jobs = [];
 let appConfig = {
+  workerUrl: "",
   owner: "",
   repo: "",
   ref: "main",
-  token: "",
+  workflowFile: WORKFLOW_FILE,
 };
 
 function nowIso() {
   return new Date().toISOString();
-}
-
-function inferRepoContext() {
-  const host = window.location.hostname;
-  const pathParts = window.location.pathname.split("/").filter(Boolean);
-  if (!host.endsWith(".github.io")) {
-    return { owner: "", repo: "" };
-  }
-
-  const owner = host.split(".")[0] || "";
-  if (!pathParts.length) {
-    return { owner, repo: `${owner}.github.io` };
-  }
-  return { owner, repo: pathParts[0] };
-}
-
-function slugify(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "game";
 }
 
 function looksLikeUrl(value) {
@@ -57,6 +36,18 @@ function looksLikeUrl(value) {
   } catch (_error) {
     return false;
   }
+}
+
+function normalizeUrl(value) {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function slugify(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "game";
 }
 
 function deriveNameFromUrl(value) {
@@ -76,37 +67,54 @@ function createRequestId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
 }
 
-function tokenConfigured(token) {
-  return Boolean(token && token.trim() && token.trim() !== PLACEHOLDER_TOKEN);
+function workerConfigured(workerUrl) {
+  const normalized = normalizeUrl(workerUrl);
+  return Boolean(normalized && normalized !== PLACEHOLDER_WORKER_URL && looksLikeUrl(normalized));
+}
+
+function workerEndpoint(path) {
+  return `${appConfig.workerUrl}${path}`;
+}
+
+function setConfigWarning(message) {
+  if (configWarning) {
+    configWarning.textContent = message;
+  }
+}
+
+function updateRepoTarget() {
+  if (!repoTarget) {
+    return;
+  }
+
+  if (appConfig.owner && appConfig.repo) {
+    repoTarget.textContent = `${appConfig.owner}/${appConfig.repo}@${appConfig.ref}`;
+    return;
+  }
+
+  if (workerConfigured(appConfig.workerUrl)) {
+    repoTarget.textContent = "Loading worker config...";
+    return;
+  }
+
+  repoTarget.textContent = "Missing Cloudflare Worker URL in site/config.js";
 }
 
 function loadConfig() {
-  const inferred = inferRepoContext();
   const configured = window.STANDALONE_FORGE_CONFIG || {};
   appConfig = {
-    owner: String(configured.owner || inferred.owner || "").trim(),
-    repo: String(configured.repo || inferred.repo || "").trim(),
-    ref: String(configured.ref || "main").trim() || "main",
-    token: String(configured.token || "").trim(),
+    workerUrl: normalizeUrl(configured.workerUrl || ""),
+    owner: "",
+    repo: "",
+    ref: "main",
+    workflowFile: WORKFLOW_FILE,
   };
 
-  if (repoTarget) {
-    repoTarget.textContent =
-      appConfig.owner && appConfig.repo
-        ? `${appConfig.owner}/${appConfig.repo}@${appConfig.ref}`
-        : "Missing owner/repo in site/config.js";
-  }
-
-  if (configWarning) {
-    if (!appConfig.owner || !appConfig.repo) {
-      configWarning.textContent =
-        "Set owner and repo in site/config.js, or leave them blank only if this Pages URL can be auto-detected.";
-    } else if (!tokenConfigured(appConfig.token)) {
-      configWarning.textContent =
-        "Paste your fine-grained PAT into site/config.js before using the demo.";
-    } else {
-      configWarning.textContent = "Config loaded. This demo will dispatch builds into the configured repo automatically.";
-    }
+  updateRepoTarget();
+  if (!workerConfigured(appConfig.workerUrl)) {
+    setConfigWarning("Paste your Cloudflare Worker URL into site/config.js before using the demo.");
+  } else {
+    setConfigWarning("Worker URL loaded. Fetching worker config...");
   }
 }
 
@@ -297,7 +305,7 @@ async function fetchJson(url, options = {}) {
     const message =
       payload?.message ||
       payload?.error ||
-      `GitHub API request failed with status ${response.status}`;
+      `Request failed with status ${response.status}`;
     throw new Error(message);
   }
 
@@ -341,6 +349,26 @@ async function loadPublishedCatalog() {
   }
 }
 
+async function loadWorkerConfig() {
+  if (!workerConfigured(appConfig.workerUrl)) {
+    updateRepoTarget();
+    return;
+  }
+
+  try {
+    const payload = await fetchJson(workerEndpoint("/config"));
+    appConfig.owner = String(payload?.owner || "").trim();
+    appConfig.repo = String(payload?.repo || "").trim();
+    appConfig.ref = String(payload?.ref || "main").trim() || "main";
+    appConfig.workflowFile = String(payload?.workflowFile || WORKFLOW_FILE).trim() || WORKFLOW_FILE;
+    updateRepoTarget();
+    setConfigWarning("Worker connected. Builds will be dispatched through Cloudflare.");
+  } catch (error) {
+    updateRepoTarget();
+    setConfigWarning(`Cloudflare Worker error: ${error.message}`);
+  }
+}
+
 function playUrlForPath(playPath) {
   return new URL(playPath, window.location.href).toString();
 }
@@ -353,72 +381,22 @@ function publishedEntryForJob(job) {
   );
 }
 
-async function findDispatchedRun(job, token) {
-  const listUrl =
-    `https://api.github.com/repos/${encodeURIComponent(job.owner)}/` +
-    `${encodeURIComponent(job.repo)}/actions/workflows/${encodeURIComponent(WORKFLOW_FILE)}/runs` +
-    `?event=workflow_dispatch&branch=${encodeURIComponent(job.ref)}&per_page=10`;
-
-  const payload = await fetchJson(listUrl, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-  });
-
-  const submittedAt = Date.parse(job.submittedAt || nowIso());
-  const runs = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : [];
-  const match = runs.find((run) => {
-    const createdAt = Date.parse(run.created_at || "");
-    return Number.isFinite(createdAt) && createdAt >= submittedAt - 120000;
-  });
-
-  if (!match) {
-    throw new Error("The workflow was dispatched, but no matching run was found yet.");
-  }
-
-  return {
-    runId: match.id,
-    runUrl: match.url,
-    htmlUrl: match.html_url,
-    jobsUrl: match.jobs_url,
-  };
-}
-
-async function dispatchWorkflow(job, token) {
-  const dispatchUrl =
-    `https://api.github.com/repos/${encodeURIComponent(job.owner)}/` +
-    `${encodeURIComponent(job.repo)}/actions/workflows/${encodeURIComponent(WORKFLOW_FILE)}/dispatches?return_run_details=true`;
-
-  const payload = await fetchJson(dispatchUrl, {
+async function dispatchWorkflow(job) {
+  return fetchJson(workerEndpoint("/dispatch"), {
     method: "POST",
     headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
-      "X-GitHub-Api-Version": "2022-11-28",
     },
     body: JSON.stringify({
-      ref: job.ref,
-      inputs: {
-        source_url: job.sourceUrl,
-        display_name: job.displayName,
-        request_id: job.requestId,
-      },
+      sourceUrl: job.sourceUrl,
+      displayName: job.displayName,
+      requestId: job.requestId,
     }),
   });
+}
 
-  if (payload?.id || payload?.run_id) {
-    return {
-      runId: payload.id || payload.run_id,
-      runUrl: payload.url || "",
-      htmlUrl: payload.html_url || "",
-      jobsUrl: payload.jobs_url || "",
-    };
-  }
-
-  return findDispatchedRun(job, token);
+async function getRunStatus(runId) {
+  return fetchJson(workerEndpoint(`/status?runId=${encodeURIComponent(runId)}`));
 }
 
 function upsertJob(nextJob) {
@@ -545,8 +523,7 @@ function renderPublished() {
 }
 
 async function refreshJobStatuses() {
-  const token = appConfig.token;
-  if (!jobs.length || !token) {
+  if (!jobs.length || !workerConfigured(appConfig.workerUrl)) {
     renderJobs();
     return;
   }
@@ -555,42 +532,24 @@ async function refreshJobStatuses() {
 
   const refreshed = await Promise.all(
     jobs.map(async (job) => {
-      if (!job.runId && !job.runUrl) {
+      if (!job.runId) {
         return job;
       }
 
       try {
-        const runPayload = await fetchJson(
-          job.runUrl ||
-            `https://api.github.com/repos/${encodeURIComponent(job.owner)}/${encodeURIComponent(job.repo)}/actions/runs/${job.runId}`,
-          {
-            headers: {
-              Accept: "application/vnd.github+json",
-              Authorization: `Bearer ${token}`,
-              "X-GitHub-Api-Version": "2022-11-28",
-            },
-          },
-        );
-
-        const jobsPayload = runPayload.jobs_url
-          ? await fetchJson(runPayload.jobs_url, {
-              headers: {
-                Accept: "application/vnd.github+json",
-                Authorization: `Bearer ${token}`,
-                "X-GitHub-Api-Version": "2022-11-28",
-              },
-            })
-          : { jobs: [] };
-
-        const derived = progressFromRun(runPayload, jobsPayload);
+        const payload = await getRunStatus(job.runId);
+        const derived = progressFromRun(payload.run, payload.jobs);
         const entry = derived.conclusion === "success" ? publishedEntryForJob(job) : null;
 
         return {
           ...job,
-          runId: runPayload.id || job.runId,
-          runUrl: runPayload.url || job.runUrl,
-          htmlUrl: runPayload.html_url || job.htmlUrl,
-          jobsUrl: runPayload.jobs_url || job.jobsUrl,
+          owner: payload.owner || job.owner,
+          repo: payload.repo || job.repo,
+          ref: payload.ref || job.ref,
+          runId: payload.run?.id || job.runId,
+          runUrl: payload.run?.url || job.runUrl,
+          htmlUrl: payload.run?.html_url || job.htmlUrl,
+          jobsUrl: payload.run?.jobs_url || job.jobsUrl,
           status: derived.status,
           conclusion: derived.conclusion,
           progressPercent: derived.progressPercent,
@@ -623,16 +582,14 @@ async function handleSubmit(event) {
   submitButton.disabled = true;
 
   try {
-    const owner = appConfig.owner;
-    const repo = appConfig.repo;
-    const ref = appConfig.ref || "main";
-    const token = appConfig.token;
-
-    if (!owner || !repo) {
-      throw new Error("Set owner and repo in site/config.js first.");
+    if (!workerConfigured(appConfig.workerUrl)) {
+      throw new Error("Paste your Cloudflare Worker URL into site/config.js first.");
     }
-    if (!tokenConfigured(token)) {
-      throw new Error("Paste a fine-grained GitHub token into site/config.js first.");
+    if (!appConfig.owner || !appConfig.repo) {
+      await loadWorkerConfig();
+    }
+    if (!appConfig.owner || !appConfig.repo) {
+      throw new Error("Cloudflare Worker config could not be loaded.");
     }
 
     const resolved = resolveSource(sourceInput.value);
@@ -640,9 +597,9 @@ async function handleSubmit(event) {
     const requestId = createRequestId();
     const draftJob = {
       requestId,
-      owner,
-      repo,
-      ref,
+      owner: appConfig.owner,
+      repo: appConfig.repo,
+      ref: appConfig.ref,
       sourceInput: sourceInput.value.trim(),
       sourceUrl: resolved.sourceUrl,
       displayName,
@@ -662,13 +619,13 @@ async function handleSubmit(event) {
       error: "",
     };
 
-    const runInfo = await dispatchWorkflow(draftJob, token);
+    const runInfo = await dispatchWorkflow(draftJob);
     const nextJob = {
       ...draftJob,
       runId: runInfo.runId,
-      runUrl: runInfo.runUrl,
-      jobsUrl: runInfo.jobsUrl,
-      htmlUrl: runInfo.htmlUrl,
+      runUrl: runInfo.runUrl || "",
+      jobsUrl: runInfo.jobsUrl || "",
+      htmlUrl: runInfo.htmlUrl || "",
       progressPercent: 10,
       phase: "Workflow queued",
     };
@@ -693,6 +650,7 @@ async function init() {
   loadJobs();
   await loadCatalog();
   await loadPublishedCatalog();
+  await loadWorkerConfig();
   renderJobs();
   renderPublished();
   await refreshJobStatuses();

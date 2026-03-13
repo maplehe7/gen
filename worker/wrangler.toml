@@ -1,0 +1,11 @@
+name = "standalone-forge-proxy"
+main = "src/index.js"
+compatibility_date = "2026-03-13"
+workers_dev = true
+
+[vars]
+GITHUB_OWNER = "maplehe7"
+GITHUB_REPO = "gen"
+GITHUB_REF = "main"
+GITHUB_WORKFLOW_FILE = "build-game.yml"
+ALLOWED_ORIGIN = "https://maplehe7.github.io"

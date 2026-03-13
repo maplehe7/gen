@@ -1,0 +1,12 @@
+{
+  "name": "standalone-forge-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^4.7.1"
+  }
+}

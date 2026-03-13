@@ -32,8 +32,8 @@
             <h2>New Export</h2>
             <p>
               Enter a direct game URL or a name from <code>game_catalog.json</code>. The
-              repo target and token are hardcoded for this demo in
-              <code>site/config.js</code>.
+              page talks to a Cloudflare Worker, and the Worker holds the GitHub token as a
+              secret.
             </p>
           </div>
 
@@ -66,13 +66,13 @@
           </div>
           <ol class="pipeline">
             <li>The page resolves the input to a source URL.</li>
-            <li>It dispatches <code>.github/workflows/build-game.yml</code>.</li>
+            <li>It calls your Cloudflare Worker.</li>
+            <li>The Worker dispatches <code>.github/workflows/build-game.yml</code>.</li>
             <li>The workflow runs the Python exporter in GitHub Actions.</li>
             <li>The completed folder is deployed back to GitHub Pages.</li>
           </ol>
           <p class="note">
-            Required token scope in <code>site/config.js</code>:
-            <code>Actions: read and write</code> and <code>Contents: read and write</code>.
+            The only browser-side config is the Worker URL in <code>site/config.js</code>.
           </p>
         </aside>
       </main>

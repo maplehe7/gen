@@ -79,7 +79,7 @@ function validateEnv(env) {
   }
 }
 
-async function githubJson(url, env, init = {}) {
+async function githubJson(url, env, init = {}, label = "GitHub request") {
   const response = await fetch(url, {
     ...init,
     headers: {
@@ -99,14 +99,14 @@ async function githubJson(url, env, init = {}) {
   }
 
   if (!response.ok) {
-    const message = payload?.message || `GitHub request failed with status ${response.status}`;
-    throw new Error(message);
+    const message = payload?.message || `${label} failed with status ${response.status}`;
+    throw new Error(`${label} failed with status ${response.status}: ${message}`);
   }
 
   return payload;
 }
 
-async function githubNoContent(url, env, init = {}) {
+async function githubNoContent(url, env, init = {}, label = "GitHub request") {
   const response = await fetch(url, {
     ...init,
     headers: {
@@ -125,8 +125,8 @@ async function githubNoContent(url, env, init = {}) {
         payload = { raw: text };
       }
     }
-    const message = payload?.message || `GitHub request failed with status ${response.status}`;
-    throw new Error(message);
+    const message = payload?.message || `${label} failed with status ${response.status}`;
+    throw new Error(`${label} failed with status ${response.status}: ${message}`);
   }
 }
 
@@ -150,7 +150,7 @@ async function findRecentRun(env, submittedAtIso) {
 
   const submittedAt = Date.parse(submittedAtIso);
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const payload = await githubJson(runsUrl, env);
+    const payload = await githubJson(runsUrl, env, {}, "List workflow runs");
     const runs = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : [];
     const match = runs.find((run) => {
       const createdAt = Date.parse(run.created_at || "");
@@ -212,7 +212,7 @@ async function handleDispatch(request, env) {
         request_id: requestId,
       },
     }),
-  });
+  }, "Dispatch workflow");
 
   const run = await findRecentRun(env, submittedAtIso);
   return json(
@@ -245,8 +245,18 @@ async function handleStatus(request, env) {
     );
   }
 
-  const run = await githubJson(`${githubApiBase(env)}/actions/runs/${encodeURIComponent(runId)}`, env);
-  const jobs = await githubJson(`${githubApiBase(env)}/actions/runs/${encodeURIComponent(runId)}/jobs?per_page=100`, env);
+  const run = await githubJson(
+    `${githubApiBase(env)}/actions/runs/${encodeURIComponent(runId)}`,
+    env,
+    {},
+    "Get workflow run",
+  );
+  const jobs = await githubJson(
+    `${githubApiBase(env)}/actions/runs/${encodeURIComponent(runId)}/jobs?per_page=100`,
+    env,
+    {},
+    "List workflow jobs",
+  );
 
   return json(
     {
@@ -300,6 +310,7 @@ export default {
         },
       );
     } catch (error) {
+      console.error(error);
       return json(
         {
           error: error instanceof Error ? error.message : "Worker error.",

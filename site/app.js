@@ -2,6 +2,8 @@ const JOBS_KEY = "standalone-forge-pages-jobs";
 const WORKFLOW_FILE = "build-game.yml";
 const DEFAULT_STEP_SECONDS = 55;
 const PLACEHOLDER_WORKER_URL = "PASTE_CLOUDFLARE_WORKER_URL_HERE";
+const STATUS_REFRESH_MS = 8000;
+const PROGRESS_RENDER_MS = 400;
 
 const form = document.getElementById("export-form");
 const sourceInput = document.getElementById("source");
@@ -42,6 +44,43 @@ function normalizeUrl(value) {
   return String(value || "").trim().replace(/\/+$/, "");
 }
 
+function clampPercent(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+  return Math.min(Math.max(numeric, 0), 100);
+}
+
+function coerceInputToUrl(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  if (looksLikeUrl(trimmed)) {
+    return trimmed;
+  }
+
+  const bareDomainPattern =
+    /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:\/\S*)?$/i;
+  if (/\s/.test(trimmed) || !bareDomainPattern.test(trimmed)) {
+    return "";
+  }
+
+  const candidate = `https://${trimmed}`;
+  return looksLikeUrl(candidate) ? candidate : "";
+}
+
+function timestampMs(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
 function slugify(value) {
   return String(value || "")
     .trim()
@@ -65,6 +104,26 @@ function createRequestId() {
     return window.crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function visibleProgressPercent(job, nowMs = Date.now()) {
+  const actual = clampPercent(job.progressPercent || 0);
+  if (job.status === "completed") {
+    return actual;
+  }
+
+  const elapsedSeconds = Math.max((nowMs - timestampMs(job.progressUpdatedAt || job.submittedAt)) / 1000, 0);
+  if (job.status === "queued") {
+    const cap = Math.min(Math.max(actual + 5, 14), 18);
+    return clampPercent(actual + elapsedSeconds * 0.45 > cap ? cap : actual + elapsedSeconds * 0.45);
+  }
+
+  if (job.status === "in_progress") {
+    const cap = Math.min(Math.max(actual + 8, 28), 96);
+    return clampPercent(actual + elapsedSeconds * 0.75 > cap ? cap : actual + elapsedSeconds * 0.75);
+  }
+
+  return actual;
 }
 
 function workerConfigured(workerUrl) {
@@ -248,10 +307,11 @@ function resolveSource(inputValue) {
     throw new Error("Enter a game URL or a catalog name.");
   }
 
-  if (looksLikeUrl(trimmed)) {
+  const normalizedUrl = coerceInputToUrl(trimmed);
+  if (normalizedUrl) {
     return {
-      sourceUrl: trimmed,
-      displayName: deriveNameFromUrl(trimmed),
+      sourceUrl: normalizedUrl,
+      displayName: deriveNameFromUrl(normalizedUrl),
       sourceMode: "url",
       matchedName: "",
     };
@@ -291,7 +351,7 @@ function resolveSource(inputValue) {
     );
   }
 
-  throw new Error("Name mode only works for entries listed in game_catalog.json.");
+  throw new Error("Enter a full game URL, a bare domain like example.com, or a name from game_catalog.json.");
 }
 
 async function fetchJson(url, options = {}) {
@@ -446,6 +506,8 @@ function renderJobs() {
   }
 
   jobs.forEach((job) => {
+    const progressPercent = visibleProgressPercent(job);
+    const roundedProgress = Math.round(progressPercent);
     const fragment = jobTemplate.content.cloneNode(true);
     const card = fragment.querySelector(".job-card");
     const status = fragment.querySelector(".job-status");
@@ -465,8 +527,8 @@ function renderJobs() {
 
     status.textContent = formatStatus(job.status);
     title.textContent = job.displayName;
-    percent.textContent = `${job.progressPercent}%`;
-    fill.style.width = `${Math.min(Math.max(job.progressPercent || 0, 0), 100)}%`;
+    percent.textContent = `${roundedProgress}%`;
+    fill.style.width = `${progressPercent.toFixed(1)}%`;
     phase.textContent = job.phase || "Queued";
     eta.textContent =
       job.status === "completed" && job.conclusion === "success" ? "Completed" : job.etaLabel;
@@ -553,6 +615,7 @@ async function refreshJobStatuses() {
           status: derived.status,
           conclusion: derived.conclusion,
           progressPercent: derived.progressPercent,
+          progressUpdatedAt: Date.now(),
           phase: derived.phase,
           etaLabel: derived.etaLabel,
           playPath: entry?.play_path || job.playPath || "",
@@ -609,6 +672,7 @@ async function handleSubmit(event) {
       status: "queued",
       conclusion: "",
       progressPercent: 6,
+      progressUpdatedAt: Date.now(),
       phase: "Dispatching workflow",
       etaLabel: "Calculating...",
       runId: "",
@@ -627,6 +691,7 @@ async function handleSubmit(event) {
       jobsUrl: runInfo.jobsUrl || "",
       htmlUrl: runInfo.htmlUrl || "",
       progressPercent: 10,
+      progressUpdatedAt: Date.now(),
       phase: "Workflow queued",
     };
 
@@ -654,7 +719,12 @@ async function init() {
   renderJobs();
   renderPublished();
   await refreshJobStatuses();
-  window.setInterval(refreshJobStatuses, 8000);
+  window.setInterval(refreshJobStatuses, STATUS_REFRESH_MS);
+  window.setInterval(() => {
+    if (jobs.some((job) => job.status !== "completed")) {
+      renderJobs();
+    }
+  }, PROGRESS_RENDER_MS);
 }
 
 init();

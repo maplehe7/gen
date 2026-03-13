@@ -1,15 +1,13 @@
 :root {
-  --bg: #121417;
-  --panel: rgba(24, 29, 35, 0.92);
-  --panel-strong: #1a2027;
-  --panel-border: rgba(255, 255, 255, 0.08);
-  --text: #f1efe8;
-  --muted: #b0ada1;
-  --accent: #f28a54;
-  --accent-soft: #ffc48f;
-  --ok: #8de2a4;
-  --error: #ff8f7a;
-  --shadow: 0 30px 80px rgba(0, 0, 0, 0.28);
+  --bg: #f5f5f5;
+  --panel: #ffffff;
+  --border: #d8d8d8;
+  --text: #111111;
+  --muted: #555555;
+  --accent: #1f6feb;
+  --accent-strong: #0f4fb8;
+  --ok: #18794e;
+  --error: #c0362c;
 }
 
 * {
@@ -23,12 +21,9 @@ body {
 }
 
 body {
+  background: var(--bg);
   color: var(--text);
-  background:
-    radial-gradient(circle at top left, rgba(242, 138, 84, 0.16), transparent 32%),
-    radial-gradient(circle at 80% 10%, rgba(255, 196, 143, 0.12), transparent 30%),
-    linear-gradient(160deg, #121417 0%, #171d24 46%, #101114 100%);
-  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 code,
@@ -36,112 +31,55 @@ pre,
 .job-facts dt,
 .job-facts dd,
 .job-status,
-.eyebrow {
-  font-family: "IBM Plex Mono", "Consolas", monospace;
+.status-chip {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
 .page-shell {
-  width: min(1180px, calc(100% - 32px));
+  width: min(100%, 960px);
   margin: 0 auto;
-  padding: 48px 0 64px;
+  padding: 16px;
 }
 
-.hero {
-  margin-bottom: 28px;
-  padding: 34px;
-  border: 1px solid var(--panel-border);
-  border-radius: 28px;
-  background:
-    linear-gradient(135deg, rgba(242, 138, 84, 0.12), transparent 42%),
-    rgba(20, 24, 29, 0.92);
-  box-shadow: var(--shadow);
-}
-
-.eyebrow {
-  margin: 0 0 14px;
-  color: var(--accent-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  font-size: 0.78rem;
-}
-
-.hero h1 {
-  margin: 0;
-  max-width: 12ch;
-  font-size: clamp(2.6rem, 5vw, 4.8rem);
-  line-height: 0.94;
-  letter-spacing: -0.05em;
-}
-
-.hero-copy {
-  margin: 18px 0 0;
-  max-width: 70ch;
-  color: var(--muted);
-  font-size: 1rem;
-  line-height: 1.65;
-}
-
-.layout {
+.stack {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
-  gap: 20px;
-  align-items: start;
+  gap: 16px;
+}
+
+.panel,
+.job-card,
+.empty-state {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }
 
 .panel {
-  padding: 24px;
-  border: 1px solid var(--panel-border);
-  border-radius: 24px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-}
-
-.panel-head h2,
-.section-head h2 {
-  margin: 0;
-  font-size: 1.15rem;
-}
-
-.panel-head p,
-.section-head p,
-.note {
-  margin: 8px 0 0;
-  color: var(--muted);
-  line-height: 1.55;
+  padding: 16px;
 }
 
 .export-form {
   display: grid;
-  gap: 16px;
-  margin-top: 18px;
-}
-
-.field {
-  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
+  align-items: center;
 }
 
-.field span {
-  color: var(--muted);
-  font-size: 0.92rem;
-}
-
-.field input {
+.export-form input {
   width: 100%;
-  padding: 15px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  background: rgba(8, 10, 13, 0.5);
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
   color: var(--text);
   font: inherit;
-  transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
 }
 
-.field input:focus {
-  outline: none;
-  border-color: rgba(242, 138, 84, 0.7);
-  background: rgba(8, 10, 13, 0.78);
-  transform: translateY(-1px);
+.export-form input:focus {
+  outline: 2px solid rgba(31, 111, 235, 0.18);
+  border-color: var(--accent);
 }
 
 .submit-button,
@@ -149,293 +87,198 @@ pre,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 48px;
-  border: 0;
-  border-radius: 999px;
-  padding: 0 18px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
   font: inherit;
-  cursor: pointer;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .submit-button {
-  background: linear-gradient(135deg, var(--accent), #e16b3b);
-  color: #151515;
-  font-weight: 700;
-  transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
 }
 
 .submit-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 16px 30px rgba(242, 138, 84, 0.25);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
 }
 
 .submit-button:disabled {
+  opacity: 0.65;
   cursor: wait;
-  opacity: 0.7;
+}
+
+.status-chip,
+.helper-text,
+.form-message {
+  margin: 8px 0 0;
 }
 
 .status-chip {
-  margin: 0;
-  padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--accent-soft);
-  font-family: "IBM Plex Mono", "Consolas", monospace;
-  font-size: 0.85rem;
-}
-
-.inline-tools {
-  display: grid;
-  gap: 10px;
-}
-
-.tool-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  color: var(--muted);
 }
 
 .helper-text {
-  margin: 0;
   color: var(--muted);
-  line-height: 1.5;
-}
-
-.subtle-button {
-  min-height: 38px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  padding: 0 14px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
 }
 
 .form-message {
-  min-height: 1.4rem;
-  margin: 0;
+  min-height: 1.25rem;
   color: var(--muted);
-}
-
-.panel-notes {
-  position: relative;
-  overflow: hidden;
-}
-
-.panel-notes::after {
-  content: "";
-  position: absolute;
-  inset: auto -40px -60px auto;
-  width: 180px;
-  height: 180px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(242, 138, 84, 0.22), transparent 70%);
-  pointer-events: none;
-}
-
-.pipeline {
-  margin: 18px 0 0;
-  padding-left: 22px;
-  color: var(--muted);
-  line-height: 1.7;
 }
 
 .jobs-section {
-  margin-top: 22px;
+  display: grid;
+  gap: 8px;
+}
+
+.section-head h2 {
+  margin: 0;
+  font-size: 1rem;
 }
 
 .jobs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 18px;
-  margin-top: 18px;
+  gap: 12px;
 }
 
 .job-card {
-  position: relative;
   display: grid;
-  gap: 16px;
-  padding: 22px;
-  border: 1px solid var(--panel-border);
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 50%),
-    var(--panel-strong);
-  box-shadow: var(--shadow);
+  gap: 12px;
+  padding: 14px;
 }
 
 .job-card.is-completed {
-  border-color: rgba(141, 226, 164, 0.22);
+  border-color: rgba(24, 121, 78, 0.35);
 }
 
 .job-card.is-error {
-  border-color: rgba(255, 143, 122, 0.25);
+  border-color: rgba(192, 54, 44, 0.4);
 }
 
 .job-topline {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  align-items: flex-start;
 }
 
 .job-status {
-  margin: 0 0 8px;
-  color: var(--accent-soft);
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 0.75rem;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-size: 0.72rem;
+}
+
+.job-title,
+.job-percent {
+  margin: 0;
 }
 
 .job-title {
-  margin: 0;
-  font-size: 1.2rem;
-  line-height: 1.15;
+  font-size: 1rem;
+  word-break: break-word;
 }
 
 .job-percent {
-  margin: 0;
-  font-size: 1.4rem;
-  font-weight: 700;
+  font-size: 1rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .meter {
   overflow: hidden;
-  height: 13px;
+  height: 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: #e7e7e7;
 }
 
 .meter-fill {
-  position: relative;
   height: 100%;
   width: 0;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #f28a54 0%, #ffc48f 100%);
-  transition: width 240ms ease;
-}
-
-.meter-fill::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    100deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.35) 50%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  animation: shimmer 1.6s linear infinite;
+  background: var(--accent);
+  transition: width 360ms ease;
 }
 
 .job-meta {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 16px;
   flex-wrap: wrap;
 }
 
-.job-meta p {
+.job-meta p,
+.job-error {
   margin: 0;
+}
+
+.job-meta p {
   color: var(--muted);
 }
 
 .job-facts {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   margin: 0;
 }
 
 .job-facts div {
   display: grid;
-  gap: 4px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
+  gap: 2px;
 }
 
 .job-facts dt {
-  color: var(--accent-soft);
-  font-size: 0.76rem;
+  color: var(--muted);
+  font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
 
 .job-facts dd {
   margin: 0;
-  color: var(--text);
   word-break: break-word;
 }
 
 .job-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .job-link {
-  color: #151515;
-  background: linear-gradient(135deg, #ffc48f, #f28a54);
-  font-weight: 700;
+  min-height: 34px;
+  border-color: var(--border);
+  background: #fff;
+  color: var(--text);
 }
 
 .job-link.secondary {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
 }
 
 .job-error {
-  margin: 0;
   color: var(--error);
 }
 
 .empty-state {
-  padding: 28px;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
-  border-radius: 24px;
+  padding: 14px;
   color: var(--muted);
   text-align: center;
-  background: rgba(255, 255, 255, 0.02);
-}
-
-@keyframes shimmer {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(160%);
-  }
-}
-
-@media (max-width: 920px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-
-  .hero h1 {
-    max-width: none;
-  }
 }
 
 @media (max-width: 640px) {
   .page-shell {
-    width: min(100% - 20px, 100%);
-    padding: 20px 0 44px;
+    padding: 12px;
   }
 
-  .hero,
-  .panel,
-  .job-card {
-    border-radius: 20px;
-    padding: 20px;
+  .export-form {
+    grid-template-columns: 1fr;
   }
 
-  .job-topline {
-    flex-direction: column;
-  }
-
+  .job-topline,
   .job-meta {
     flex-direction: column;
   }

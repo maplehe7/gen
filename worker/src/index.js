@@ -150,6 +150,26 @@ function looksLikeUrl(value) {
   }
 }
 
+function normalizeSourceUrl(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  if (looksLikeUrl(trimmed)) {
+    return trimmed;
+  }
+
+  const bareDomainPattern =
+    /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:\/\S*)?$/i;
+  if (/\s/.test(trimmed) || !bareDomainPattern.test(trimmed)) {
+    return "";
+  }
+
+  const candidate = `https://${trimmed}`;
+  return looksLikeUrl(candidate) ? candidate : "";
+}
+
 async function findRecentRun(env, submittedAtIso) {
   const runsUrl =
     `${githubApiBase(env)}/actions/workflows/${encodeURIComponent(workflowFile(env))}/runs` +
@@ -190,13 +210,13 @@ async function handleConfig(request, env) {
 async function handleDispatch(request, env) {
   validateEnv(env);
   const body = await request.json().catch(() => null);
-  const sourceUrl = String(body?.sourceUrl || "").trim();
+  const sourceUrl = normalizeSourceUrl(body?.sourceUrl);
   const displayName = String(body?.displayName || "").trim();
   const requestId = String(body?.requestId || "").trim();
 
-  if (!looksLikeUrl(sourceUrl)) {
+  if (!sourceUrl) {
     return json(
-      { error: "A valid sourceUrl is required." },
+      { error: "A valid sourceUrl is required. Bare domains like example.com are allowed." },
       {
         status: 400,
         headers: corsHeaders(request, env),

@@ -4,94 +4,44 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Standalone Forge</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="./app.css" />
   </head>
   <body>
     <div class="page-shell">
-      <header class="hero">
-        <p class="eyebrow">GitHub Pages Build Console</p>
-        <h1>Dispatch Unity exports from a static site.</h1>
-        <p class="hero-copy">
-          This page runs on GitHub Pages. It does not execute Python in the browser.
-          Instead, it triggers a GitHub Actions workflow that runs
-          <code>unity_standalone.py</code>, publishes the generated
-          <code>Build/</code> and <code>index.html</code>, and returns a play link when the
-          workflow finishes.
-        </p>
-      </header>
-
-      <main class="layout">
+      <main class="stack">
         <section class="panel panel-form">
-          <div class="panel-head">
-            <h2>New Export</h2>
-            <p>
-              Enter a direct game URL or a name from <code>game_catalog.json</code>. The
-              page talks to a Cloudflare Worker, and the Worker holds the GitHub token as a
-              secret.
-            </p>
-          </div>
-
           <form id="export-form" class="export-form">
-            <p id="repo-target" class="status-chip"></p>
-            <p id="config-warning" class="helper-text"></p>
-
-            <label class="field">
-              <span>Game name or URL</span>
-              <input
-                id="source"
-                name="source"
-                type="text"
-                placeholder="https://example.com/game or Catalog Game Name"
-                autocomplete="off"
-                required
-              />
-            </label>
-
+            <input
+              id="source"
+              name="source"
+              type="text"
+              placeholder="Game URL or name"
+              autocomplete="off"
+              required
+            />
             <button id="submit-button" class="submit-button" type="submit">
-              Start GitHub build
+              Generate
             </button>
-            <p id="form-message" class="form-message" aria-live="polite"></p>
           </form>
+          <p id="repo-target" class="status-chip"></p>
+          <p id="config-warning" class="helper-text"></p>
+          <p id="form-message" class="form-message" aria-live="polite"></p>
         </section>
 
-        <aside class="panel panel-notes">
-          <div class="panel-head">
-            <h2>How It Works</h2>
-          </div>
-          <ol class="pipeline">
-            <li>The page resolves the input to a source URL.</li>
-            <li>It calls your Cloudflare Worker.</li>
-            <li>The Worker dispatches <code>.github/workflows/build-game.yml</code>.</li>
-            <li>The workflow runs the Python exporter in GitHub Actions.</li>
-            <li>The completed folder is deployed back to GitHub Pages.</li>
-          </ol>
-          <p class="note">
-            The only browser-side config is the Worker URL in <code>site/config.js</code>.
-          </p>
-        </aside>
-      </main>
-
-      <section class="jobs-section">
+        <section class="jobs-section">
         <div class="section-head">
           <h2>Recent Requests</h2>
-          <p>These are tracked in your browser so you can watch workflow progress.</p>
         </div>
         <div id="jobs" class="jobs-grid"></div>
-      </section>
+        </section>
 
-      <section class="jobs-section">
+        <section class="jobs-section">
         <div class="section-head">
           <h2>Published Games</h2>
-          <p>These are the builds currently deployed on the site.</p>
         </div>
         <div id="published-games" class="jobs-grid"></div>
-      </section>
+        </section>
+      </main>
     </div>
 
     <template id="job-template">

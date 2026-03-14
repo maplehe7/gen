@@ -11166,6 +11166,9 @@ def export_html_entry(
             allowed_launch_modes=allowed_launch_modes,
             recommended_launch_mode=recommended_launch_mode,
         )
+    raise FetchError(
+        "Web fallback export is disabled. HTML/web runtimes are not exportable as standalone builds."
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     title = infer_display_title(
@@ -11746,8 +11749,10 @@ def main(argv: Sequence[str]) -> int:
     legacy_config: dict[str, Any] = {}
     detected_build: DetectedBuild | None = None
     detected_eagler_entry: DetectedEaglerEntry | None = None
+    detected_entry: DetectedEntry | None = None
     detected_html_entry: DetectedEntry | None = None
     detected_remote_entry: DetectedEntry | None = None
+    custom_split_bootstrap: dict[str, Any] | None = None
 
     if direct_mode:
         loader_url = normalize_url(args.loader_url)
@@ -11775,15 +11780,11 @@ def main(argv: Sequence[str]) -> int:
                 try:
                     detected_build = detect_entry_build(detected_entry.index_url, detected_entry.index_html)
                 except FetchError as exc:
-                    entry_kind = "html"
-                    detected_html_entry = DetectedEntry(
-                        entry_kind="html",
-                        index_url=detected_entry.index_url,
-                        index_html=detected_entry.index_html,
-                        source_page_url=detected_entry.source_page_url or detected_entry.index_url,
+                    raise FetchError(
+                        "Web fallback is disabled. "
+                        "Direct Unity build extraction failed for inline legacy Unity bootstrap page: "
+                        f"{exc}"
                     )
-                    log(f"Falling back to localized HTML export for inline legacy Unity bootstrap page: {exc}")
-                    log(f"Resolved HTML entry URL: {detected_html_entry.index_url}")
                 else:
                     build_kind = detected_build.build_kind
                     legacy_config = detected_build.legacy_config
@@ -11793,15 +11794,17 @@ def main(argv: Sequence[str]) -> int:
                     log(f"Detected build kind: {build_kind}")
                     log(f"Resolved loader URL: {loader_url}")
             elif looks_like_split_unity_bootstrap_page(detected_entry.index_html):
-                entry_kind = "html"
-                detected_html_entry = DetectedEntry(
-                    entry_kind="html",
-                    index_url=detected_entry.index_url,
-                    index_html=detected_entry.index_html,
-                    source_page_url=detected_entry.source_page_url or detected_entry.index_url,
+                custom_split_bootstrap = extract_custom_split_unity_bootstrap(
+                    detected_entry.index_html,
+                    detected_entry.index_url,
                 )
-                log("Falling back to localized HTML export for split-part Unity bootstrap page")
-                log(f"Resolved HTML entry URL: {detected_html_entry.index_url}")
+                if custom_split_bootstrap is None:
+                    raise FetchError(
+                        "Web fallback is disabled. Split-part Unity bootstrap page did not expose "
+                        "a direct downloadable build."
+                    )
+                log("Extracted direct Unity build from split-part Unity bootstrap page")
+                log(f"Resolved loader URL: {custom_split_bootstrap['loader_url']}")
             else:
                 detected_build = detect_entry_build(detected_entry.index_url, detected_entry.index_html)
                 build_kind = detected_build.build_kind
@@ -11818,32 +11821,24 @@ def main(argv: Sequence[str]) -> int:
                     detected_entry.index_html,
                 )
             except FetchError as exc:
-                if looks_like_inline_eagler_payload_html(detected_entry.index_html):
-                    entry_kind = "html"
-                    detected_html_entry = DetectedEntry(
-                        entry_kind="html",
-                        index_url=detected_entry.index_url,
-                        index_html=detected_entry.index_html,
-                        source_page_url=detected_entry.source_page_url or detected_entry.index_url,
-                    )
-                    log(f"Falling back to localized HTML export for inline Eagler payload: {exc}")
-                    log(f"Resolved HTML entry URL: {detected_html_entry.index_url}")
-                else:
-                    raise
+                raise FetchError(
+                    "Web fallback is disabled. "
+                    f"Direct Eagler runtime extraction failed: {exc}"
+                ) from exc
             else:
                 log(f"Resolved Eagler runtime URL: {detected_eagler_entry.classes_url}")
                 log(f"Resolved Eagler assets URL: {detected_eagler_entry.assets_url}")
                 if detected_eagler_entry.locales_url:
                     log(f"Resolved Eagler locales URL: {detected_eagler_entry.locales_url}")
         elif entry_kind == "remote_stream":
-            detected_remote_entry = detected_entry
-            log(f"Resolved remote stream URL: {detected_remote_entry.metadata.get('remote_url', detected_remote_entry.index_url)}")
-            remote_provider = str(detected_remote_entry.metadata.get("remote_provider") or "").strip()
-            if remote_provider:
-                log(f"Detected remote provider: {remote_provider}")
+            raise FetchError(
+                "Web fallback is disabled. Remote streamed pages are not exportable as direct standalone builds."
+            )
         else:
-            detected_html_entry = detected_entry
-            log(f"Resolved HTML entry URL: {detected_html_entry.index_url}")
+            raise FetchError(
+                "Web fallback is disabled. "
+                "This page only exposes an HTML/web runtime and not a direct standalone build."
+            )
 
     if direct_mode:
         output_name = args.out_dir.strip() or infer_output_name_from_url(root_url, loader_url)
@@ -11854,12 +11849,12 @@ def main(argv: Sequence[str]) -> int:
             fallback_name="eaglercraft",
             source_page_url=input_url,
         )
-    elif entry_kind == "html" and detected_html_entry is not None:
+    elif custom_split_bootstrap is not None and detected_entry is not None:
         output_name = args.out_dir.strip() or infer_output_name_from_entry(
-            extract_html_title(detected_html_entry.index_html),
+            extract_html_title(detected_entry.index_html),
             root_url,
-            fallback_name="html-game",
-            source_page_url=detected_html_entry.source_page_url or input_url,
+            fallback_name="unity-game",
+            source_page_url=detected_entry.source_page_url or input_url,
         )
     elif entry_kind == "remote_stream" and detected_remote_entry is not None:
         output_name = args.out_dir.strip() or infer_output_name_from_entry(
@@ -11905,13 +11900,14 @@ def main(argv: Sequence[str]) -> int:
         log(json.dumps(summary, indent=2))
         return 0
 
-    if entry_kind == "html" and detected_html_entry is not None:
-        summary = export_html_entry(
+    if custom_split_bootstrap is not None and detected_entry is not None:
+        summary = export_custom_split_unity_entry(
             output_dir=output_dir,
             progress_file=progress_file,
-            detected_entry=detected_html_entry,
+            detected_entry=detected_entry,
             input_url=input_url,
             root_url=root_url,
+            custom_bootstrap=custom_split_bootstrap,
             allowed_launch_modes=allowed_launch_modes,
             recommended_launch_mode=recommended_launch_mode,
         )

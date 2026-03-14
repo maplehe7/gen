@@ -19,6 +19,20 @@ const PREFERRED_SEARCH_SITES = [
   },
 ];
 const VERIFIED_QUERY_OVERRIDES = {
+  "geometry dash": [
+    {
+      title: "Geometry Dash Lite: Play Free Online",
+      url: "https://geometrydash-lite.io/",
+      textScore: 260,
+    },
+  ],
+  "geometry dash lite": [
+    {
+      title: "Geometry Dash Lite: Play Free Online",
+      url: "https://geometrydash-lite.io/",
+      textScore: 260,
+    },
+  ],
   "realistic car simulator": [
     {
       title: "Car Racing - Realistic Car Simulator",

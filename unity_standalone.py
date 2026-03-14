@@ -539,6 +539,43 @@ def patch_unity_loader_inline_redirect_hack(loader_path: Path) -> bool:
     return True
 
 
+def patch_legacy_unity_loader_process_data_job(loader_path: Path) -> bool:
+    if not loader_path.exists():
+        return False
+
+    try:
+        original_raw = loader_path.read_bytes()
+    except OSError:
+        return False
+
+    decoded_bytes = maybe_decompress_bytes(original_raw, loader_path)
+    try:
+        decoded_text = decoded_bytes.decode("utf-8", errors="ignore")
+    except UnicodeDecodeError:
+        return False
+
+    patched_text, patch_count = re.subn(
+        r"""var u=String\.fromCharCode\.apply\(null,r\.subarray\(o,o\+l\)\);""",
+        (
+            'var u="undefined"!=typeof TextDecoder?new TextDecoder("utf-8").decode(r.subarray(o,o+l))'
+            ':Array.prototype.map.call(r.subarray(o,o+l),function(e){return String.fromCharCode(e)}).join("");'
+        ),
+        decoded_text,
+        count=1,
+    )
+
+    if patch_count <= 0 or patched_text == decoded_text:
+        return False
+
+    try:
+        loader_path.write_bytes(
+            encode_bytes_like_source(patched_text.encode("utf-8"), original_raw, loader_path)
+        )
+    except (OSError, RuntimeError):
+        return False
+    return True
+
+
 def log(message: str) -> None:
     print(f"[unity-standalone] {message}", flush=True)
 
@@ -9615,6 +9652,9 @@ def generate_index_html(
       }}
 
       function patchUnityLoaderAuxiliaryCache() {{
+        if (BUILD_KIND === "legacy_json") {{
+          return;
+        }}
         const rewriteUrlValue = window.__unityStandaloneRewriteUrlValue;
         const shouldBypassCacheForUrl = window.__unityStandaloneShouldBypassCacheForUrl;
         if (
@@ -11293,7 +11333,8 @@ def prepare_geometry_dash_lite_streaming_assets(
         return "", {}, {}
 
     canonical_source_page_url = canonicalize_source_page_url(source_page_url, original_folder_url)
-    streaming_assets_url = GEOMETRY_DASH_LITE_PRIMARY_STREAMING_ASSETS_URL
+    remote_streaming_assets_url = GEOMETRY_DASH_LITE_PRIMARY_STREAMING_ASSETS_URL
+    streaming_assets_url = "StreamingAssets/"
 
     remote_bases: list[str] = []
     if original_folder_url:
@@ -11316,37 +11357,82 @@ def prepare_geometry_dash_lite_streaming_assets(
     remote_bases = list(dict.fromkeys(normalize_url(base) for base in remote_bases if base))
 
     rewrite_map: dict[str, str] = {}
-    redirected_audio_count = 0
+    mirrored_streaming_asset_files: list[str] = []
+    mirrored_root_asset_files: list[str] = []
+    mirrored_audio_count = 0
     root_asset_count = 0
 
     for file_name in GEOMETRY_DASH_LITE_AUDIO_FILES:
         alias_name = file_name.replace(" ", "")
-        canonical_remote_original = normalize_url(
-            urllib.parse.urljoin(
-                streaming_assets_url,
-                "audios/" + urllib.parse.quote(file_name),
-            )
-        )
-        canonical_remote_alias = normalize_url(
-            urllib.parse.urljoin(
-                streaming_assets_url,
-                "audio/" + urllib.parse.quote(alias_name),
-            )
-        )
         relative_original = "StreamingAssets/audios/" + file_name
         relative_alias = "StreamingAssets/audio/" + alias_name
-        rewrite_map[relative_original] = canonical_remote_original
-        rewrite_map["./" + relative_original] = canonical_remote_original
-        rewrite_map[relative_alias] = canonical_remote_alias
-        rewrite_map["./" + relative_alias] = canonical_remote_alias
-        redirected_audio_count += 1
+        destination_original = output_dir / relative_original
+        destination_alias = output_dir / relative_alias
+        original_candidates = [
+            normalize_url(
+                urllib.parse.urljoin(
+                    remote_streaming_assets_url,
+                    "audios/" + urllib.parse.quote(file_name),
+                )
+            )
+        ]
+        alias_candidates = [
+            normalize_url(
+                urllib.parse.urljoin(
+                    remote_streaming_assets_url,
+                    "audio/" + urllib.parse.quote(alias_name),
+                )
+            )
+        ]
         for remote_base in remote_bases:
-            if normalize_url(remote_base) == normalize_url(streaming_assets_url):
-                continue
-            remote_original = normalize_url(urllib.parse.urljoin(remote_base, "audios/" + urllib.parse.quote(file_name)))
-            remote_alias = normalize_url(urllib.parse.urljoin(remote_base, "audio/" + urllib.parse.quote(alias_name)))
-            rewrite_map[remote_original] = canonical_remote_original
-            rewrite_map[remote_alias] = canonical_remote_alias
+            original_candidates.append(
+                normalize_url(urllib.parse.urljoin(remote_base, "audios/" + urllib.parse.quote(file_name)))
+            )
+            alias_candidates.append(
+                normalize_url(urllib.parse.urljoin(remote_base, "audio/" + urllib.parse.quote(alias_name)))
+            )
+
+        resolved_original = ""
+        for candidate_url in dict.fromkeys(original_candidates):
+            resolved_original = maybe_download_optional_asset(
+                candidate_url,
+                destination_original,
+                referer_url=canonical_source_page_url or original_folder_url,
+            )
+            if resolved_original:
+                break
+
+        resolved_alias = ""
+        if destination_original.exists():
+            destination_alias.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(destination_original, destination_alias)
+        else:
+            for candidate_url in dict.fromkeys(alias_candidates):
+                resolved_alias = maybe_download_optional_asset(
+                    candidate_url,
+                    destination_alias,
+                    referer_url=canonical_source_page_url or original_folder_url,
+                )
+                if resolved_alias:
+                    break
+            if destination_alias.exists():
+                destination_original.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(destination_alias, destination_original)
+
+        if not destination_original.exists() or not destination_alias.exists():
+            raise FetchError(f"Missing required Geometry Dash Lite audio asset: {file_name}")
+
+        rewrite_map[relative_original] = relative_original
+        rewrite_map["./" + relative_original] = relative_original
+        rewrite_map[relative_alias] = relative_alias
+        rewrite_map["./" + relative_alias] = relative_alias
+        for candidate_url in dict.fromkeys(original_candidates):
+            rewrite_map[candidate_url] = relative_original
+        for candidate_url in dict.fromkeys(alias_candidates):
+            rewrite_map[candidate_url] = relative_alias
+
+        mirrored_streaming_asset_files.extend([relative_original, relative_alias])
+        mirrored_audio_count += 1
 
     game_txt_source_candidates: list[str] = []
     if original_folder_url:
@@ -11373,6 +11459,7 @@ def prepare_geometry_dash_lite_streaming_assets(
             break
     if resolved_game_txt:
         root_asset_count += 1
+        mirrored_root_asset_files.append("game.txt")
         for game_txt_source_url in dict.fromkeys(candidate for candidate in game_txt_source_candidates if candidate):
             rewrite_map[game_txt_source_url] = "game.txt"
         if resolved_game_txt_source:
@@ -11393,22 +11480,25 @@ def prepare_geometry_dash_lite_streaming_assets(
         )
         if resolved_setting_txt:
             root_asset_count += 1
+            mirrored_root_asset_files.append("setting.txt")
             for candidate in setting_txt_source_candidates:
                 rewrite_map[candidate] = "setting.txt"
             log("auxiliary: downloaded GD Lite setting.txt")
             break
 
-    if redirected_audio_count:
-        log(f"auxiliary: redirected GD Lite audio files to canonical remote base ({redirected_audio_count})")
+    if mirrored_audio_count:
+        log(f"auxiliary: mirrored GD Lite audio files locally ({mirrored_audio_count})")
 
     return (
         streaming_assets_url,
         rewrite_map,
         {
-            "streaming_assets_audio_mirrored": 0,
-            "streaming_assets_audio_alias_count": redirected_audio_count,
-            "streaming_assets_audio_redirected_remote": redirected_audio_count,
+            "streaming_assets_audio_mirrored": mirrored_audio_count,
+            "streaming_assets_audio_alias_count": mirrored_audio_count,
+            "streaming_assets_audio_redirected_remote": 0,
             "gd_lite_root_assets_mirrored": root_asset_count,
+            "mirrored_streaming_asset_files": list(dict.fromkeys(mirrored_streaming_asset_files)),
+            "mirrored_root_asset_files": list(dict.fromkeys(mirrored_root_asset_files)),
         },
     )
 
@@ -13005,10 +13095,16 @@ def main(argv: Sequence[str]) -> int:
         )
 
     unity_loader_inline_redirect_hack_patched = False
+    legacy_loader_process_data_job_patched = False
     if assets.loader_name:
+        loader_path = build_dir / assets.loader_name
         unity_loader_inline_redirect_hack_patched = patch_unity_loader_inline_redirect_hack(
-            build_dir / assets.loader_name
+            loader_path
         )
+        if assets.build_kind == "legacy_json":
+            legacy_loader_process_data_job_patched = patch_legacy_unity_loader_process_data_job(
+                loader_path
+            )
 
     gd_lite_runtime_data_patched = False
     if assets.data_name and should_prepare_geometry_dash_lite_streaming_assets(
@@ -13200,6 +13296,7 @@ def main(argv: Sequence[str]) -> int:
         "used_compressed_assets": assets.used_br_assets,
         "site_lock_framework_patched": site_lock_framework_patched,
         "unity_loader_inline_redirect_hack_patched": unity_loader_inline_redirect_hack_patched,
+        "legacy_loader_process_data_job_patched": legacy_loader_process_data_job_patched,
         "gmsoft_host_bridge_patched": gmsoft_host_bridge_patched,
         "gmsoft_sendmessage_defaults_patched": gmsoft_sendmessage_defaults_patched,
         "sendmessage_value_compat_patched": sendmessage_value_compat_patched,

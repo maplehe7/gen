@@ -96,6 +96,16 @@ def summary_required_files(summary: dict[str, Any]) -> tuple[list[str], list[str
             if normalized:
                 static_files.append(normalized)
                 runtime_paths.append(normalized)
+        for mirrored_path in summary.get("mirrored_streaming_asset_files") or []:
+            normalized = normalize_relative_path(str(mirrored_path))
+            if normalized:
+                static_files.append(normalized)
+                runtime_paths.append(normalized)
+        for mirrored_path in summary.get("mirrored_root_asset_files") or []:
+            normalized = normalize_relative_path(str(mirrored_path))
+            if normalized:
+                static_files.append(normalized)
+                runtime_paths.append(normalized)
     elif entry_kind == "eaglercraft":
         for key in ("classes_file", "assets_file"):
             name = normalize_relative_path(str(summary.get(key, "")).strip())

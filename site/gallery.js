@@ -224,7 +224,7 @@ async function reportGame(entry, button) {
     button.textContent = "Reported";
   } catch (error) {
     button.disabled = false;
-    button.textContent = "Report Not Working";
+    button.textContent = "Report issue";
     window.alert(error.message);
   }
 }
@@ -309,10 +309,15 @@ function renderGallery(entries) {
     link.href = playUrlForPath(entry.play_path || entry.folder || "");
     title.textContent = entry.title || entry.id || "Untitled";
     if (source) {
-      source.textContent = hostFromUrl(entry.source_url || "") || "Unknown source";
+      const sourceHost = hostFromUrl(entry.source_url || "") || "Unknown source";
+      source.textContent = `Source ${sourceHost}`;
     }
     if (meta) {
-      meta.textContent = [entry.generated_at ? `Built ${new Date(entry.generated_at).toLocaleString()}` : "", entry.folder || ""]
+      meta.textContent = [
+        entry.generated_at ? `Built ${new Date(entry.generated_at).toLocaleString()}` : "",
+        entry.folder || "",
+        entry.id ? `ID ${entry.id}` : "",
+      ]
         .filter(Boolean)
         .join(" | ");
     }

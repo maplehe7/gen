@@ -9,61 +9,90 @@
   <body>
     <div class="page-shell">
       <main class="stack">
-        <form id="export-form" class="export-form panel">
-          <div class="source-input-wrap">
-            <input
-              id="source"
-              name="source"
-              type="text"
-              placeholder="Game URL or name"
-              autocomplete="off"
-              required
-            />
+        <form id="export-form" class="panel dashboard-band">
+          <div class="dashboard-band-main stack">
+            <div>
+              <p class="panel-kicker">Search Console</p>
+              <h1 class="panel-title">Resolve candidates before you queue builds</h1>
+            </div>
+
+            <div class="export-form">
+              <div class="source-input-wrap">
+                <input
+                  id="source"
+                  name="source"
+                  type="text"
+                  placeholder="Game URL or name"
+                  autocomplete="off"
+                  required
+                />
+              </div>
+              <label class="candidate-count-control" for="candidate-count">
+                <span>Candidates</span>
+                <select id="candidate-count" name="candidate-count">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3" selected>3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                </select>
+              </label>
+              <button
+                id="bulk-toggle"
+                class="bulk-corner-toggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="bulk-panel"
+                title="Add multiple games"
+              ></button>
+              <div class="form-actions">
+                <button id="submit-button" class="submit-button" type="submit">Resolve candidates</button>
+                <button id="dispatch-button" class="job-link" type="button">Dispatch selected</button>
+                <button id="clear-review-button" class="job-link secondary" type="button">Clear review</button>
+              </div>
+              <div id="bulk-panel" class="bulk-panel" hidden>
+                <textarea
+                  id="source-list"
+                  name="source-list"
+                  rows="6"
+                  placeholder="One game name or URL per line"
+                  spellcheck="false"
+                ></textarea>
+              </div>
+            </div>
           </div>
-          <label class="candidate-count-control" for="candidate-count">
-            <span>Candidates</span>
-            <select id="candidate-count" name="candidate-count">
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3" selected>3</option>
-              <option value="4">4</option>
-              <option value="5">5</option>
-            </select>
-          </label>
-          <button
-            id="bulk-toggle"
-            class="bulk-corner-toggle"
-            type="button"
-            aria-expanded="false"
-            aria-controls="bulk-panel"
-            title="Add multiple games"
-          ></button>
-          <button id="submit-button" class="submit-button" type="submit">Generate</button>
-          <div id="bulk-panel" class="bulk-panel" hidden>
-            <textarea
-              id="source-list"
-              name="source-list"
-              rows="6"
-              placeholder="One game name or URL per line"
-              spellcheck="false"
-            ></textarea>
+          <div class="dashboard-band-side stack compact-stack">
+            <p id="repo-target" class="status-chip"></p>
+            <p id="config-warning" class="helper-text"></p>
+            <p id="form-message" class="form-message" aria-live="polite"></p>
+
+            <div class="dashboard-stats">
+              <div class="dashboard-stat">
+                <span class="dashboard-stat-label">Active</span>
+                <strong id="dashboard-active-count" class="dashboard-stat-value"></strong>
+              </div>
+              <div class="dashboard-stat">
+                <span class="dashboard-stat-label">Review</span>
+                <strong id="dashboard-review-count" class="dashboard-stat-value"></strong>
+              </div>
+              <div class="dashboard-stat dashboard-stat-wide">
+                <span class="dashboard-stat-label">Refresh</span>
+                <strong id="dashboard-refresh-status" class="dashboard-stat-value"></strong>
+              </div>
+            </div>
+
+            <div class="mini-nav">
+              <a class="job-link secondary" href="./gallery.html">Gallery</a>
+            </div>
           </div>
         </form>
-
-        <div class="stack compact-stack">
-          <p id="repo-target" class="status-chip"></p>
-          <p id="config-warning" class="helper-text"></p>
-          <p id="form-message" class="form-message" aria-live="polite"></p>
-          <div class="mini-nav">
-            <a class="job-link secondary" href="./gallery.html">Gallery</a>
-          </div>
-        </div>
 
         <section id="candidate-preview" class="panel preview-panel" hidden>
           <div class="preview-header">
             <div>
               <p class="panel-kicker">Candidate Preview</p>
               <h2 class="panel-title">Resolved before dispatch</h2>
+              <p id="candidate-preview-copy" class="preview-copy"></p>
             </div>
             <p id="candidate-preview-status" class="preview-status"></p>
           </div>
@@ -94,7 +123,10 @@
             <h3 class="job-title"></h3>
             <p class="job-subtitle"></p>
           </div>
-          <p class="job-percent"></p>
+          <div class="job-top-actions">
+            <p class="job-percent"></p>
+            <div class="job-header-actions"></div>
+          </div>
         </div>
 
         <div class="meter">

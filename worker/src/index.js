@@ -4,6 +4,7 @@ import {
   rejectionReasonForCandidate,
   searchOverridesForQuery,
 } from "./failure_corpus.js";
+import { buildSearchPayload } from "./search_payload.js";
 
 const JSON_HEADERS = {
   "content-type": "application/json; charset=UTF-8",
@@ -988,31 +989,6 @@ function applyFailureHistoryMetadata(candidate) {
   };
 }
 
-function summarizeCandidate(candidate) {
-  return {
-    query: candidate.query,
-    sourceUrl: candidate.sourceUrl,
-    displayName: candidate.displayName,
-    matchedName: candidate.displayName,
-    sourceMode:
-      candidate.provider === "override"
-        ? "verified-search"
-        : candidate.provider === "drive-site"
-        ? "drive-site-search"
-        : candidate.provider === "direct-host"
-          ? "direct-host-search"
-          : "web-search",
-    provider: candidate.provider,
-    confidence: candidate.confidence,
-    hostedOnline: candidate.hostedOnline,
-    reason: candidate.reason,
-    imageUrl: candidate.imageUrl,
-    buildDisposition: candidate.buildDisposition || "unknown",
-    historyStatus: candidate.historyStatus || "unknown",
-    historySummary: candidate.historySummary || "No failed-build history recorded.",
-  };
-}
-
 function canonicalCandidateKey(candidate) {
   const normalized = cleanExtractedUrl(candidate?.sourceUrl || candidate?.url || "");
   if (!normalized) {
@@ -1271,6 +1247,33 @@ function sortCandidates(candidates) {
   });
 }
 
+function collectSuppressedCandidates(ranked, selected) {
+  const selectedKeys = new Set((Array.isArray(selected) ? selected : []).map((candidate) => canonicalCandidateKey(candidate)).filter(Boolean));
+  const seenKeys = new Set();
+  const suppressed = [];
+
+  (Array.isArray(ranked) ? ranked : []).forEach((candidate) => {
+    const key = canonicalCandidateKey(candidate);
+    if (!key || seenKeys.has(key) || selectedKeys.has(key)) {
+      return;
+    }
+    const shouldInclude =
+      candidate.buildDisposition === "reject_search" ||
+      looksLikeAssetOnlyUrl(candidate?.sourceUrl || candidate?.url || "") ||
+      !candidate.hostedOnline ||
+      candidate.softwarePortal ||
+      candidate.blockedPage ||
+      candidate.mediaOnlyEmbeds;
+    if (!shouldInclude) {
+      return;
+    }
+    seenKeys.add(key);
+    suppressed.push(candidate);
+  });
+
+  return suppressed;
+}
+
 function listAlternativeNames(candidates, selectedUrl = "", limit = 4) {
   return uniqueBy(
     (Array.isArray(candidates) ? candidates : []).filter(
@@ -1401,6 +1404,7 @@ function selectRankedCandidates(candidates, limit = 1, reasonSuffix = "") {
   return {
     candidates: selected.slice(0, limit),
     alternatives: listAlternativeNames(ranked, selected[0]?.url || ""),
+    suppressed: collectSuppressedCandidates(ranked, selected),
   };
 }
 
@@ -1408,6 +1412,7 @@ function mergeCandidateSelections(selections, limit = 1) {
   const selected = [];
   const seenKeys = new Set();
   const alternativeNames = [];
+  const suppressed = [];
 
   (Array.isArray(selections) ? selections : []).forEach((selection) => {
     (selection?.candidates || []).forEach((candidate) => {
@@ -1422,6 +1427,13 @@ function mergeCandidateSelections(selections, limit = 1) {
       selected.push(candidate);
     });
     alternativeNames.push(...(selection?.alternatives || []));
+    (selection?.suppressed || []).forEach((candidate) => {
+      const key = canonicalCandidateKey(candidate);
+      if (!key || seenKeys.has(key)) {
+        return;
+      }
+      suppressed.push(candidate);
+    });
   });
 
   return {
@@ -1430,6 +1442,7 @@ function mergeCandidateSelections(selections, limit = 1) {
       alternativeNames.map((name) => String(name || "").trim()).filter(Boolean),
       (name) => normalizeSearchText(name),
     ).slice(0, 6),
+    suppressed: uniqueBy(suppressed, (candidate) => canonicalCandidateKey(candidate)).slice(0, 8),
   };
 }
 
@@ -2218,17 +2231,7 @@ async function handleSearch(request, env) {
     );
   }
 
-  const summarizedCandidates = result.candidates.map((candidate, index) => ({
-    ...summarizeCandidate(candidate),
-    rank: index + 1,
-  }));
-  const payload = limit === 1
-    ? summarizedCandidates[0]
-    : {
-        query,
-        candidates: summarizedCandidates,
-        alternatives: result.alternatives,
-      };
+  const payload = buildSearchPayload(query, result, limit);
 
   return json(payload, {
     headers: corsHeaders(request, env),

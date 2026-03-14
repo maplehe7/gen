@@ -1,4 +1,19 @@
 import { buildCandidateBadges, buildJobErrorSummary, hostFromUrl } from "./ui_helpers.js";
+import {
+  bucketReviewCandidates,
+  buildSelectionSummary,
+  candidateSelectionKey,
+  dashboardSnapshot,
+  groupActiveJobsByBatch,
+  initialSelectedCandidateKeys,
+  isCancelableJob,
+  isDispatchableSelection,
+  normalizeSelectedCandidateKeys,
+  reviewSelectionsFromState,
+  selectedCandidatesForSelection,
+  selectionStateLabel,
+  splitBatchCancellationJobs,
+} from "./dashboard_helpers.js";
 
 const JOBS_KEY = "standalone-forge-pages-jobs";
 const JOB_HISTORY_KEY = "standalone-forge-pages-job-history";
@@ -62,12 +77,18 @@ const sourceListInput = document.getElementById("source-list");
 const repoTarget = document.getElementById("repo-target");
 const configWarning = document.getElementById("config-warning");
 const submitButton = document.getElementById("submit-button");
+const dispatchButton = document.getElementById("dispatch-button");
+const clearReviewButton = document.getElementById("clear-review-button");
 const formMessage = document.getElementById("form-message");
 const candidatePreview = document.getElementById("candidate-preview");
 const candidatePreviewStatus = document.getElementById("candidate-preview-status");
+const candidatePreviewCopy = document.getElementById("candidate-preview-copy");
 const candidatePreviewList = document.getElementById("candidate-preview-list");
 const jobsContainer = document.getElementById("jobs");
 const jobTemplate = document.getElementById("job-template");
+const dashboardActiveCount = document.getElementById("dashboard-active-count");
+const dashboardReviewCount = document.getElementById("dashboard-review-count");
+const dashboardRefreshStatus = document.getElementById("dashboard-refresh-status");
 const favoriteModal = document.getElementById("favorite-modal");
 const favoriteTitle = document.getElementById("favorite-title");
 const favoriteCopy = document.getElementById("favorite-copy");
@@ -90,6 +111,8 @@ let jobSectionState = {
 };
 let activeFavoriteBatchId = "";
 let refreshInFlight = false;
+let lastRefreshAt = 0;
+let formBusy = false;
 let appConfig = {
   workerUrl: "",
   owner: "",
@@ -268,6 +291,10 @@ function loadBatchSelections() {
                 normalized.state = "pending";
               }
             }
+            normalized.selectedCandidateKeys = normalizeSelectedCandidateKeys(normalized);
+            if (!normalized.state && Array.isArray(normalized.candidatePool) && normalized.candidatePool.length) {
+              normalized.state = "review";
+            }
             return [key, normalized];
           }),
         )
@@ -296,6 +323,17 @@ function updateBatchSelection(batchId, patch) {
     batchId: key,
     updatedAt: nowIso(),
   };
+  batchSelections[key].selectedCandidateKeys = normalizeSelectedCandidateKeys(batchSelections[key]);
+  saveBatchSelections();
+  renderCandidatePreview();
+}
+
+function removeBatchSelection(batchId) {
+  const key = String(batchId || "").trim();
+  if (!key || !batchSelections[key]) {
+    return;
+  }
+  delete batchSelections[key];
   saveBatchSelections();
   renderCandidatePreview();
 }
@@ -395,9 +433,43 @@ function searchPoolCountForDesiredCount(desiredCount) {
   return Math.min(Math.max(safeDesired * 3, safeDesired + 3), MAX_SEARCH_POOL_COUNT);
 }
 
+function reviewSelections() {
+  return reviewSelectionsFromState(batchSelections);
+}
+
+function dispatchableReviewSelections() {
+  return reviewSelections().filter((selection) => isDispatchableSelection(selection));
+}
+
+function updateDashboardStatus() {
+  const snapshot = dashboardSnapshot(jobs, batchSelections, lastRefreshAt);
+  if (dashboardActiveCount) {
+    dashboardActiveCount.textContent = `${snapshot.activeJobCount} active build${snapshot.activeJobCount === 1 ? "" : "s"}`;
+  }
+  if (dashboardReviewCount) {
+    dashboardReviewCount.textContent = `${snapshot.reviewBatchCount} review batch${snapshot.reviewBatchCount === 1 ? "" : "es"} | ${snapshot.selectedCandidateCount} selected`;
+  }
+  if (dashboardRefreshStatus) {
+    dashboardRefreshStatus.textContent = snapshot.refreshText;
+  }
+  if (dispatchButton) {
+    dispatchButton.disabled = formBusy || !dispatchableReviewSelections().length;
+  }
+  if (clearReviewButton) {
+    clearReviewButton.disabled = formBusy || reviewSelections().length === 0;
+  }
+}
+
 function setFormBusy(isBusy) {
+  formBusy = Boolean(isBusy);
   if (submitButton) {
     submitButton.disabled = isBusy;
+  }
+  if (dispatchButton) {
+    dispatchButton.disabled = isBusy;
+  }
+  if (clearReviewButton) {
+    clearReviewButton.disabled = isBusy;
   }
   if (candidateCountInput) {
     candidateCountInput.disabled = isBusy;
@@ -411,6 +483,7 @@ function setFormBusy(isBusy) {
   if (sourceListInput) {
     sourceListInput.disabled = isBusy;
   }
+  updateDashboardStatus();
 }
 
 function visibleProgressPercent(job, nowMs = Date.now()) {
@@ -703,6 +776,9 @@ function serializeJobForStorage(job) {
     thumbnailPath: stringValue(job.thumbnailPath),
     entryId: stringValue(job.entryId),
     error: stringValue(job.error),
+    cancelPending: Boolean(job.cancelPending),
+    batchCancelPending: Boolean(job.batchCancelPending),
+    selectedForDispatch: Boolean(job.selectedForDispatch),
     failureLoggedAt: timestampMs(job.failureLoggedAt || 0),
     failedAt: isFailedJob(job) ? timestampMs(job.failedAt || job.lastServerUpdateAt || job.progressUpdatedAt || Date.now()) : 0,
     lastServerUpdateAt: timestampMs(job.lastServerUpdateAt || job.progressUpdatedAt || Date.now()),
@@ -805,6 +881,8 @@ function formatStatus(status) {
   if (status === "error") return "Failed";
   if (status === "in_progress") return "Running";
   if (status === "queued") return "Queued";
+  if (status === "dispatching") return "Dispatching";
+  if (status === "requested") return "Requested";
   return "Waiting";
 }
 
@@ -850,7 +928,7 @@ function candidateSubtitle(job) {
   if (sourceHost) {
     parts.push(sourceHost);
   }
-  return parts.join(" • ");
+  return parts.join(" | ");
 }
 
 function successfulJob(job) {
@@ -1340,7 +1418,31 @@ function normalizeResolvedCandidate(candidate, fallbackName = "") {
   };
 }
 
+function normalizeSuppressedCandidate(candidate, fallbackName = "") {
+  return {
+    sourceUrl: String(candidate?.sourceUrl || "").trim(),
+    displayName: String(candidate?.displayName || fallbackName || "Candidate").trim(),
+    provider: String(candidate?.provider || "search").trim() || "search",
+    buildDisposition: String(candidate?.buildDisposition || "unknown").trim() || "unknown",
+    historyStatus: String(candidate?.historyStatus || "unknown").trim() || "unknown",
+    historySummary: String(candidate?.historySummary || "").trim(),
+    rejectionReason: String(candidate?.rejectionReason || candidate?.reason || "").trim(),
+  };
+}
+
 function dedupeResolvedCandidates(candidates) {
+  const seen = new Set();
+  return (Array.isArray(candidates) ? candidates : []).filter((candidate) => {
+    const key = candidateSourceKey(candidate?.sourceUrl || "");
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function dedupeSuppressedCandidates(candidates) {
   const seen = new Set();
   return (Array.isArray(candidates) ? candidates : []).filter((candidate) => {
     const key = candidateSourceKey(candidate?.sourceUrl || "");
@@ -1360,7 +1462,7 @@ async function searchForGameByName(query, limit = 1) {
   return fetchJson(searchUrl.toString());
 }
 
-async function resolveSourceCandidates(inputValue, limit = DEFAULT_TARGET_SUCCESSFUL_CANDIDATES) {
+async function resolveSourceSelection(inputValue, limit = DEFAULT_TARGET_SUCCESSFUL_CANDIDATES) {
   const trimmed = String(inputValue || "").trim();
   if (!trimmed) {
     throw new Error("Enter a game URL or a game name.");
@@ -1368,31 +1470,46 @@ async function resolveSourceCandidates(inputValue, limit = DEFAULT_TARGET_SUCCES
 
   const normalizedUrl = coerceInputToUrl(trimmed);
   if (normalizedUrl) {
-    return [normalizeResolvedCandidate({
-      sourceUrl: normalizedUrl,
-      displayName: deriveNameFromUrl(normalizedUrl),
-      sourceMode: "url",
-      matchedName: "",
-      provider: "direct-url",
-      confidence: 100,
-      hostedOnline: true,
-      reason: "",
-    })];
+    return {
+      candidates: [
+        normalizeResolvedCandidate({
+          sourceUrl: normalizedUrl,
+          displayName: deriveNameFromUrl(normalizedUrl),
+          sourceMode: "url",
+          matchedName: "",
+          provider: "direct-url",
+          confidence: 100,
+          hostedOnline: true,
+          reason: "Direct URL provided.",
+          buildDisposition: "allow_build",
+        }),
+      ],
+      suppressed: [],
+    };
   }
 
   const attemptedQueries = [];
   let lastSearchError = null;
   let candidates = [];
+  let suppressed = [];
   for (const variant of buildSearchQueryVariants(trimmed)) {
     try {
       const result = await searchForGameByName(variant, limit);
       const rawCandidates = Array.isArray(result?.candidates) ? result.candidates : [result];
+      const rawSuppressed = Array.isArray(result?.suppressed) ? result.suppressed : [];
       candidates = dedupeResolvedCandidates([
         ...candidates,
         ...rawCandidates.map((candidate) => normalizeResolvedCandidate(candidate, trimmed)),
       ]);
+      suppressed = dedupeSuppressedCandidates([
+        ...suppressed,
+        ...rawSuppressed.map((candidate) => normalizeSuppressedCandidate(candidate, trimmed)),
+      ]);
       if (candidates.length >= limit) {
-        return candidates.slice(0, limit);
+        return {
+          candidates: candidates.slice(0, limit),
+          suppressed,
+        };
       }
     } catch (searchError) {
       lastSearchError = searchError;
@@ -1401,7 +1518,10 @@ async function resolveSourceCandidates(inputValue, limit = DEFAULT_TARGET_SUCCES
   }
 
   if (candidates.length) {
-    return candidates.slice(0, limit);
+    return {
+      candidates: candidates.slice(0, limit),
+      suppressed,
+    };
   }
 
   if (lastSearchError) {
@@ -1412,12 +1532,20 @@ async function resolveSourceCandidates(inputValue, limit = DEFAULT_TARGET_SUCCES
       try {
         const result = await searchForGameByName(candidate, limit);
         const rawCandidates = Array.isArray(result?.candidates) ? result.candidates : [result];
+        const rawSuppressed = Array.isArray(result?.suppressed) ? result.suppressed : [];
         candidates = dedupeResolvedCandidates([
           ...candidates,
           ...rawCandidates.map((item) => normalizeResolvedCandidate(item, candidate)),
         ]);
+        suppressed = dedupeSuppressedCandidates([
+          ...suppressed,
+          ...rawSuppressed.map((item) => normalizeSuppressedCandidate(item, candidate)),
+        ]);
         if (candidates.length >= limit) {
-          return candidates.slice(0, limit);
+          return {
+            candidates: candidates.slice(0, limit),
+            suppressed,
+          };
         }
       } catch (_closestError) {
         // Keep falling through to catalog and then the original error.
@@ -1426,18 +1554,26 @@ async function resolveSourceCandidates(inputValue, limit = DEFAULT_TARGET_SUCCES
   }
 
   if (candidates.length) {
-    return candidates.slice(0, limit);
+    return {
+      candidates: candidates.slice(0, limit),
+      suppressed,
+    };
   }
 
   try {
     const catalogResolved = resolveCatalogSource(trimmed);
-    return [normalizeResolvedCandidate({
-      ...catalogResolved,
-      provider: "catalog",
-      confidence: 80,
-      hostedOnline: true,
-      reason: "Used local game catalog fallback.",
-    })];
+    return {
+      candidates: [
+        normalizeResolvedCandidate({
+          ...catalogResolved,
+          provider: "catalog",
+          confidence: 80,
+          hostedOnline: true,
+          reason: "Used local game catalog fallback.",
+        }),
+      ],
+      suppressed,
+    };
   } catch (_catalogError) {
     throw lastSearchError || new Error("No compatible hosted result was found.");
   }
@@ -1748,7 +1884,7 @@ function createBatchDraftJob(batchId, batchLabel, batchSubmittedAt, candidate, p
     historyStatus: String(candidate?.historyStatus || "unknown").trim() || "unknown",
     historySummary: String(candidate?.historySummary || "").trim(),
     submittedAt: nowIso(),
-    status: "queued",
+    status: "dispatching",
     conclusion: "",
     progressPercent: candidateRank === 1 ? 6 : 4,
     progressUpdatedAt: Date.now(),
@@ -1765,6 +1901,9 @@ function createBatchDraftJob(batchId, batchLabel, batchSubmittedAt, candidate, p
     entryId: "",
     folder: "",
     error: "",
+    selectedForDispatch: true,
+    cancelPending: false,
+    batchCancelPending: false,
     failureLoggedAt: 0,
   };
 }
@@ -1900,56 +2039,156 @@ async function syncBatchRecoveryAndFailureLogs() {
   }
 }
 
-function renderActions(job, actionsRoot) {
+function finalizeCancelledJob(job, reason, patch = {}) {
+  upsertJob({
+    ...job,
+    ...patch,
+    status: "completed",
+    conclusion: "cancelled",
+    progressPercent: clampPercent(job.progressPercent || 0),
+    progressUpdatedAt: Date.now(),
+    phase: patch.phase || reason,
+    etaLabel: "Cancelled",
+    etaSeconds: 0,
+    etaUpdatedAt: Date.now(),
+    error: reason,
+    cancelPending: false,
+    batchCancelPending: false,
+    failedAt: 0,
+    lastServerUpdateAt: Date.now(),
+    lastSyncAttemptAt: Date.now(),
+    syncFailureCount: 0,
+  });
+}
+
+function markJobCancellationPending(job, batch = false) {
+  upsertJob({
+    ...job,
+    cancelPending: true,
+    batchCancelPending: batch,
+    phase: batch ? "Cancelling remaining builds" : "Cancelling build",
+    etaLabel: "Cancelling...",
+    etaSeconds: 0,
+    etaUpdatedAt: Date.now(),
+    lastSyncAttemptAt: Date.now(),
+  });
+}
+
+async function cancelActiveJob(job, options = {}) {
+  const batchCancel = Boolean(options.batchCancel);
+  if (!isCancelableJob(job)) {
+    return { ok: false, skipped: true };
+  }
+
+  const localOnly = !String(job?.runId || "").trim() && String(job?.status || "").trim() === "dispatching";
+  if (localOnly) {
+    finalizeCancelledJob(
+      job,
+      batchCancel ? "Cancelled before the workflow run was confirmed." : "Cancelled before the workflow run was confirmed.",
+      {
+        phase: batchCancel ? "Cancelled before dispatch completed" : "Cancelled before dispatch completed",
+      },
+    );
+    renderJobs();
+    return { ok: true, localOnly: true };
+  }
+
+  markJobCancellationPending(job, batchCancel);
+  renderJobs();
+
+  try {
+    const result = await cancelWorkflowJob(job);
+    if (result?.alreadyCompleted && String(result?.conclusion || "").trim() !== "cancelled") {
+      upsertJob({
+        ...job,
+        cancelPending: false,
+        batchCancelPending: false,
+      });
+      await refreshJobStatuses();
+      return { ok: false, alreadyCompleted: true };
+    }
+
+    finalizeCancelledJob(
+      {
+        ...job,
+        runId: String(result?.runId || job?.runId || "").trim(),
+      },
+      batchCancel ? "Cancelled remaining build." : "Cancelled by operator.",
+      {
+        phase: batchCancel ? "Cancelled remaining build" : "Cancelled by operator",
+      },
+    );
+    renderJobs();
+    await syncBatchRecoveryAndFailureLogs();
+    return { ok: true };
+  } catch (error) {
+    upsertJob({
+      ...job,
+      cancelPending: false,
+      batchCancelPending: false,
+      error: error.message || "Could not cancel this build.",
+      lastSyncAttemptAt: Date.now(),
+      syncFailureCount: Math.max(Number(job.syncFailureCount) || 0, 0) + 1,
+    });
+    renderJobs();
+    throw error;
+  }
+}
+
+async function cancelRemainingBatch(batchId) {
+  const batchJobs = jobsForBatch(batchId);
+  const { remote, local } = splitBatchCancellationJobs(batchJobs);
+  if (!remote.length && !local.length) {
+    return;
+  }
+
+  local.forEach((job) => {
+    finalizeCancelledJob(job, "Cancelled before the workflow run was confirmed.", {
+      phase: "Cancelled before dispatch completed",
+    });
+  });
+  renderJobs();
+
+  const results = await Promise.allSettled(
+    remote.map((job) => cancelActiveJob(job, { batchCancel: true })),
+  );
+  const rejected = results.filter((result) => result.status === "rejected");
+  if (rejected.length) {
+    formMessage.textContent = `Cancelled ${remote.length - rejected.length + local.length} build${remote.length - rejected.length + local.length === 1 ? "" : "s"}, but ${rejected.length} cancellation request${rejected.length === 1 ? "" : "s"} failed.`;
+  }
+}
+
+function renderHeaderActions(job, actionsRoot) {
   if (!actionsRoot) {
     return;
   }
   actionsRoot.innerHTML = "";
 
-  if (activeJob(job)) {
-    const cancelButton = document.createElement("button");
-    cancelButton.className = "job-link secondary";
-    cancelButton.type = "button";
-    cancelButton.textContent = "Cancel job";
-    cancelButton.addEventListener("click", async () => {
-      cancelButton.disabled = true;
-      try {
-        const result = await cancelWorkflowJob(job);
-        if (result?.alreadyCompleted && String(result?.conclusion || "").trim() !== "cancelled") {
-          await refreshJobStatuses();
-          return;
-        }
-        upsertJob({
-          ...job,
-          runId: String(result?.runId || job?.runId || "").trim(),
-          status: "completed",
-          conclusion: "cancelled",
-          progressPercent: clampPercent(job.progressPercent || 0),
-          progressUpdatedAt: Date.now(),
-          phase: "Cancelled by user",
-          etaLabel: "Cancelled",
-          etaSeconds: 0,
-          etaUpdatedAt: Date.now(),
-          error: "Cancelled by user.",
-          failedAt: 0,
-          lastServerUpdateAt: Date.now(),
-          lastSyncAttemptAt: Date.now(),
-          syncFailureCount: 0,
-        });
-        renderJobs();
-        await syncBatchRecoveryAndFailureLogs();
-      } catch (error) {
-        upsertJob({
-          ...job,
-          error: error.message || "Could not cancel this job.",
-          lastSyncAttemptAt: Date.now(),
-          syncFailureCount: Math.max(Number(job.syncFailureCount) || 0, 0) + 1,
-        });
-        renderJobs();
-      }
-    });
-    actionsRoot.append(cancelButton);
+  if (!isCancelableJob(job)) {
+    return;
   }
+
+  const cancelButton = document.createElement("button");
+  cancelButton.className = "job-link danger";
+  cancelButton.type = "button";
+  cancelButton.textContent = job.cancelPending ? "Cancelling..." : "Cancel build";
+  cancelButton.disabled = Boolean(job.cancelPending);
+  cancelButton.addEventListener("click", async () => {
+    cancelButton.disabled = true;
+    try {
+      await cancelActiveJob(job);
+    } catch (_error) {
+      // Error is persisted on the job card.
+    }
+  });
+  actionsRoot.append(cancelButton);
+}
+
+function renderActions(job, actionsRoot) {
+  if (!actionsRoot) {
+    return;
+  }
+  actionsRoot.innerHTML = "";
 
   if (successfulJob(job) && job.playPath) {
     const playLink = document.createElement("a");
@@ -2173,13 +2412,6 @@ function syncFavoriteChooser() {
   setFavoriteModalVisible(true);
 }
 
-function previewSelections() {
-  return Object.values(batchSelections || {})
-    .filter((selection) => Array.isArray(selection?.candidatePool) && selection.candidatePool.length)
-    .sort((left, right) => timestampMs(right?.updatedAt) - timestampMs(left?.updatedAt))
-    .slice(0, 6);
-}
-
 function appendBadgeRow(root, candidate) {
   const badges = buildCandidateBadges(candidate);
   if (!badges.length) {
@@ -2196,6 +2428,166 @@ function appendBadgeRow(root, candidate) {
   root.append(badgeRow);
 }
 
+function previewSelections() {
+  return reviewSelections().slice(0, 6);
+}
+
+function setReviewSelectionKeys(batchId, nextKeys) {
+  updateBatchSelection(batchId, {
+    selectedCandidateKeys: nextKeys,
+  });
+}
+
+function selectionLockedCandidate(selection, candidate) {
+  if (String(candidate?.sourceMode || "").trim() === "url") {
+    return true;
+  }
+  const normalized = normalizeSelectedCandidateKeys(selection);
+  return normalized.length === 1 && candidateSelectionKey(candidate) === normalized[0] && (selection?.candidatePool || []).length === 1;
+}
+
+async function dispatchReviewedBatch(batchId) {
+  const selection = batchSelectionFor(batchId);
+  if (!selection) {
+    throw new Error("Candidate review is no longer available.");
+  }
+
+  const selectedCandidates = selectedCandidatesForSelection(selection).map((candidate, index) => ({
+    ...candidate,
+    rank: index + 1,
+  }));
+  if (!selectedCandidates.length) {
+    throw new Error("Select at least one candidate before dispatching.");
+  }
+
+  const batchLabel = String(selection?.batchLabel || "Request").trim() || "Request";
+  const batchSubmittedAt = String(selection?.batchSubmittedAt || nowIso());
+  updateBatchSelection(batchId, {
+    state: "dispatching",
+    desiredSuccessCount: selectedCandidates.length,
+    candidatePool: selectedCandidates,
+    selectedCandidateKeys: initialSelectedCandidateKeys(selectedCandidates, selectedCandidates.length),
+    error: "",
+  });
+
+  const draftJobs = selectedCandidates.map((candidate) =>
+    createBatchDraftJob(batchId, batchLabel, batchSubmittedAt, candidate, selectedCandidates.length),
+  );
+  const results = await Promise.all(draftJobs.map((draftJob) => dispatchCandidateJob(draftJob)));
+  const queuedCount = results.filter((result) => result.ok).length;
+  const failureCount = results.length - queuedCount;
+
+  updateBatchSelection(batchId, {
+    state: queuedCount > 0 ? "pending" : "dispatch-failed",
+    desiredSuccessCount: selectedCandidates.length,
+    candidatePool: selectedCandidates,
+    selectedCandidateKeys: initialSelectedCandidateKeys(selectedCandidates, selectedCandidates.length),
+    error: queuedCount > 0 ? "" : (results.find((result) => !result.ok)?.error || "No workflows were queued."),
+    lastDispatchAt: nowIso(),
+  });
+
+  await syncBatchRecoveryAndFailureLogs();
+  return {
+    ok: queuedCount > 0,
+    queuedCount,
+    failureCount,
+    batchLabel,
+    candidateCount: selectedCandidates.length,
+  };
+}
+
+async function dispatchSelectedReviewBatches() {
+  const selections = dispatchableReviewSelections();
+  if (!selections.length) {
+    throw new Error("Resolve candidates first, then keep at least one candidate selected.");
+  }
+
+  const successes = [];
+  const failures = [];
+  for (const selection of selections) {
+    try {
+      const result = await dispatchReviewedBatch(selection.batchId);
+      if (result.ok) {
+        successes.push(result);
+      } else {
+        failures.push({
+          batchLabel: result.batchLabel,
+          error: "No workflows were queued.",
+        });
+      }
+    } catch (error) {
+      failures.push({
+        batchLabel: String(selection?.batchLabel || "Request").trim() || "Request",
+        error: error.message,
+      });
+    }
+  }
+
+  if (!successes.length) {
+    throw new Error(failures[0]?.error || "No workflows were queued.");
+  }
+
+  const totalQueued = successes.reduce((sum, item) => sum + item.queuedCount, 0);
+  const totalSelected = successes.reduce((sum, item) => sum + item.candidateCount, 0);
+  formMessage.textContent = failures.length
+    ? `Queued ${totalQueued} of ${totalSelected} selected candidate build${totalQueued === 1 ? "" : "s"}. Failed: ${failures
+        .slice(0, 3)
+        .map((item) => `${item.batchLabel} (${item.error})`)
+        .join("; ")}`
+    : `Queued ${totalQueued} selected candidate build${totalQueued === 1 ? "" : "s"} across ${successes.length} request${successes.length === 1 ? "" : "s"}.`;
+  await refreshJobStatuses();
+}
+
+function clearReviewSelections() {
+  reviewSelections().forEach((selection) => removeBatchSelection(selection.batchId));
+  formMessage.textContent = "Cleared the current review queue.";
+}
+
+function appendSuppressedDiagnostics(batchCard, suppressedCandidates) {
+  if (!Array.isArray(suppressedCandidates) || !suppressedCandidates.length) {
+    return;
+  }
+
+  const diagnostics = document.createElement("details");
+  diagnostics.className = "preview-diagnostics";
+
+  const summary = document.createElement("summary");
+  summary.className = "preview-diagnostics-summary";
+  summary.textContent = `Filtered out (${suppressedCandidates.length})`;
+  diagnostics.append(summary);
+
+  const list = document.createElement("div");
+  list.className = "preview-diagnostics-list";
+  suppressedCandidates.forEach((candidate) => {
+    const item = document.createElement("div");
+    item.className = "preview-diagnostic-item";
+
+    const title = document.createElement("strong");
+    title.className = "preview-candidate-title";
+    title.textContent = candidate.displayName || hostFromUrl(candidate.sourceUrl || "") || "Filtered source";
+    item.append(title);
+
+    const source = document.createElement("p");
+    source.className = "preview-candidate-source";
+    source.textContent = hostFromUrl(candidate.sourceUrl || "") || String(candidate.sourceUrl || "").trim();
+    item.append(source);
+
+    appendBadgeRow(item, candidate);
+
+    const reason = document.createElement("p");
+    reason.className = "preview-candidate-reason";
+    reason.textContent =
+      String(candidate?.rejectionReason || "").trim() ||
+      String(candidate?.historySummary || "").trim() ||
+      "Filtered by search diagnostics.";
+    item.append(reason);
+    list.append(item);
+  });
+
+  diagnostics.append(list);
+  batchCard.append(diagnostics);
+}
+
 function renderCandidatePreview() {
   if (!candidatePreview || !candidatePreviewList || !candidatePreviewStatus) {
     return;
@@ -2206,18 +2598,23 @@ function renderCandidatePreview() {
   candidatePreviewList.innerHTML = "";
   if (!selections.length) {
     candidatePreviewStatus.textContent = "";
+    if (candidatePreviewCopy) {
+      candidatePreviewCopy.textContent = "";
+    }
+    updateDashboardStatus();
     return;
   }
 
-  const candidateCount = selections.reduce(
-    (sum, selection) => sum + (Array.isArray(selection?.candidatePool) ? selection.candidatePool.length : 0),
-    0,
-  );
-  candidatePreviewStatus.textContent = `${candidateCount} candidate${candidateCount === 1 ? "" : "s"} indexed`;
+  const selectedCount = selections.reduce((sum, selection) => sum + normalizeSelectedCandidateKeys(selection).length, 0);
+  candidatePreviewStatus.textContent = `${selections.length} review batch${selections.length === 1 ? "" : "es"} | ${selectedCount} selected`;
+  if (candidatePreviewCopy) {
+    candidatePreviewCopy.textContent = "Resolve candidates first, then dispatch the checked builds.";
+  }
 
   selections.forEach((selection) => {
     const batchCard = document.createElement("article");
     batchCard.className = "preview-batch";
+    batchCard.classList.toggle("is-dispatching", String(selection?.state || "") === "dispatching");
 
     const header = document.createElement("div");
     header.className = "preview-batch-header";
@@ -2228,53 +2625,156 @@ function renderCandidatePreview() {
     title.textContent = String(selection?.batchLabel || "Request").trim() || "Request";
     const copy = document.createElement("p");
     copy.className = "preview-batch-copy";
-    copy.textContent = `Keeping ${Math.max(Number(selection?.desiredSuccessCount) || 1, 1)} successful candidate${Math.max(Number(selection?.desiredSuccessCount) || 1, 1) === 1 ? "" : "s"}.`;
+    copy.textContent = buildSelectionSummary(selection);
     heading.append(title, copy);
+
+    const headerActions = document.createElement("div");
+    headerActions.className = "preview-batch-actions";
 
     const state = document.createElement("p");
     state.className = "preview-batch-state";
-    state.textContent = String(selection?.state || "pending").replace(/-/g, " ");
-    header.append(heading, state);
+    state.textContent = selectionStateLabel(selection);
+    headerActions.append(state);
+
+    const dispatchBatchButton = document.createElement("button");
+    dispatchBatchButton.className = "job-link";
+    dispatchBatchButton.type = "button";
+    dispatchBatchButton.textContent = String(selection?.state || "") === "dispatching" ? "Dispatching..." : "Dispatch batch";
+    dispatchBatchButton.disabled = formBusy || !isDispatchableSelection(selection);
+    dispatchBatchButton.addEventListener("click", async () => {
+      setFormBusy(true);
+      try {
+        const result = await dispatchReviewedBatch(selection.batchId);
+        formMessage.textContent = `Queued ${result.queuedCount} of ${result.candidateCount} selected candidate${result.candidateCount === 1 ? "" : "s"} for ${result.batchLabel}.`;
+        await refreshJobStatuses();
+      } catch (error) {
+        formMessage.textContent = error.message;
+      } finally {
+        setFormBusy(false);
+      }
+    });
+    headerActions.append(dispatchBatchButton);
+
+    const dismissButton = document.createElement("button");
+    dismissButton.className = "job-link secondary";
+    dismissButton.type = "button";
+    dismissButton.textContent = "Dismiss";
+    dismissButton.disabled = formBusy || String(selection?.state || "") === "dispatching";
+    dismissButton.addEventListener("click", () => {
+      removeBatchSelection(selection.batchId);
+    });
+    headerActions.append(dismissButton);
+
+    header.append(heading, headerActions);
     batchCard.append(header);
 
-    const list = document.createElement("div");
-    list.className = "preview-candidate-list";
+    const buckets = bucketReviewCandidates(selection?.candidatePool || []);
+    const selectedKeys = new Set(normalizeSelectedCandidateKeys(selection));
+    [
+      ["Recommended", buckets.recommended],
+      ["Buildable", buckets.buildable],
+      ["Risky", buckets.risky],
+    ].forEach(([label, items]) => {
+      if (!items.length) {
+        return;
+      }
 
-    (selection.candidatePool || []).forEach((candidate, index) => {
-      const item = document.createElement("div");
-      item.className = "preview-candidate";
+      const section = document.createElement("section");
+      section.className = "preview-bucket";
 
-      const topline = document.createElement("div");
-      topline.className = "preview-candidate-topline";
-      const name = document.createElement("strong");
-      name.className = "preview-candidate-title";
-      name.textContent = `${Math.max(Number(candidate?.rank) || index + 1, index + 1)}. ${candidate?.displayName || selection?.batchLabel || "Candidate"}`;
-      const confidence = document.createElement("span");
-      confidence.className = "preview-candidate-confidence";
-      confidence.textContent = `${Math.max(Number(candidate?.confidence) || 0, 0)}%`;
-      topline.append(name, confidence);
-      item.append(topline);
+      const bucketTitle = document.createElement("h4");
+      bucketTitle.className = "preview-bucket-title";
+      bucketTitle.textContent = label;
+      section.append(bucketTitle);
 
-      const source = document.createElement("p");
-      source.className = "preview-candidate-source";
-      source.textContent = hostFromUrl(candidate?.sourceUrl || "") || String(candidate?.sourceUrl || "").trim();
-      item.append(source);
+      const list = document.createElement("div");
+      list.className = "preview-candidate-list";
+      items.forEach((candidate, index) => {
+        const item = document.createElement("label");
+        item.className = "preview-candidate";
+        const key = candidateSelectionKey(candidate);
+        const isChecked = selectedKeys.has(key);
+        const isLocked = selectionLockedCandidate(selection, candidate);
+        item.classList.toggle("is-selected", isChecked);
 
-      appendBadgeRow(item, candidate);
+        const toggle = document.createElement("input");
+        toggle.className = "preview-candidate-toggle";
+        toggle.type = "checkbox";
+        toggle.checked = isChecked;
+        toggle.disabled = formBusy || String(selection?.state || "") === "dispatching" || isLocked;
+        toggle.addEventListener("change", () => {
+          const nextKeys = new Set(normalizeSelectedCandidateKeys(selection));
+          if (toggle.checked) {
+            nextKeys.add(key);
+          } else {
+            nextKeys.delete(key);
+          }
+          setReviewSelectionKeys(selection.batchId, [...nextKeys]);
+        });
+        item.append(toggle);
 
-      const reason = document.createElement("p");
-      reason.className = "preview-candidate-reason";
-      reason.textContent =
-        String(candidate?.historySummary || "").trim() ||
-        String(candidate?.resolutionReason || "").trim() ||
-        "No historical failures recorded.";
-      item.append(reason);
-      list.append(item);
+        const content = document.createElement("div");
+        content.className = "preview-candidate-content";
+
+        const topline = document.createElement("div");
+        topline.className = "preview-candidate-topline";
+        const name = document.createElement("strong");
+        name.className = "preview-candidate-title";
+        name.textContent = `${Math.max(Number(candidate?.rank) || index + 1, index + 1)}. ${candidate?.displayName || selection?.batchLabel || "Candidate"}`;
+        const confidence = document.createElement("span");
+        confidence.className = "preview-candidate-confidence";
+        confidence.textContent = `${Math.max(Number(candidate?.confidence) || 0, 0)}%`;
+        topline.append(name, confidence);
+        content.append(topline);
+
+        const source = document.createElement("p");
+        source.className = "preview-candidate-source";
+        source.textContent = hostFromUrl(candidate?.sourceUrl || "") || String(candidate?.sourceUrl || "").trim();
+        content.append(source);
+
+        appendBadgeRow(content, candidate);
+
+        const reason = document.createElement("p");
+        reason.className = "preview-candidate-reason";
+        reason.textContent =
+          String(candidate?.historySummary || "").trim() ||
+          String(candidate?.resolutionReason || "").trim() ||
+          "No historical failures recorded.";
+        content.append(reason);
+
+        if (String(candidate?.resolutionReason || "").trim() && String(candidate?.historySummary || "").trim()) {
+          const detail = document.createElement("p");
+          detail.className = "preview-candidate-detail";
+          detail.textContent = candidate.resolutionReason;
+          content.append(detail);
+        }
+
+        if (isLocked) {
+          const lockedLabel = document.createElement("span");
+          lockedLabel.className = "preview-locked";
+          lockedLabel.textContent = "Locked";
+          topline.append(lockedLabel);
+        }
+
+        item.append(content);
+        list.append(item);
+      });
+      section.append(list);
+      batchCard.append(section);
     });
 
-    batchCard.append(list);
+    if (String(selection?.error || "").trim()) {
+      const error = document.createElement("p");
+      error.className = "preview-batch-error";
+      error.textContent = selection.error;
+      batchCard.append(error);
+    }
+
+    appendSuppressedDiagnostics(batchCard, selection?.suppressedCandidates || []);
     candidatePreviewList.append(batchCard);
   });
+
+  updateDashboardStatus();
 }
 
 function buildJobCardFragment(job) {
@@ -2288,6 +2788,7 @@ function buildJobCardFragment(job) {
   const title = fragment.querySelector(".job-title");
   const subtitle = fragment.querySelector(".job-subtitle");
   const percent = fragment.querySelector(".job-percent");
+  const headerActions = fragment.querySelector(".job-header-actions");
   const fill = fragment.querySelector(".meter-fill");
   const phase = fragment.querySelector(".job-phase");
   const eta = fragment.querySelector(".job-eta");
@@ -2296,24 +2797,84 @@ function buildJobCardFragment(job) {
 
   card.classList.toggle("is-completed", job.status === "completed" && job.conclusion === "success");
   card.classList.toggle("is-error", isFailedJob(job));
+   card.classList.toggle("is-cancelling", Boolean(job.cancelPending));
   card.classList.toggle(
     "is-favorite",
     String(batchSelectionFor(job.batchId)?.favoriteRequestId || "") === String(job.requestId || ""),
   );
 
-  status.textContent = formatJobStatus(job);
+  status.textContent = job.cancelPending ? "Cancelling" : formatJobStatus(job);
   rank.textContent = candidateRankLabel(job);
   title.textContent = job.displayName;
   subtitle.textContent = candidateSubtitle(job);
   appendBadgeRow(fragment.querySelector(".job-heading"), job);
   percent.textContent = `${roundedProgress}%`;
   fill.style.width = `${progressPercent.toFixed(1)}%`;
-  phase.textContent = job.phase || "Queued";
+  phase.textContent = job.cancelPending ? "Cancellation requested" : (job.phase || "Queued");
   eta.textContent = visibleEtaLabel(job, nowMs);
   error.textContent = buildJobErrorSummary(job);
+  renderHeaderActions(job, headerActions);
   renderActions(job, actions);
 
   return fragment;
+}
+
+function buildActiveBatchGroup(group) {
+  const batchCard = document.createElement("article");
+  batchCard.className = "active-batch";
+
+  const header = document.createElement("div");
+  header.className = "active-batch-header";
+
+  const heading = document.createElement("div");
+  heading.className = "active-batch-heading";
+
+  const title = document.createElement("h3");
+  title.className = "active-batch-title";
+  title.textContent = group.batchLabel || "Request";
+  heading.append(title);
+
+  const summary = document.createElement("p");
+  summary.className = "active-batch-copy";
+  const desiredCount = desiredSuccessCountForBatch(group.batchId);
+  const successfulCount = batchSuccessfulJobs(jobsForBatch(group.batchId)).length;
+  summary.textContent = `${group.jobs.length} active candidate${group.jobs.length === 1 ? "" : "s"} | ${successfulCount} successful | target ${desiredCount}`;
+  heading.append(summary);
+  header.append(heading);
+
+  const actions = document.createElement("div");
+  actions.className = "active-batch-actions";
+  const cancelableJobs = group.jobs.filter((job) => isCancelableJob(job));
+  if (cancelableJobs.length) {
+    const cancelButton = document.createElement("button");
+    cancelButton.className = "job-link danger";
+    cancelButton.type = "button";
+    cancelButton.textContent = "Cancel remaining";
+    cancelButton.disabled = formBusy || cancelableJobs.some((job) => job.cancelPending);
+    cancelButton.addEventListener("click", async () => {
+      setFormBusy(true);
+      try {
+        await cancelRemainingBatch(group.batchId);
+      } catch (error) {
+        formMessage.textContent = error.message;
+      } finally {
+        setFormBusy(false);
+      }
+    });
+    actions.append(cancelButton);
+  }
+
+  header.append(actions);
+  batchCard.append(header);
+
+  const list = document.createElement("div");
+  list.className = "active-batch-grid";
+  group.jobs.forEach((job) => {
+    list.append(buildJobCardFragment(job));
+  });
+  batchCard.append(list);
+
+  return batchCard;
 }
 
 function buildJobSection(sectionKey, title, copy, sectionJobs, emptyMessage) {
@@ -2355,9 +2916,15 @@ function buildJobSection(sectionKey, title, copy, sectionJobs, emptyMessage) {
   const content = document.createElement("div");
   content.className = "job-section-content";
   if (sectionJobs.length) {
-    sectionJobs.forEach((job) => {
-      content.append(buildJobCardFragment(job));
-    });
+    if (sectionKey === "active") {
+      groupActiveJobsByBatch(sectionJobs).forEach((group) => {
+        content.append(buildActiveBatchGroup(group));
+      });
+    } else {
+      sectionJobs.forEach((job) => {
+        content.append(buildJobCardFragment(job));
+      });
+    }
   } else {
     const empty = document.createElement("p");
     empty.className = "job-section-empty";
@@ -2415,6 +2982,7 @@ function renderJobs() {
   );
   syncFavoriteChooser();
   renderCandidatePreview();
+  updateDashboardStatus();
 }
 
 async function refreshJobStatuses() {
@@ -2424,6 +2992,7 @@ async function refreshJobStatuses() {
   refreshInFlight = true;
   try {
   if (!jobs.length || !workerConfigured(appConfig.workerUrl)) {
+    lastRefreshAt = Date.now();
     renderJobs();
     return;
   }
@@ -2502,6 +3071,9 @@ async function refreshJobStatuses() {
             derived.conclusion && derived.conclusion !== "success"
               ? timestampMs(job.failedAt || Date.now())
               : 0,
+          cancelPending: derived.status === "completed" ? false : Boolean(job.cancelPending),
+          batchCancelPending: derived.status === "completed" ? false : Boolean(job.batchCancelPending),
+          selectedForDispatch: false,
           lastServerUpdateAt: Date.now(),
           lastSyncAttemptAt: Date.now(),
           syncFailureCount: 0,
@@ -2517,6 +3089,7 @@ async function refreshJobStatuses() {
           status: job.runId ? job.status : "queued",
           lastSyncAttemptAt: Date.now(),
           syncFailureCount: nextSyncFailureCount,
+          selectedForDispatch: false,
           error: error.message,
         };
       }
@@ -2538,6 +3111,7 @@ async function refreshJobStatuses() {
     }),
   );
   await trimQueuedBatchOverflow();
+  lastRefreshAt = Date.now();
   saveJobs();
   await syncBatchRecoveryAndFailureLogs();
   renderJobs();
@@ -2552,17 +3126,37 @@ async function dispatchCandidateJob(draftJob) {
 
   try {
     const runInfo = await dispatchWorkflow(draftJob);
+    const currentJob = jobs.find((job) => String(job.requestId || "") === String(draftJob.requestId || ""));
+    if (currentJob && isCancelledJob(currentJob)) {
+      try {
+        await cancelWorkflowJob({
+          ...draftJob,
+          runId: runInfo.runId,
+        });
+      } catch (_error) {
+        // Keep the local cancelled state.
+      }
+      return {
+        ok: false,
+        job: draftJob,
+        cancelled: true,
+        error: "Cancelled before dispatch completed.",
+      };
+    }
+
     upsertJob({
       ...draftJob,
       runId: runInfo.runId,
       runUrl: runInfo.runUrl || "",
       jobsUrl: runInfo.jobsUrl || "",
       htmlUrl: runInfo.htmlUrl || "",
+      status: "requested",
       progressPercent: 10,
       progressUpdatedAt: Date.now(),
       phase: "Workflow queued",
       etaSeconds: draftJob.etaSeconds,
       etaUpdatedAt: Date.now(),
+      selectedForDispatch: false,
     });
     renderJobs();
     return {
@@ -2570,6 +3164,16 @@ async function dispatchCandidateJob(draftJob) {
       job: draftJob,
     };
   } catch (error) {
+    const currentJob = jobs.find((job) => String(job.requestId || "") === String(draftJob.requestId || ""));
+    if (currentJob && isCancelledJob(currentJob)) {
+      return {
+        ok: false,
+        job: draftJob,
+        cancelled: true,
+        error: "Cancelled before dispatch completed.",
+      };
+    }
+
     const recoverable = isRecoverableDispatchError(error);
     upsertJob({
       ...draftJob,
@@ -2586,6 +3190,9 @@ async function dispatchCandidateJob(draftJob) {
       lastServerUpdateAt: recoverable ? 0 : Date.now(),
       lastSyncAttemptAt: Date.now(),
       syncFailureCount: recoverable ? 1 : 0,
+      selectedForDispatch: false,
+      cancelPending: false,
+      batchCancelPending: false,
     });
     renderJobs();
     return {
@@ -2596,7 +3203,7 @@ async function dispatchCandidateJob(draftJob) {
   }
 }
 
-async function queueSourceBatch(rawInput, index, total, requestedCandidateCount = DEFAULT_TARGET_SUCCESSFUL_CANDIDATES) {
+async function resolveSourceBatch(rawInput, index, total, requestedCandidateCount = DEFAULT_TARGET_SUCCESSFUL_CANDIDATES) {
   const inputValue = String(rawInput || "").trim();
   const progressLabel = total > 1 ? `${index + 1} of ${total}` : "";
   const batchId = createRequestId();
@@ -2616,98 +3223,39 @@ async function queueSourceBatch(rawInput, index, total, requestedCandidateCount 
     ? `Searching ${progressLabel}: ${inputValue}`
     : "Searching for the best hosted matches...";
 
-  try {
-    const resolvedCandidates = dedupeResolvedCandidates(
-      await resolveSourceCandidates(inputValue, searchPoolLimit),
-    ).slice(0, searchPoolLimit);
-    if (!resolvedCandidates.length) {
-      throw new Error(`No distinct candidates were found for ${inputValue}.`);
-    }
-    const desiredSuccessCount = Math.min(desiredCandidateCount, resolvedCandidates.length);
-
-    updateBatchSelection(batchId, {
-      batchId,
-      batchLabel: inputValue,
-      batchSubmittedAt,
-      desiredSuccessCount,
-      state: "pending",
-      candidatePool: resolvedCandidates.map((candidate, poolIndex) => ({
-        ...candidate,
-        rank: Math.max(Number(candidate?.rank) || poolIndex + 1, poolIndex + 1),
-      })),
-    });
-
-    const initialDispatchCount = Math.min(
-      desiredSuccessCount,
-      batchActiveTargetCount(batchId, 0),
-    );
-    const initialCandidates = resolvedCandidates.slice(0, initialDispatchCount);
-    formMessage.textContent = `Queueing ${initialDispatchCount} of ${desiredSuccessCount} candidate${desiredSuccessCount === 1 ? "" : "s"} for ${inputValue}`;
-    const draftJobs = initialCandidates.map((candidate) =>
-      createBatchDraftJob(batchId, inputValue, batchSubmittedAt, candidate, resolvedCandidates.length),
-    );
-    const results = await Promise.all(draftJobs.map((draftJob) => dispatchCandidateJob(draftJob)));
-
-    const queuedCount = results.filter((result) => result.ok).length;
-    const failureCount = results.length - queuedCount;
-    await syncBatchRecoveryAndFailureLogs();
-    return {
-      ok: queuedCount > 0,
-      inputValue,
-      batchId,
-      candidateCount: desiredSuccessCount,
-      successCount: queuedCount,
-      failureCount,
-      displayName: resolvedCandidates[0]?.displayName || inputValue,
-      resolutionReason: resolvedCandidates[0]?.resolutionReason || "",
-      error: queuedCount > 0 ? "" : (results.find((result) => !result.ok)?.error || "No workflows were queued."),
-    };
-  } catch (error) {
-    upsertJob({
-      requestId: createRequestId(),
-      batchId,
-      batchLabel: inputValue,
-      batchSubmittedAt,
-      candidateRank: 1,
-      candidateTotal: 1,
-      candidateReason: "",
-      candidateConfidence: 0,
-      owner: appConfig.owner,
-      repo: appConfig.repo,
-      ref: appConfig.ref,
-      sourceInput: inputValue,
-      sourceUrl: "",
-      displayName: inputValue,
-      sourceMode: "failed",
-      matchedName: "",
-      submittedAt: nowIso(),
-      status: "completed",
-      conclusion: "failure",
-      progressPercent: 0,
-      progressUpdatedAt: Date.now(),
-      phase: "Build failed",
-      etaLabel: "Failed",
-      etaSeconds: 0,
-      etaUpdatedAt: Date.now(),
-      runId: "",
-      runUrl: "",
-      jobsUrl: "",
-      htmlUrl: "",
-      playPath: "",
-      error: error.message,
-      failedAt: Date.now(),
-      lastServerUpdateAt: Date.now(),
-      lastSyncAttemptAt: Date.now(),
-      syncFailureCount: 0,
-    });
-    renderJobs();
-    await syncBatchRecoveryAndFailureLogs();
-    return {
-      ok: false,
-      inputValue,
-      error: error.message,
-    };
+  const resolved = await resolveSourceSelection(inputValue, searchPoolLimit);
+  const resolvedCandidates = dedupeResolvedCandidates(resolved?.candidates || []).slice(0, searchPoolLimit);
+  const suppressedCandidates = dedupeSuppressedCandidates(resolved?.suppressed || []);
+  if (!resolvedCandidates.length) {
+    throw new Error(`No distinct candidates were found for ${inputValue}.`);
   }
+
+  const desiredSuccessCount = Math.min(desiredCandidateCount, resolvedCandidates.length);
+  updateBatchSelection(batchId, {
+    batchId,
+    batchLabel: inputValue,
+    batchSubmittedAt,
+    desiredSuccessCount,
+    state: "review",
+    candidatePool: resolvedCandidates.map((candidate, poolIndex) => ({
+      ...candidate,
+      rank: Math.max(Number(candidate?.rank) || poolIndex + 1, poolIndex + 1),
+    })),
+    selectedCandidateKeys: initialSelectedCandidateKeys(resolvedCandidates, desiredSuccessCount),
+    suppressedCandidates,
+    error: "",
+  });
+
+  return {
+    ok: true,
+    inputValue,
+    batchId,
+    candidateCount: resolvedCandidates.length,
+    selectedCount: desiredSuccessCount,
+    suppressedCount: suppressedCandidates.length,
+    displayName: resolvedCandidates[0]?.displayName || inputValue,
+    resolutionReason: resolvedCandidates[0]?.resolutionReason || "",
+  };
 }
 
 async function handleSubmit(event) {
@@ -2735,34 +3283,33 @@ async function handleSubmit(event) {
     const successes = [];
     const failures = [];
     for (const [index, inputValue] of requestedSources.entries()) {
-      const result = await queueSourceBatch(
-        inputValue,
-        index,
-        requestedSources.length,
-        requestedCandidateCount,
-      );
-      if (result.ok) {
+      try {
+        const result = await resolveSourceBatch(
+          inputValue,
+          index,
+          requestedSources.length,
+          requestedCandidateCount,
+        );
         successes.push(result);
-      } else {
-        failures.push(result);
+      } catch (error) {
+        failures.push({
+          inputValue,
+          error: error.message,
+        });
       }
     }
 
     if (!successes.length) {
-      throw new Error(failures[0]?.error || "No workflows were queued.");
+      throw new Error(failures[0]?.error || "No candidates were resolved.");
     }
 
-    resetSourceInputs();
     if (successes.length === 1 && !failures.length) {
       const success = successes[0];
-      const candidateText = `${success.successCount || success.candidateCount} of ${success.candidateCount} candidate${success.candidateCount === 1 ? "" : "s"}`;
-      const failureText = success.failureCount ? ` ${success.failureCount} failed to queue.` : "";
-      formMessage.textContent = success.resolutionReason
-        ? `Queued ${candidateText} for ${success.displayName}.${failureText} ${success.resolutionReason}`.trim()
-        : `Queued ${candidateText} for ${success.displayName}.${failureText}`.trim();
+      formMessage.textContent = `Resolved ${success.selectedCount} candidate${success.selectedCount === 1 ? "" : "s"} for ${success.displayName}. Review the selection, then dispatch when ready.`;
     } else {
       const totalCandidates = successes.reduce((sum, item) => sum + (item.candidateCount || 0), 0);
-      const successText = `Queued ${totalCandidates} candidate build${totalCandidates === 1 ? "" : "s"} across ${successes.length} request${successes.length === 1 ? "" : "s"}.`;
+      const totalSelected = successes.reduce((sum, item) => sum + (item.selectedCount || 0), 0);
+      const successText = `Resolved ${totalCandidates} candidate${totalCandidates === 1 ? "" : "s"} across ${successes.length} request${successes.length === 1 ? "" : "s"}. ${totalSelected} preselected for dispatch.`;
       const failureText = failures.length
         ? ` Failed: ${failures
             .slice(0, 3)
@@ -2771,7 +3318,7 @@ async function handleSubmit(event) {
         : "";
       formMessage.textContent = `${successText}${failureText}`;
     }
-    await refreshJobStatuses();
+    renderCandidatePreview();
   } catch (error) {
     formMessage.textContent = error.message;
   } finally {
@@ -2779,7 +3326,32 @@ async function handleSubmit(event) {
   }
 }
 
+async function handleDispatchSelected() {
+  formMessage.textContent = "";
+  setFormBusy(true);
+
+  try {
+    if (!workerConfigured(appConfig.workerUrl)) {
+      throw new Error("Paste your Cloudflare Worker URL into site/config.js first.");
+    }
+    await dispatchSelectedReviewBatches();
+  } catch (error) {
+    formMessage.textContent = error.message;
+  } finally {
+    setFormBusy(false);
+  }
+}
+
+function handleClearReview() {
+  clearReviewSelections();
+  updateDashboardStatus();
+}
+
 form.addEventListener("submit", handleSubmit);
+dispatchButton?.addEventListener("click", () => {
+  void handleDispatchSelected();
+});
+clearReviewButton?.addEventListener("click", handleClearReview);
 bulkToggleButton?.addEventListener("click", () => {
   setBulkMode(!bulkModeEnabled());
 });
@@ -2794,6 +3366,7 @@ async function init() {
   await loadWorkerConfig();
   setBulkMode(false);
   renderJobs();
+  updateDashboardStatus();
   await refreshJobStatuses();
   window.setInterval(refreshJobStatuses, STATUS_REFRESH_MS);
   document.addEventListener("visibilitychange", () => {

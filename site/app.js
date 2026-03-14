@@ -17,6 +17,8 @@ const MAX_RECORDED_RUNS = 40;
 const MAX_STORED_JOBS = 20;
 const ACTIVE_JOB_RETENTION_MS = 2 * 24 * 60 * 60 * 1000;
 const TERMINAL_JOB_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
+const UNCONFIRMED_DISPATCH_TIMEOUT_MS = 60 * 1000;
+const UNCONFIRMED_DISPATCH_SYNC_LIMIT = 4;
 const MIN_HISTORY_DURATION_SECONDS = 1;
 const MAX_HISTORY_DURATION_SECONDS = 900;
 const DEFAULT_STEP_DURATIONS = {
@@ -1478,6 +1480,7 @@ function publishedEntryForJob(job) {
 async function dispatchWorkflow(job) {
   return fetchJson(workerEndpoint("/dispatch"), {
     method: "POST",
+    keepalive: true,
     headers: {
       "Content-Type": "application/json",
     },
@@ -1491,6 +1494,35 @@ async function dispatchWorkflow(job) {
 
 async function getRunStatus(runId) {
   return fetchJson(workerEndpoint(`/status?runId=${encodeURIComponent(runId)}`));
+}
+
+async function getRunStatusByRequestId(requestId) {
+  return fetchJson(workerEndpoint(`/status?requestId=${encodeURIComponent(requestId)}`));
+}
+
+function isRecoverableDispatchError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return (
+    message.includes("failed to fetch") ||
+    message.includes("networkerror") ||
+    message.includes("network request failed") ||
+    message.includes("load failed") ||
+    message.includes("aborted") ||
+    message.includes("no matching run was found yet")
+  );
+}
+
+function shouldFailUnconfirmedDispatch(job, syncAttemptCount) {
+  if (String(job?.runId || "").trim()) {
+    return false;
+  }
+  if (isTerminalJob(job)) {
+    return false;
+  }
+
+  const attempts = Math.max(Number(syncAttemptCount) || 0, 0);
+  const ageMs = Date.now() - timestampMs(job?.submittedAt);
+  return attempts >= UNCONFIRMED_DISPATCH_SYNC_LIMIT && ageMs >= UNCONFIRMED_DISPATCH_TIMEOUT_MS;
 }
 
 function upsertJob(nextJob) {
@@ -1657,24 +1689,19 @@ async function maybeDispatchBatchFallback(batchId) {
   try {
     const batchLabel = String(selection.batchLabel || batchJobs[0]?.batchLabel || batchJobs[0]?.sourceInput || "").trim();
     const batchSubmittedAt = String(selection.batchSubmittedAt || batchJobs[0]?.batchSubmittedAt || nowIso());
-    let queuedCount = 0;
-
-    for (const nextCandidate of remainingCandidates) {
-      if (queuedCount >= openSlots) {
-        break;
-      }
-      const draftJob = createBatchDraftJob(
+    const fallbackDraftJobs = remainingCandidates.slice(0, openSlots).map((nextCandidate) =>
+      createBatchDraftJob(
         normalizedBatchId,
         batchLabel,
         batchSubmittedAt,
         nextCandidate,
         candidatePool.length,
-      );
-      const result = await dispatchCandidateJob(draftJob);
-      if (result.ok) {
-        queuedCount += 1;
-      }
-    }
+      ),
+    );
+    const results = await Promise.all(
+      fallbackDraftJobs.map((draftJob) => dispatchCandidateJob(draftJob)),
+    );
+    const queuedCount = results.filter((result) => result.ok).length;
 
     updateBatchSelection(normalizedBatchId, {
       dispatchingFallback: false,
@@ -2129,12 +2156,47 @@ async function refreshJobStatuses() {
 
   const refreshed = await Promise.all(
     jobs.map(async (job) => {
-      if (!job.runId) {
+      if (isTerminalJob(job)) {
         return job;
       }
 
       try {
-        const payload = await getRunStatus(job.runId);
+        const payload = job.runId
+          ? await getRunStatus(job.runId)
+          : await getRunStatusByRequestId(job.requestId);
+        if (!payload?.run) {
+          const nextSyncFailureCount = Math.max(Number(job.syncFailureCount) || 0, 0) + 1;
+          if (shouldFailUnconfirmedDispatch(job, nextSyncFailureCount)) {
+            return {
+              ...job,
+              status: "completed",
+              conclusion: "failure",
+              progressPercent: 0,
+              progressUpdatedAt: Date.now(),
+              phase: "Build failed",
+              etaLabel: "Failed",
+              etaSeconds: 0,
+              etaUpdatedAt: Date.now(),
+              failedAt: timestampMs(job.failedAt || Date.now()),
+              lastServerUpdateAt: Date.now(),
+              lastSyncAttemptAt: Date.now(),
+              syncFailureCount: nextSyncFailureCount,
+              error: "Workflow dispatch was not confirmed.",
+            };
+          }
+          return {
+            ...job,
+            status: "queued",
+            progressPercent: Math.max(Number(job.progressPercent) || 0, 4),
+            progressUpdatedAt: Date.now(),
+            phase: "Waiting for workflow run",
+            etaLabel: job.etaLabel || "Calculating...",
+            etaUpdatedAt: Date.now(),
+            lastSyncAttemptAt: Date.now(),
+            syncFailureCount: nextSyncFailureCount,
+            error: "",
+          };
+        }
         recordSuccessfulRunHistory(payload.run, payload.jobs);
         const derived = progressFromRun(payload.run, payload.jobs);
         const entry = derived.conclusion === "success" ? publishedEntryForJob(job) : null;
@@ -2173,10 +2235,12 @@ async function refreshJobStatuses() {
               : "",
         };
       } catch (error) {
+        const nextSyncFailureCount = Math.max(Number(job.syncFailureCount) || 0, 0) + 1;
         return {
           ...job,
+          status: job.runId ? job.status : "queued",
           lastSyncAttemptAt: Date.now(),
-          syncFailureCount: Math.max(Number(job.syncFailureCount) || 0, 0) + 1,
+          syncFailureCount: nextSyncFailureCount,
           error: error.message,
         };
       }
@@ -2227,25 +2291,26 @@ async function dispatchCandidateJob(draftJob) {
       job: draftJob,
     };
   } catch (error) {
+    const recoverable = isRecoverableDispatchError(error);
     upsertJob({
       ...draftJob,
-      status: "completed",
-      conclusion: "failure",
-      progressPercent: 0,
+      status: recoverable ? "queued" : "completed",
+      conclusion: recoverable ? "" : "failure",
+      progressPercent: recoverable ? Math.max(Number(draftJob.progressPercent) || 0, 4) : 0,
       progressUpdatedAt: Date.now(),
-      phase: "Build failed",
-      etaLabel: "Failed",
-      etaSeconds: 0,
+      phase: recoverable ? "Waiting for workflow run" : "Build failed",
+      etaLabel: recoverable ? "Calculating..." : "Failed",
+      etaSeconds: recoverable ? Math.max(Number(draftJob.etaSeconds) || 0, 0) : 0,
       etaUpdatedAt: Date.now(),
-      error: error.message,
-      failedAt: Date.now(),
-      lastServerUpdateAt: Date.now(),
+      error: recoverable ? "" : error.message,
+      failedAt: recoverable ? 0 : Date.now(),
+      lastServerUpdateAt: recoverable ? 0 : Date.now(),
       lastSyncAttemptAt: Date.now(),
-      syncFailureCount: 0,
+      syncFailureCount: recoverable ? 1 : 0,
     });
     renderJobs();
     return {
-      ok: false,
+      ok: recoverable,
       job: draftJob,
       error: error.message,
     };
@@ -2293,28 +2358,26 @@ async function queueSourceBatch(rawInput, index, total, requestedCandidateCount 
       })),
     });
 
-    const results = [];
-    for (const [candidateIndex, candidate] of resolvedCandidates.slice(0, desiredSuccessCount).entries()) {
-      formMessage.textContent = `Queueing ${inputValue}: candidate ${candidateIndex + 1} of ${desiredSuccessCount}`;
-      const draftJob = createBatchDraftJob(batchId, inputValue, batchSubmittedAt, candidate, resolvedCandidates.length);
-      results.push(await dispatchCandidateJob(draftJob));
-    }
+    const initialCandidates = resolvedCandidates.slice(0, desiredSuccessCount);
+    formMessage.textContent = `Queueing ${desiredSuccessCount} candidate${desiredSuccessCount === 1 ? "" : "s"} for ${inputValue}`;
+    const draftJobs = initialCandidates.map((candidate) =>
+      createBatchDraftJob(batchId, inputValue, batchSubmittedAt, candidate, resolvedCandidates.length),
+    );
+    const results = await Promise.all(draftJobs.map((draftJob) => dispatchCandidateJob(draftJob)));
 
     const queuedCount = results.filter((result) => result.ok).length;
     const failureCount = results.length - queuedCount;
     await syncBatchRecoveryAndFailureLogs();
-    const batchJobsAfterRecovery = jobsForBatch(batchId);
-    const dispatchCount = batchJobsAfterRecovery.filter((job) => String(job.runId || "").trim()).length;
     return {
-      ok: dispatchCount > 0,
+      ok: queuedCount > 0,
       inputValue,
       batchId,
       candidateCount: desiredSuccessCount,
-      successCount: dispatchCount,
+      successCount: queuedCount,
       failureCount,
       displayName: resolvedCandidates[0]?.displayName || inputValue,
       resolutionReason: resolvedCandidates[0]?.resolutionReason || "",
-      error: dispatchCount > 0 ? "" : (results.find((result) => !result.ok)?.error || "No workflows were queued."),
+      error: queuedCount > 0 ? "" : (results.find((result) => !result.ok)?.error || "No workflows were queued."),
     };
   } catch (error) {
     upsertJob({

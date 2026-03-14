@@ -36,7 +36,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: standalone-forge-pages
+  group: standalone-forge-pages-${{ github.event_name == 'workflow_dispatch' && inputs.request_id || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -96,19 +96,216 @@ jobs:
             --display-name "$DISPLAY_NAME" \
             --request-id "$REQUEST_ID"
 
+      - name: Merge with latest Pages state
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          from datetime import datetime
+          from pathlib import Path
+          from urllib.parse import urlparse, urlunparse
+
+          workspace = Path.cwd()
+          dist_dir = workspace / "dist"
+          latest_state_dir = workspace / "latest-state"
+          publish_dir = workspace / "publish-dist"
+
+          shutil.rmtree(latest_state_dir, ignore_errors=True)
+          latest_state_dir.mkdir(parents=True, exist_ok=True)
+          shutil.rmtree(publish_dir, ignore_errors=True)
+          publish_dir.mkdir(parents=True, exist_ok=True)
+
+          result = subprocess.run(
+              ["git", "ls-remote", "--exit-code", "--heads", "origin", "pages-state"],
+              capture_output=True,
+              text=True,
+          )
+          if result.returncode == 0:
+              subprocess.run(["git", "fetch", "origin", "pages-state"], check=True)
+              subprocess.run(
+                  f"git archive origin/pages-state | tar -x -C \"{latest_state_dir}\"",
+                  check=True,
+                  shell=True,
+              )
+
+          def copy_tree_contents(source_dir: Path, target_dir: Path, skip_names: set[str] | None = None) -> None:
+              if not source_dir.exists():
+                  return
+              skip = skip_names or set()
+              for item in source_dir.iterdir():
+                  if item.name in skip:
+                      continue
+                  destination = target_dir / item.name
+                  if item.is_dir():
+                      shutil.copytree(item, destination, dirs_exist_ok=True)
+                  else:
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      shutil.copy2(item, destination)
+
+          def load_json(path: Path) -> dict:
+              if not path.exists():
+                  return {}
+              try:
+                  payload = json.loads(path.read_text(encoding="utf-8"))
+              except (OSError, json.JSONDecodeError):
+                  return {}
+              return payload if isinstance(payload, dict) else {}
+
+          def write_json(path: Path, payload: dict) -> None:
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+          def normalize_source_url(value: str) -> str:
+              text = str(value or "").strip()
+              if not text:
+                  return ""
+              parsed = urlparse(text)
+              path = parsed.path or "/"
+              if path != "/":
+                  path = path.rstrip("/") or "/"
+              return urlunparse(
+                  (
+                      parsed.scheme.lower(),
+                      parsed.netloc.lower(),
+                      path,
+                      parsed.params,
+                      parsed.query,
+                      "",
+                  )
+              )
+
+          def sort_games_newest_first(games: list[dict]) -> list[dict]:
+              def key(item: dict) -> float:
+                  raw = str(item.get("generated_at", "")).replace("Z", "+00:00")
+                  try:
+                      return datetime.fromisoformat(raw).timestamp()
+                  except ValueError:
+                      return 0.0
+              return sorted(games, key=key, reverse=True)
+
+          copy_tree_contents(latest_state_dir, publish_dir, skip_names={".git"})
+          copy_tree_contents(dist_dir, publish_dir, skip_names={".git", ".build-staging", "published_games.json"})
+
+          latest_catalog = load_json(publish_dir / "published_games.json")
+          current_catalog = load_json(dist_dir / "published_games.json")
+          latest_games = latest_catalog.get("games")
+          current_games = current_catalog.get("games")
+          merged_games = [game for game in latest_games if isinstance(game, dict)] if isinstance(latest_games, list) else []
+
+          for game in current_games if isinstance(current_games, list) else []:
+              if not isinstance(game, dict):
+                  continue
+              game_id = str(game.get("id", "")).strip()
+              request_id = str(game.get("request_id", "")).strip()
+              normalized_source = normalize_source_url(str(game.get("source_url", "")).strip())
+              filtered = []
+              for existing in merged_games:
+                  existing_id = str(existing.get("id", "")).strip()
+                  existing_request_id = str(existing.get("request_id", "")).strip()
+                  existing_source = normalize_source_url(str(existing.get("source_url", "")).strip())
+                  same_id = bool(game_id and existing_id and existing_id == game_id)
+                  same_request = bool(request_id and existing_request_id and existing_request_id == request_id)
+                  same_source = bool(normalized_source and existing_source and existing_source == normalized_source)
+                  if same_id or same_request or same_source:
+                      continue
+                  filtered.append(existing)
+              filtered.append(game)
+              merged_games = filtered
+
+          write_json(
+              publish_dir / "published_games.json",
+              {
+                  "generated_at": current_catalog.get("generated_at") or latest_catalog.get("generated_at") or "",
+                  "games": sort_games_newest_first(merged_games),
+              },
+          )
+          PY
+
       - name: Persist Pages state branch
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          cd dist
-          git init
-          git checkout -b pages-state
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit --allow-empty -m "Update Pages state"
-          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git push --force origin pages-state
+          python - <<'PY'
+          import os
+          import shutil
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          workspace = Path.cwd()
+          publish_dir = workspace / "publish-dist"
+          remote = f"https://x-access-token:{os.environ['GITHUB_TOKEN']}@github.com/{os.environ['GITHUB_REPOSITORY']}.git"
+
+          def run(args, cwd=None, capture_output=False, check=True):
+              return subprocess.run(args, cwd=cwd, capture_output=capture_output, text=True, check=check)
+
+          def clear_worktree(repo_dir: Path) -> None:
+              for item in repo_dir.iterdir():
+                  if item.name == ".git":
+                      continue
+                  if item.is_dir():
+                      shutil.rmtree(item, ignore_errors=True)
+                  else:
+                      item.unlink(missing_ok=True)
+
+          temp_repo = Path(tempfile.mkdtemp(prefix="pages-state-publish-", dir=str(workspace)))
+          try:
+              for attempt in range(1, 7):
+                  shutil.rmtree(temp_repo, ignore_errors=True)
+                  temp_repo.mkdir(parents=True, exist_ok=True)
+                  run(["git", "init"], cwd=temp_repo)
+                  run(["git", "config", "user.name", "github-actions[bot]"], cwd=temp_repo)
+                  run(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"], cwd=temp_repo)
+                  run(["git", "remote", "add", "origin", remote], cwd=temp_repo)
+
+                  ls_remote = run(
+                      ["git", "ls-remote", "--heads", "origin", "pages-state"],
+                      cwd=temp_repo,
+                      capture_output=True,
+                      check=False,
+                  )
+                  expected_sha = ""
+                  if ls_remote.returncode == 0 and ls_remote.stdout.strip():
+                      expected_sha = ls_remote.stdout.split()[0]
+                      run(["git", "fetch", "--depth", "1", "origin", "pages-state"], cwd=temp_repo)
+                      run(["git", "checkout", "-B", "pages-state", "FETCH_HEAD"], cwd=temp_repo)
+                  else:
+                      run(["git", "checkout", "--orphan", "pages-state"], cwd=temp_repo)
+
+                  clear_worktree(temp_repo)
+
+                  for item in publish_dir.iterdir():
+                      destination = temp_repo / item.name
+                      if item.is_dir():
+                          shutil.copytree(item, destination, dirs_exist_ok=True)
+                      else:
+                          destination.parent.mkdir(parents=True, exist_ok=True)
+                          shutil.copy2(item, destination)
+
+                  run(["git", "add", "--all"], cwd=temp_repo)
+                  status = run(["git", "status", "--short"], cwd=temp_repo, capture_output=True)
+                  if not status.stdout.strip():
+                      break
+
+                  run(["git", "commit", "-m", "Update Pages state"], cwd=temp_repo)
+
+                  push_args = ["git", "push", "origin", "HEAD:pages-state"]
+                  if expected_sha:
+                      push_args.insert(2, f"--force-with-lease=refs/heads/pages-state:{expected_sha}")
+                  result = run(push_args, cwd=temp_repo, check=False, capture_output=True)
+                  if result.returncode == 0:
+                      break
+                  if attempt >= 6:
+                      raise SystemExit(result.stderr or result.stdout or "git push failed")
+              else:
+                  raise SystemExit("Failed to publish pages-state after retries.")
+          finally:
+              shutil.rmtree(temp_repo, ignore_errors=True)
+          PY
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -116,7 +313,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: publish-dist
 
   deploy:
     needs: build

@@ -2218,6 +2218,24 @@ async function dispatchWorkflowRun(env, sourceUrl, displayName, requestId) {
   return findRecentRun(env, submittedAtIso, requestId);
 }
 
+async function findRunByRequestId(env, requestId) {
+  const normalizedRequestId = String(requestId || "").trim();
+  if (!normalizedRequestId) {
+    return null;
+  }
+
+  const runsUrl =
+    `${githubApiBase(env)}/actions/workflows/${encodeURIComponent(workflowFile(env))}/runs` +
+    `?event=workflow_dispatch&branch=${encodeURIComponent(env.GITHUB_REF || "main")}&per_page=25`;
+  const payload = await githubJson(runsUrl, env, {}, "List workflow runs");
+  const runs = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : [];
+  return runs.find((run) => {
+    const displayTitle = String(run?.display_title || "").trim();
+    const runName = String(run?.name || "").trim();
+    return displayTitle === normalizedRequestId || runName === normalizedRequestId;
+  }) || null;
+}
+
 async function handleConfig(request, env) {
   validateEnv(env);
   return json(
@@ -2405,9 +2423,10 @@ async function handleStatus(request, env) {
   validateEnv(env);
   const url = new URL(request.url);
   const runId = String(url.searchParams.get("runId") || "").trim();
-  if (!runId) {
+  const requestId = String(url.searchParams.get("requestId") || "").trim();
+  if (!runId && !requestId) {
     return json(
-      { error: "runId is required." },
+      { error: "runId or requestId is required." },
       {
         status: 400,
         headers: corsHeaders(request, env),
@@ -2415,9 +2434,30 @@ async function handleStatus(request, env) {
     );
   }
 
-  const run = await githubJson(`${githubApiBase(env)}/actions/runs/${encodeURIComponent(runId)}`, env, {}, "Get workflow run");
+  const run = runId
+    ? await githubJson(`${githubApiBase(env)}/actions/runs/${encodeURIComponent(runId)}`, env, {}, "Get workflow run")
+    : await findRunByRequestId(env, requestId);
+  if (!run) {
+    return json(
+      {
+        owner: env.GITHUB_OWNER,
+        repo: env.GITHUB_REPO,
+        ref: env.GITHUB_REF || "main",
+        requestId,
+        run: null,
+        jobs: {
+          total_count: 0,
+          jobs: [],
+        },
+      },
+      {
+        headers: corsHeaders(request, env),
+      },
+    );
+  }
+
   const jobs = await githubJson(
-    `${githubApiBase(env)}/actions/runs/${encodeURIComponent(runId)}/jobs?per_page=100`,
+    `${githubApiBase(env)}/actions/runs/${encodeURIComponent(String(run?.id || runId))}/jobs?per_page=100`,
     env,
     {},
     "List workflow jobs",

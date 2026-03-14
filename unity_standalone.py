@@ -775,6 +775,26 @@ CRAZYGAMES_LOCALE_MAP = {
     "vn": "vi_VN",
 }
 
+KNOWN_ENTRY_URL_ALIASES = {
+    ("geometrylitepc.io", "/"): "https://1games.io/game/geometry-dash-lite/",
+    ("geometrylitepc.io", "/index.html"): "https://1games.io/game/geometry-dash-lite/",
+    ("www.geometrylitepc.io", "/"): "https://1games.io/game/geometry-dash-lite/",
+    ("www.geometrylitepc.io", "/index.html"): "https://1games.io/game/geometry-dash-lite/",
+}
+
+
+def apply_known_entry_url_alias(input_url: str) -> str:
+    normalized_input_url = normalize_url(input_url)
+    if not normalized_input_url:
+        return normalized_input_url
+    parsed = urllib.parse.urlparse(normalized_input_url)
+    host = str(parsed.netloc or "").lower()
+    if not host:
+        return normalized_input_url
+    path = parsed.path or "/"
+    key = (host, path.rstrip("/") or "/")
+    return KNOWN_ENTRY_URL_ALIASES.get(key, normalized_input_url)
+
 
 def candidate_index_urls(input_url: str, root_url: str) -> list[str]:
     candidates = []
@@ -9429,6 +9449,69 @@ def generate_index_html(
               }}),
             }};
           }}
+          if (
+            hostname === "api.1games.io" &&
+            pathname.indexOf("/config/load") === 0
+          ) {{
+            return {{
+              status: 200,
+              contentType: "application/json; charset=utf-8",
+              body: JSON.stringify({{
+                signed: "local",
+                gameinfo: {{
+                  allow_play: "yes",
+                  unlock_timer: 0,
+                  image: "",
+                  title: "",
+                  description: "",
+                  redirect_url: "",
+                  signed: "local",
+                }},
+                regisinfo: {{
+                  sdktype: "disabled",
+                  more_games_url: "",
+                  promotion: {{}},
+                }},
+                adsinfo: {{
+                  enable: "no",
+                  sdk_type: "disabled",
+                  reward: false,
+                  enable_reward: "no",
+                  enable_interstitial: "no",
+                  enable_preroll: "no",
+                  time_show_inter: 999999,
+                  time_show_reward: 999999,
+                  ads_debug: "no",
+                }},
+              }}),
+            }};
+          }}
+          if (hostname === "api.cdnwave.com") {{
+            return {{
+              status: 200,
+              contentType: "application/json; charset=utf-8",
+              body: JSON.stringify({{
+                signed: "local",
+                allow_play: "yes",
+                success: true,
+              }}),
+            }};
+          }}
+          if (
+            hostname === "player-auth.services.api.unity.com" &&
+            pathname.indexOf("/v1/authentication/anonymous") === 0
+          ) {{
+            return {{
+              status: 200,
+              contentType: "application/json; charset=utf-8",
+              body: JSON.stringify({{
+                idToken: "standalone-local-token",
+                sessionToken: "standalone-local-session",
+                playerId: "standalone-local-player",
+                expiresIn: 3600,
+              }}),
+            }};
+          }}
           if (pathname.endsWith("/whitelisted.json")) {{
             const allowedHosts = collectStubbedHostnames();
             return {{
@@ -11173,11 +11256,182 @@ def maybe_download_optional_asset(
     return resolved
 
 
+def build_local_unity_support_script_stub(
+    script_url: str,
+    script_name: str,
+    *,
+    prefer_local_support_stubs: bool = False,
+) -> str:
+    if not prefer_local_support_stubs:
+        return ""
+
+    lower_name = str(script_name or "").strip().lower()
+    lower_url = str(script_url or "").strip().lower()
+
+    if lower_name == "gmsdkv1.js" or "/gmsdk" in lower_url:
+        return """(function () {
+  const globalTarget = typeof globalThis !== "undefined" ? globalThis : window;
+  const sharedConfig =
+    window.GMSOFT_OPTIONS && typeof window.GMSOFT_OPTIONS === "object"
+      ? window.GMSOFT_OPTIONS
+      : window.config && typeof window.config === "object"
+        ? window.config
+        : {};
+  window.config = sharedConfig;
+  globalTarget.config = sharedConfig;
+  window.GMSOFT_OPTIONS = sharedConfig;
+  globalTarget.GMSOFT_OPTIONS = sharedConfig;
+  window.GMSOFT_SIGNED = window.GMSOFT_SIGNED || "local";
+  window.GMSOFT_GAME_INFO = window.GMSOFT_GAME_INFO || {
+    sdktype: "disabled",
+    more_games_url: "",
+    promotion: {},
+  };
+  window.GMSOFT_ADS_INFO = window.GMSOFT_ADS_INFO || {
+    enable: "no",
+    sdk_type: "disabled",
+    time_show_inter: 999999,
+    time_show_reward: 999999,
+    pubid: "",
+    reward: false,
+    enable_reward: "no",
+    enable_interstitial: "no",
+    enable_preroll: "no",
+  };
+  if (typeof window.adConfig !== "function") {
+    window.adConfig = function (options) {
+      if (options && typeof options.onReady === "function") {
+        options.onReady();
+      }
+    };
+  }
+  if (!Array.isArray(window.adsbygoogle)) {
+    window.adsbygoogle = [];
+  }
+  if (!window.LocalAds || typeof window.LocalAds !== "object") {
+    window.LocalAds = {
+      fetchAd: function (callback) {
+        if (typeof callback === "function") {
+          callback({});
+        }
+      },
+      refetchAd: function (callback) {
+        if (typeof callback === "function") {
+          callback({});
+        }
+      },
+      registerRewardCallbacks: function (callbacks) {
+        if (callbacks && typeof callbacks.onReady === "function") {
+          callbacks.onReady();
+        }
+      },
+      showRewardAd: function () {},
+      showAd: function () {},
+      available: function () {
+        return false;
+      },
+    };
+  }
+  try {
+    document.dispatchEvent(new CustomEvent("gmsoftSdkReady"));
+  } catch (error) {
+    // Ignore startup event failures in local standalone mode.
+  }
+})();"""
+
+    if lower_name.startswith("firebase-") and lower_name.endswith(".js"):
+        return """(function () {
+  // Firebase web SDK is intentionally stubbed in standalone mode.
+})();"""
+
+    return ""
+
+
+def normalize_relative_output_path(value: str) -> str:
+    raw_value = str(value or "").strip().replace("\\", "/")
+    if not raw_value:
+        return ""
+    try:
+        parsed = urllib.parse.urlparse(raw_value)
+        path = parsed.path or raw_value
+    except ValueError:
+        path = raw_value
+    while path.startswith("./"):
+        path = path[2:]
+    return path.strip("/")
+
+
+def prepare_gmsoft_local_assets(
+    output_dir: Path,
+    *,
+    streaming_assets_url: str = "",
+    analysis_paths: Sequence[Path] = (),
+) -> tuple[dict[str, str], dict[str, Any]]:
+    if not streaming_assets_url:
+        return {}, {}
+
+    def references_any(*patterns: bytes) -> bool:
+        return any(
+            file_contains_any_bytes(path, patterns)
+            for path in analysis_paths
+            if path and path.name
+        )
+
+    if not references_any(b"UnityServicesProjectConfiguration.json", b"player-auth.services.api.unity.com"):
+        return {}, {}
+
+    relative_dir = normalize_relative_output_path(streaming_assets_url)
+    if not relative_dir:
+        return {}, {}
+
+    target_relative_path = f"{relative_dir}/UnityServicesProjectConfiguration.json"
+    target_path = output_dir / Path(target_relative_path)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_payload = {
+        "projectId": "standalone-local",
+        "cloudProjectId": "standalone-local",
+        "environmentId": "local",
+        "enabled": False,
+        "analyticsEnabled": False,
+        "crashReportingEnabled": False,
+        "messagingEnabled": False,
+        "services": [],
+    }
+    target_path.write_text(json.dumps(target_payload, indent=2), encoding="utf-8")
+    return {}, {
+        "mirrored_streaming_asset_files": [target_relative_path],
+        "gmsoft_local_stub_files": [target_relative_path],
+    }
+
+
+def merge_summary_extras(summary: dict[str, Any], *extras: Mapping[str, Any]) -> None:
+    list_keys = {
+        "mirrored_streaming_asset_files",
+        "mirrored_root_asset_files",
+        "gmsoft_local_stub_files",
+    }
+    for extra in extras:
+        if not extra:
+            continue
+        for key, value in extra.items():
+            if key in list_keys:
+                existing = list(summary.get(key) or [])
+                for item in value or []:
+                    normalized_item = str(item or "").strip()
+                    if normalized_item and normalized_item not in existing:
+                        existing.append(normalized_item)
+                if existing:
+                    summary[key] = existing
+                continue
+            summary[key] = value
+
+
 def download_unity_support_scripts(
     output_dir: Path,
     script_urls: Sequence[str],
     *,
     referer_url: str = "",
+    prefer_local_support_stubs: bool = False,
 ) -> list[dict[str, str]]:
     if not script_urls:
         return []
@@ -11204,6 +11458,22 @@ def download_unity_support_scripts(
                 counter += 1
         used_names.add(script_name.lower())
         destination = support_dir / script_name
+        local_stub = build_local_unity_support_script_stub(
+            script_url,
+            script_name,
+            prefer_local_support_stubs=prefer_local_support_stubs,
+        )
+        if local_stub:
+            destination.write_text(local_stub, encoding="utf-8")
+            downloaded.append(
+                {
+                    "url": script_url,
+                    "resolved_url": script_url,
+                    "name": f"support/{script_name}",
+                }
+            )
+            log(f"support-script: stubbed {script_name}")
+            continue
         try:
             resolved_url = download_raw_asset(
                 script_url,
@@ -12866,7 +13136,7 @@ def main(argv: Sequence[str]) -> int:
         log("Mode: direct asset URLs")
         log(f"Loader URL: {loader_url}")
     else:
-        input_url = normalize_url(args.entry_url)
+        input_url = apply_known_entry_url_alias(normalize_url(args.entry_url))
         root_url = derive_game_root_url(input_url)
 
         log("Mode: entry URL auto-detect")
@@ -13115,12 +13385,6 @@ def main(argv: Sequence[str]) -> int:
             build_dir / assets.data_name
         )
 
-    downloaded_support_scripts = download_unity_support_scripts(
-        output_dir,
-        unity_support_script_urls,
-        referer_url=detected_build.index_url if detected_build is not None else "",
-    )
-
     patched_framework_path = (
         patch_redirect_domain_function(build_dir / assets.framework_name)
         if assets.framework_name
@@ -13165,6 +13429,13 @@ def main(argv: Sequence[str]) -> int:
         if (not direct_mode and detected_build is not None)
         else {}
     )
+    gmsoft_like_build = looks_like_gmsoft_page_config(page_config)
+    downloaded_support_scripts = download_unity_support_scripts(
+        output_dir,
+        unity_support_script_urls,
+        referer_url=detected_build.index_url if detected_build is not None else "",
+        prefer_local_support_stubs=gmsoft_like_build,
+    )
     source_page_url = canonicalize_source_page_url(
         (
             detected_entry.source_page_url
@@ -13186,6 +13457,20 @@ def main(argv: Sequence[str]) -> int:
             if path.name
         ),
     )
+    gmsoft_local_rewrites, gmsoft_local_summary = prepare_gmsoft_local_assets(
+        output_dir,
+        streaming_assets_url=streaming_assets_url,
+        analysis_paths=tuple(
+            path
+            for path in (
+                build_dir / assets.framework_name,
+                build_dir / assets.data_name,
+            )
+            if path.name
+        ),
+    )
+    if gmsoft_local_rewrites:
+        auxiliary_asset_rewrites.update(gmsoft_local_rewrites)
     special_streaming_assets_url, special_streaming_asset_rewrites, special_streaming_asset_summary = (
         prepare_geometry_dash_lite_streaming_assets(
             output_dir,
@@ -13197,7 +13482,6 @@ def main(argv: Sequence[str]) -> int:
         streaming_assets_url = special_streaming_assets_url
     if special_streaming_asset_rewrites:
         auxiliary_asset_rewrites.update(special_streaming_asset_rewrites)
-    gmsoft_like_build = looks_like_gmsoft_page_config(page_config)
     source_url_spoof_patterns = [
         b"SiteLock",
         b"whitelistedDomains",
@@ -13322,7 +13606,7 @@ def main(argv: Sequence[str]) -> int:
         "support_script_urls": [item["resolved_url"] for item in downloaded_support_scripts],
         "progress_file": str(progress_file),
     }
-    summary.update(special_streaming_asset_summary)
+    merge_summary_extras(summary, gmsoft_local_summary, special_streaming_asset_summary)
     if assets.build_kind == "legacy_json":
         summary["legacy_asset_names"] = assets.legacy_asset_names
     (output_dir / "standalone-build-info.json").write_text(

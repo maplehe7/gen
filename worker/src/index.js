@@ -23,14 +23,78 @@ const VERIFIED_QUERY_OVERRIDES = {
     {
       title: "Geometry Dash Lite: Play Free Online",
       url: "https://geometrydash-lite.io/",
-      textScore: 260,
+      textScore: 320,
+    },
+    {
+      title: "Geometry Dash Full Version",
+      url: "https://geometrydashfullversion.io/",
+      textScore: 315,
+    },
+    {
+      title: "Geometry Dash Lite",
+      url: "https://1games.io/game/geometry-dash-lite/",
+      textScore: 310,
+    },
+    {
+      title: "Geometry Dash Lite Online",
+      url: "http://geodashlite.org/",
+      textScore: 300,
+    },
+    {
+      title: "Geometry Dash",
+      url: "https://azgames.io/geometry-dash",
+      textScore: 290,
     },
   ],
   "geometry dash lite": [
     {
       title: "Geometry Dash Lite: Play Free Online",
       url: "https://geometrydash-lite.io/",
-      textScore: 260,
+      textScore: 320,
+    },
+    {
+      title: "Geometry Dash Full Version",
+      url: "https://geometrydashfullversion.io/",
+      textScore: 315,
+    },
+    {
+      title: "Geometry Dash Lite",
+      url: "https://1games.io/game/geometry-dash-lite/",
+      textScore: 310,
+    },
+    {
+      title: "Geometry Dash Lite Online",
+      url: "http://geodashlite.org/",
+      textScore: 300,
+    },
+    {
+      title: "Geometry Dash",
+      url: "https://azgames.io/geometry-dash",
+      textScore: 290,
+    },
+  ],
+  "geometry dash full version": [
+    {
+      title: "Geometry Dash Full Version",
+      url: "https://geometrydashfullversion.io/",
+      textScore: 325,
+    },
+    {
+      title: "Geometry Dash Lite",
+      url: "https://1games.io/game/geometry-dash-lite/",
+      textScore: 315,
+    },
+  ],
+  "geometry lite pc": [
+    {
+      title: "Geometry Dash Lite",
+      url: "https://1games.io/game/geometry-dash-lite/",
+      textScore: 325,
+    },
+    {
+      title: "Geometry Dash Full Version",
+      url: "https://geometrydashfullversion.io/",
+      textScore: 315,
     },
   ],
   "realistic car simulator": [
@@ -1696,15 +1760,26 @@ async function searchVerifiedOverrides(query) {
   }
 
   const inspected = await Promise.all(
-    overrides.map((item) =>
-      inspectCandidate({
+    overrides.map(async (item) => {
+      const originalUrl = item.url;
+      const analyzed = await inspectCandidate({
         provider: "override",
         query,
         title: item.title,
-        url: item.url,
+        url: originalUrl,
         textScore: Math.max(Number(item.textScore) || 0, scoreQueryMatch(query, item.title, item.url)),
-      }),
-    ),
+      });
+      if (!analyzed) {
+        return null;
+      }
+      return {
+        ...analyzed,
+        provider: "override",
+        title: item.title || analyzed.title,
+        url: originalUrl,
+        sourceUrl: originalUrl,
+      };
+    }),
   );
 
   return sortCandidates(

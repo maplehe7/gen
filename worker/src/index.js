@@ -18,16 +18,38 @@ const PREFERRED_SEARCH_SITES = [
     prefix: "/view/classroom6x/",
   },
 ];
+const VERIFIED_QUERY_OVERRIDES = {
+  "realistic car simulator": [
+    {
+      title: "Car Racing - Realistic Car Simulator",
+      url: "https://www.madkidgames.com/game/car-racing-realistic-car-simulator",
+      textScore: 220,
+    },
+    {
+      title: "Ultimate Car Driving Simulator",
+      url: "https://www.madkidgames.com/game/ultimate-car-driving-simulator",
+      textScore: 205,
+    },
+    {
+      title: "Carquest Open World Racing",
+      url: "https://www.madkidgames.com/game/carquest-open-world-racing",
+      textScore: 196,
+    },
+  ],
+};
 const DUCKDUCKGO_HTML_URL = "https://html.duckduckgo.com/html/";
 const BING_SEARCH_URL = "https://www.bing.com/search";
 const BRAVE_SEARCH_URL = "https://search.brave.com/search";
 const REPORTS_FILE_PATH = "reports/not-working.txt";
 const PUBLISHED_GAMES_FILE_PATH = "published_games.json";
+const FAILED_BUILDS_FILE_PATH = "reports/failed-builds.txt";
+const FAILED_BUILD_LOGS_DIR = "reports/failed-builds";
 const SEARCH_INDEX_TTL_MS = 30 * 60 * 1000;
 const MAX_SITE_CANDIDATES = 8;
 const MAX_WEB_CANDIDATES = 10;
 const SEARCHABLE_SITE_MATCH_FLOOR = 28;
 const REPORT_FILE_HEADER = "# Not Working Game Reports\n";
+const FAILED_BUILD_FILE_HEADER = "# Failed Build Reports\n";
 const DOWNLOAD_EXTENSIONS = [".apk", ".dmg", ".exe", ".iso", ".msi", ".pkg", ".rar", ".zip", ".7z"];
 const INFRASTRUCTURE_HOSTS = [
   "accounts.google.com",
@@ -44,9 +66,11 @@ const INFRASTRUCTURE_HOSTS = [
   "youtu.be",
 ];
 const FRIENDLY_HOSTS = [
+  "8games.net",
   "github.io",
   "githubusercontent.com",
   "jsdelivr.net",
+  "madkidgames.com",
   "netlify.app",
   "pages.dev",
   "sites.google.com",
@@ -58,6 +82,7 @@ const PENALIZED_HOSTS = [
   "fandom.com",
   "itch.io",
   "poki.com",
+  "spatial.io",
   "softonic.com",
   "reddit.com",
   "store.epicgames.com",
@@ -260,6 +285,23 @@ async function githubNoContent(url, env, init = {}, label = "GitHub request") {
   }
 }
 
+async function githubText(url, env, init = {}, label = "GitHub request") {
+  const response = await fetch(url, {
+    ...init,
+    redirect: "follow",
+    headers: {
+      ...githubHeaders(env),
+      Accept: "text/plain",
+      ...(init.headers || {}),
+    },
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`${label} failed with status ${response.status}: ${text || response.statusText}`);
+  }
+  return text;
+}
+
 async function fetchText(url, init = {}, label = "Request") {
   const response = await fetch(url, {
     ...init,
@@ -357,6 +399,76 @@ function tokenizeSearchText(value) {
     .filter(Boolean);
 }
 
+function normalizeLooseToken(value) {
+  let token = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+  if (!token) {
+    return "";
+  }
+
+  const suffixes = [
+    "ization",
+    "isation",
+    "ations",
+    "ation",
+    "istics",
+    "istic",
+    "ments",
+    "ment",
+    "ness",
+    "less",
+    "able",
+    "ible",
+    "ally",
+    "fully",
+    "ously",
+    "ious",
+    "izing",
+    "izers",
+    "izer",
+    "ingly",
+    "edly",
+    "ings",
+    "ing",
+    "ers",
+    "er",
+    "ied",
+    "ies",
+    "est",
+    "ful",
+    "ous",
+    "ive",
+    "ion",
+    "al",
+    "ly",
+    "ed",
+    "es",
+    "s",
+  ];
+
+  for (const suffix of suffixes) {
+    if (token.length >= suffix.length + 3 && token.endsWith(suffix)) {
+      token = token.slice(0, -suffix.length);
+      break;
+    }
+  }
+  return token;
+}
+
+function roughlyMatchingTokens(left, right) {
+  const leftToken = normalizeLooseToken(left);
+  const rightToken = normalizeLooseToken(right);
+  if (!leftToken || !rightToken) {
+    return false;
+  }
+  if (leftToken === rightToken) {
+    return true;
+  }
+  const shortest = Math.min(leftToken.length, rightToken.length);
+  return shortest >= 4 && (leftToken.startsWith(rightToken) || rightToken.startsWith(leftToken));
+}
+
 function uniqueBy(items, keyFn) {
   const seen = new Set();
   const results = [];
@@ -447,10 +559,15 @@ function buildWebSearchTerms(query) {
   const terms = [];
   variants.forEach((variant) => {
     terms.push(variant);
+    terms.push(`"${variant}"`);
     terms.push(`"${variant}" game`);
     terms.push(`${variant} online game`);
     terms.push(`${variant} browser game`);
     terms.push(`${variant} unblocked game`);
+    terms.push(`${variant} unity`);
+    terms.push(`${variant} webgl`);
+    terms.push(`"${variant}" unity`);
+    terms.push(`"${variant}" webgl`);
   });
   return uniqueBy(terms.filter(Boolean), (value) => normalizeSearchText(value)).slice(0, 12);
 }
@@ -540,6 +657,25 @@ function genericHostSuffixPenalty(query, value) {
     return 48;
   }
   return 0;
+}
+
+function genericCollectionPenalty(query, value, rawTitle = "") {
+  const normalizedPath = String(value || "").toLowerCase();
+  const normalizedTitle = normalizeSearchText(rawTitle);
+  const normalizedQuery = normalizeSearchText(query);
+  let penalty = 0;
+
+  if (/\/(?:categories?|category|tags?|tag|collections?|collection|browse|genres?|genre|topics?|topic|search)(?:\/|$)/i.test(normalizedPath)) {
+    penalty += 70;
+  }
+  if (/\/(?:en\/)?t\/[^/]+\/?$/i.test(normalizedPath)) {
+    penalty += 60;
+  }
+  if (/\b(?:games|simulator games|car simulator games)\b/i.test(normalizedTitle) && !/\bgames\b/.test(normalizedQuery)) {
+    penalty += 26;
+  }
+
+  return penalty;
 }
 
 function hasSuspiciousWrappedAsset(urls, html = "") {
@@ -686,14 +822,18 @@ function scoreQueryMatch(query, title, url = "") {
   }
 
   const queryTokens = tokenizeSearchText(query);
-  const titleTokens = new Set([...tokenizeSearchText(title), ...tokenizeSearchText(url)]);
-  const matchingTokens = queryTokens.filter((token) => titleTokens.has(token));
+  const candidateTokens = uniqueBy([...tokenizeSearchText(title), ...tokenizeSearchText(url)], (token) => token);
+  const matchingTokens = queryTokens.filter((token) => candidateTokens.includes(token));
+  const looselyMatchingTokens = queryTokens.filter(
+    (token) => !matchingTokens.includes(token) && candidateTokens.some((candidateToken) => roughlyMatchingTokens(token, candidateToken)),
+  );
   const numericQueryTokens = queryTokens.filter((token) => /^\d+$/.test(token));
-  const missingNumericTokens = numericQueryTokens.filter((token) => !titleTokens.has(token));
+  const missingNumericTokens = numericQueryTokens.filter((token) => !candidateTokens.includes(token));
   const compactQuery = normalizedQuery.replace(/\s+/g, "");
   const compactCandidate = normalizeSearchText(`${title} ${url}`).replace(/\s+/g, "");
 
   let score = matchingTokens.length * 24;
+  score += looselyMatchingTokens.length * 18;
   if (normalizedTitle === normalizedQuery) {
     score += 170;
   }
@@ -704,6 +844,9 @@ function scoreQueryMatch(query, title, url = "") {
   }
   if (matchingTokens.length && matchingTokens.length === queryTokens.length) {
     score += 55;
+  }
+  if (queryTokens.length && matchingTokens.length + looselyMatchingTokens.length === queryTokens.length) {
+    score += 42;
   }
   if (compactQuery && compactCandidate.includes(compactQuery)) {
     score += 85;
@@ -755,7 +898,9 @@ function cleanDisplayTitle(query, rawTitle, fallbackTitle = "") {
 
 function buildReason(candidate) {
   const reasons = [];
-  if (candidate.provider === "drive-site") {
+  if (candidate.provider === "override") {
+    reasons.push("matched verified override");
+  } else if (candidate.provider === "drive-site") {
     reasons.push(`matched ${candidate.searchSiteLabel || "drive-u-7-home-10"} first`);
   } else if (candidate.provider === "direct-host") {
     reasons.push("matched direct host fallback");
@@ -778,7 +923,9 @@ function summarizeCandidate(candidate) {
     displayName: candidate.displayName,
     matchedName: candidate.displayName,
     sourceMode:
-      candidate.provider === "drive-site"
+      candidate.provider === "override"
+        ? "verified-search"
+        : candidate.provider === "drive-site"
         ? "drive-site-search"
         : candidate.provider === "direct-host"
           ? "direct-host-search"
@@ -844,6 +991,7 @@ function analyzeCandidateHtml(candidate, html) {
   );
   const brandMatchScore = primaryBrandMatchScore + Math.round(externalBrandMatchScore * 0.35);
   const genericSuffixPenalty = genericHostSuffixPenalty(candidate.query, candidate.url);
+  const collectionPenalty = genericCollectionPenalty(candidate.query, candidate.url, candidate.title);
   const suspiciousWrapperAssets = hasSuspiciousWrappedAsset(externalUrls, htmlLower);
   const softwarePortal = looksLikeSoftwarePortal(candidate, rawTitle, description, htmlLower);
   const blockedPage = looksLikeAccessBlockedPage(rawTitle, description, htmlLower);
@@ -889,6 +1037,10 @@ function analyzeCandidateHtml(candidate, html) {
   if (genericSuffixPenalty > 0) {
     hostedOnlineScore -= genericSuffixPenalty;
   }
+  if (collectionPenalty > 0) {
+    hostedOnlineScore -= collectionPenalty;
+    compatibilityScore -= Math.round(collectionPenalty * 0.45);
+  }
   if (downloadableUrls.length) {
     hostedOnlineScore -= 55;
   }
@@ -897,8 +1049,8 @@ function analyzeCandidateHtml(candidate, html) {
     compatibilityScore -= 10;
   }
   if (isPortalDomain(candidate.url)) {
-    hostedOnlineScore -= 18;
-    compatibilityScore -= 6;
+    hostedOnlineScore -= 32;
+    compatibilityScore -= 10;
   }
   if (candidate.provider === "drive-site" && !externalUrls.some((value) => brandedHostScore(candidate.query, value) >= 80)) {
     hostedOnlineScore -= 55;
@@ -1419,6 +1571,29 @@ async function searchDirectHostHeuristic(query) {
   );
 }
 
+async function searchVerifiedOverrides(query) {
+  const overrides = VERIFIED_QUERY_OVERRIDES[normalizeSearchText(query)] || [];
+  if (!overrides.length) {
+    return [];
+  }
+
+  const inspected = await Promise.all(
+    overrides.map((item) =>
+      inspectCandidate({
+        provider: "override",
+        query,
+        title: item.title,
+        url: item.url,
+        textScore: Math.max(Number(item.textScore) || 0, scoreQueryMatch(query, item.title, item.url)),
+      }),
+    ),
+  );
+
+  return sortCandidates(
+    inspected.filter((candidate) => candidate && !candidate.softwarePortal && !candidate.blockedPage),
+  );
+}
+
 async function searchWebFallback(query) {
   const rawMatches = [];
   const searchTerms = buildWebSearchTerms(query);
@@ -1481,6 +1656,18 @@ async function searchWebFallback(query) {
 
 async function findSearchResults(query, limit = 1) {
   const driveCandidates = await searchDriveSite(query);
+  const overrideCandidates = await searchVerifiedOverrides(query);
+  if (overrideCandidates.length) {
+    const verifiedPreferred = selectRankedCandidates(
+      sortCandidates([...overrideCandidates, ...driveCandidates]),
+      limit,
+      driveCandidates.length ? " | verified preferred match" : " | verified fallback",
+    );
+    if (verifiedPreferred.candidates.length >= limit) {
+      return verifiedPreferred;
+    }
+  }
+
   const driveResult = selectRankedCandidates(
     driveCandidates,
     limit,
@@ -1490,20 +1677,29 @@ async function findSearchResults(query, limit = 1) {
     return driveResult;
   }
 
+  const overrideResult = selectRankedCandidates(
+    sortCandidates([...driveCandidates, ...overrideCandidates]),
+    limit,
+    " | verified fallback",
+  );
+  if (overrideResult.candidates.length >= limit) {
+    return mergeCandidateSelections([driveResult, overrideResult], limit);
+  }
+
   const directHostCandidates = await searchDirectHostHeuristic(query);
   const directHostResult = selectRankedCandidates(
-    sortCandidates([...driveCandidates, ...directHostCandidates]),
+    sortCandidates([...driveCandidates, ...overrideCandidates, ...directHostCandidates]),
     limit,
     " | direct host fallback",
   );
   if (directHostResult.candidates.length >= limit) {
-    return mergeCandidateSelections([driveResult, directHostResult], limit);
+    return mergeCandidateSelections([driveResult, overrideResult, directHostResult], limit);
   }
 
   const webCandidates = await searchWebFallback(query);
-  const combined = sortCandidates([...driveCandidates, ...directHostCandidates, ...webCandidates]);
+  const combined = sortCandidates([...driveCandidates, ...overrideCandidates, ...directHostCandidates, ...webCandidates]);
   const webResult = selectRankedCandidates(combined, limit);
-  return mergeCandidateSelections([driveResult, directHostResult, webResult], limit);
+  return mergeCandidateSelections([driveResult, overrideResult, directHostResult, webResult], limit);
 }
 
 async function findBestSearchResult(query) {
@@ -1755,6 +1951,15 @@ async function commitPagesStateDeletion(branch, catalogText, folderPrefix, messa
 
 function sanitizeReportValue(value) {
   return collapseWhitespace(String(value || "").replace(/[|\r\n]+/g, " "));
+}
+
+function sanitizeLogSlug(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120) || "failed-build";
 }
 
 async function findRecentRun(env, submittedAtIso, requestId = "") {
@@ -2039,6 +2244,170 @@ async function handleStatus(request, env) {
   );
 }
 
+function formatFailureLogSection(job, logText) {
+  const lines = [
+    `Job: ${String(job?.name || job?.id || "unknown")}`,
+    `id: ${String(job?.id || "")}`,
+    `status: ${String(job?.status || "")}`,
+    `conclusion: ${String(job?.conclusion || "")}`,
+    `started_at: ${String(job?.started_at || "")}`,
+    `completed_at: ${String(job?.completed_at || "")}`,
+    "steps:",
+  ];
+
+  (Array.isArray(job?.steps) ? job.steps : []).forEach((step) => {
+    lines.push(
+      `- ${String(step?.name || "").trim()} | status=${String(step?.status || "")} | conclusion=${String(step?.conclusion || "")}`,
+    );
+  });
+  lines.push("", "full_log:");
+  lines.push(logText || "<no log text>");
+  return lines.join("\n");
+}
+
+async function buildFailureLogText(body, env) {
+  const runId = String(body?.runId || "").trim();
+  const summaryLines = [
+    `logged_at: ${new Date().toISOString()}`,
+    `request_id: ${sanitizeReportValue(body?.requestId) || "-"}`,
+    `batch_id: ${sanitizeReportValue(body?.batchId) || "-"}`,
+    `batch_label: ${sanitizeReportValue(body?.batchLabel) || "-"}`,
+    `candidate_rank: ${sanitizeReportValue(body?.candidateRank) || "-"}`,
+    `candidate_total: ${sanitizeReportValue(body?.candidateTotal) || "-"}`,
+    `display_name: ${sanitizeReportValue(body?.displayName) || "-"}`,
+    `matched_name: ${sanitizeReportValue(body?.matchedName) || "-"}`,
+    `source_input: ${sanitizeReportValue(body?.sourceInput) || "-"}`,
+    `source_url: ${sanitizeReportValue(body?.sourceUrl) || "-"}`,
+    `source_mode: ${sanitizeReportValue(body?.sourceMode) || "-"}`,
+    `candidate_reason: ${sanitizeReportValue(body?.candidateReason) || "-"}`,
+    `candidate_confidence: ${sanitizeReportValue(body?.candidateConfidence) || "-"}`,
+    `status: ${sanitizeReportValue(body?.status) || "-"}`,
+    `conclusion: ${sanitizeReportValue(body?.conclusion) || "-"}`,
+    `phase: ${sanitizeReportValue(body?.phase) || "-"}`,
+    `error: ${sanitizeReportValue(body?.error) || "-"}`,
+    `run_id: ${runId || "-"}`,
+    `run_url: ${sanitizeReportValue(body?.runUrl) || "-"}`,
+    `html_url: ${sanitizeReportValue(body?.htmlUrl) || "-"}`,
+    `jobs_url: ${sanitizeReportValue(body?.jobsUrl) || "-"}`,
+    `failed_at: ${sanitizeReportValue(body?.failedAt) || "-"}`,
+  ];
+
+  if (!runId) {
+    return {
+      logText: `${summaryLines.join("\n")}\n`,
+      run: null,
+      jobs: null,
+    };
+  }
+
+  const run = await githubJson(`${githubApiBase(env)}/actions/runs/${encodeURIComponent(runId)}`, env, {}, "Get workflow run");
+  const jobsPayload = await githubJson(
+    `${githubApiBase(env)}/actions/runs/${encodeURIComponent(runId)}/jobs?per_page=100`,
+    env,
+    {},
+    "List workflow jobs",
+  );
+  const jobEntries = Array.isArray(jobsPayload?.jobs) ? jobsPayload.jobs : [];
+  const logSections = [];
+
+  for (const job of jobEntries) {
+    let logText = "";
+    try {
+      logText = await githubText(
+        `${githubApiBase(env)}/actions/jobs/${encodeURIComponent(String(job?.id || ""))}/logs`,
+        env,
+        {},
+        `Download job logs for ${String(job?.name || job?.id || "job")}`,
+      );
+    } catch (error) {
+      logText = `<could not download logs: ${error instanceof Error ? error.message : "unknown error"}>`;
+    }
+    logSections.push(formatFailureLogSection(job, logText));
+  }
+
+  return {
+    logText: [
+      summaryLines.join("\n"),
+      "",
+      "run_payload:",
+      JSON.stringify(run, null, 2),
+      "",
+      "jobs_payload:",
+      JSON.stringify(jobsPayload, null, 2),
+      "",
+      "job_logs:",
+      logSections.join("\n\n====================\n\n"),
+      "",
+    ].join("\n"),
+    run,
+    jobs: jobsPayload,
+  };
+}
+
+async function handleLogFailure(request, env) {
+  validateEnv(env);
+  const body = await request.json().catch(() => null);
+  const requestId = sanitizeReportValue(body?.requestId) || `failed-build-${Date.now()}`;
+  const displayName = sanitizeReportValue(body?.displayName) || "generated game";
+  const sourceUrl = sanitizeReportValue(body?.sourceUrl) || "-";
+  const runId = sanitizeReportValue(body?.runId) || "-";
+  const errorText = sanitizeReportValue(body?.error) || sanitizeReportValue(body?.conclusion) || "failure";
+  const slugBase = sanitizeLogSlug(requestId || runId || displayName);
+  const detailPath = `${FAILED_BUILD_LOGS_DIR}/${slugBase}.txt`;
+  const detailExisting = await readGitHubTextFile(detailPath, env);
+  const { logText } = await buildFailureLogText(body, env);
+
+  await writeGitHubTextFile(
+    detailPath,
+    logText,
+    `Log failed build for ${displayName}`,
+    env,
+    detailExisting.sha,
+    env.GITHUB_REF || "main",
+    "Write failed build detail log",
+  );
+
+  const summaryExisting = await readGitHubTextFile(FAILED_BUILDS_FILE_PATH, env);
+  const lines = [summaryExisting.text.trimEnd()];
+  if (!summaryExisting.text.trim()) {
+    lines.length = 0;
+    lines.push(FAILED_BUILD_FILE_HEADER.trimEnd());
+  }
+  const marker = `request_id=${requestId}`;
+  if (!summaryExisting.text.includes(marker)) {
+    lines.push([
+      new Date().toISOString(),
+      marker,
+      `display_name=${displayName}`,
+      `source_url=${sourceUrl}`,
+      `run_id=${runId}`,
+      `error=${errorText}`,
+      `detail_path=${detailPath}`,
+    ].join(" | "));
+    await writeGitHubTextFile(
+      FAILED_BUILDS_FILE_PATH,
+      `${lines.filter(Boolean).join("\n")}\n`,
+      `Index failed build for ${displayName}`,
+      env,
+      summaryExisting.sha,
+      env.GITHUB_REF || "main",
+      "Write failed build summary",
+    );
+  }
+
+  return json(
+    {
+      ok: true,
+      requestId,
+      detailPath,
+      summaryPath: FAILED_BUILDS_FILE_PATH,
+    },
+    {
+      headers: corsHeaders(request, env),
+    },
+  );
+}
+
 async function handleReport(request, env) {
   validateEnv(env);
   const body = await request.json().catch(() => null);
@@ -2129,6 +2498,9 @@ export default {
       if (request.method === "POST" && url.pathname === "/delete") {
         return await handleDelete(request, env);
       }
+      if (request.method === "POST" && url.pathname === "/log-failure") {
+        return await handleLogFailure(request, env);
+      }
 
       return json(
         { error: "Not found." },
@@ -2152,4 +2524,4 @@ export default {
   },
 };
 
-export { findBestSearchResult };
+export { findBestSearchResult, findSearchResults };

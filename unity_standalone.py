@@ -8982,10 +8982,9 @@ def generate_index_html(
       }}
 
       function installAuxiliaryAssetUrlRewrites(rewriteMap) {{
-        if (!rewriteMap || typeof rewriteMap !== "object") {{
-          return;
-        }}
-        const entries = Object.entries(rewriteMap)
+        const entries = Object.entries(
+          rewriteMap && typeof rewriteMap === "object" ? rewriteMap : {{}}
+        )
           .filter(function (entry) {{
             return (
               Array.isArray(entry) &&
@@ -8998,9 +8997,6 @@ def generate_index_html(
           .map(function (entry) {{
             return [entry[0], new URL(entry[1], LOCAL_PAGE_URL).toString()];
           }});
-        if (!entries.length) {{
-          return;
-        }}
         const rewriteTable = new Map();
         entries.forEach(function (entry) {{
           const sourceUrl = entry[0];
@@ -9074,25 +9070,227 @@ def generate_index_html(
         window.__unityStandaloneRewriteUrlValue = rewriteUrlValue;
         window.__unityStandaloneShouldBypassCacheForUrl = shouldBypassCacheForUrl;
 
-        if (typeof window.fetch === "function") {{
-          const originalFetch = window.fetch.bind(window);
-          window.fetch = function (input, init) {{
+        function collectStubbedHostnames() {{
+          const hosts = new Set(["localhost", "127.0.0.1"]);
+          [LOCAL_HOST_NAME, SOURCE_PAGE_URL, ORIGINAL_FOLDER_URL].forEach(function (value) {{
+            if (!value) {{
+              return;
+            }}
+            try {{
+              const hostname = new URL(value, LOCAL_PAGE_URL).hostname;
+              if (hostname) {{
+                hosts.add(String(hostname).toLowerCase());
+              }}
+            }} catch (err) {{
+              // Ignore URL parsing failures.
+            }}
+          }});
+          return Array.from(hosts);
+        }}
+
+        function getNetworkStubDescriptor(value) {{
+          if (typeof value !== "string" || !value) {{
+            return null;
+          }}
+          let parsedUrl;
+          try {{
+            parsedUrl = new URL(value, LOCAL_PAGE_URL);
+          }} catch (err) {{
+            return null;
+          }}
+          const hostname = String(parsedUrl.hostname || "").toLowerCase();
+          const pathname = String(parsedUrl.pathname || "").toLowerCase();
+          if (hostname === "config.uca.cloud.unity3d.com") {{
+            return {{
+              status: 200,
+              contentType: "application/json; charset=utf-8",
+              body: JSON.stringify({{
+                enabled: false,
+                configs: [],
+              }}),
+            }};
+          }}
+          if (hostname === "cdp.cloud.unity3d.com" && pathname.indexOf("/v1/events") === 0) {{
+            return {{
+              status: 200,
+              contentType: "application/json; charset=utf-8",
+              body: JSON.stringify({{
+                accepted: true,
+              }}),
+            }};
+          }}
+          if (pathname.endsWith("/whitelisted.json")) {{
+            const allowedHosts = collectStubbedHostnames();
+            return {{
+              status: 200,
+              contentType: "application/json; charset=utf-8",
+              body: JSON.stringify({{
+                success: true,
+                allowedDomains: allowedHosts,
+                whitelistedDomains: allowedHosts,
+                allowedRemoteHosts: allowedHosts,
+                allowedHosts: allowedHosts,
+                domains: allowedHosts,
+                hostnames: allowedHosts,
+              }}),
+            }};
+          }}
+          return null;
+        }}
+
+        function createNetworkStubResponse(descriptor, requestUrl) {{
+          const headers = new Headers();
+          const body = descriptor && typeof descriptor.body === "string" ? descriptor.body : "";
+          const contentType =
+            descriptor && typeof descriptor.contentType === "string" && descriptor.contentType
+              ? descriptor.contentType
+              : "application/json; charset=utf-8";
+          headers.set("content-type", contentType);
+          headers.set("cache-control", "no-store");
+          headers.set("x-unity-standalone-stub", "1");
+          if (requestUrl) {{
+            headers.set("x-unity-standalone-stub-url", requestUrl);
+          }}
+          return new Response(body, {{
+            status:
+              descriptor && Number.isFinite(Number(descriptor.status))
+                ? Math.max(200, Number(descriptor.status))
+                : 200,
+            headers: headers,
+          }});
+        }}
+
+        function buildNetworkStubDataUrl(descriptor) {{
+          const body = descriptor && typeof descriptor.body === "string" ? descriptor.body : "";
+          const contentType =
+            descriptor && typeof descriptor.contentType === "string" && descriptor.contentType
+              ? descriptor.contentType
+              : "application/json; charset=utf-8";
+          return "data:" + contentType + "," + encodeURIComponent(body);
+        }}
+
+        function extractRequestUrl(value) {{
+          if (typeof value === "string") {{
+            return value;
+          }}
+          if (typeof URL !== "undefined" && value instanceof URL) {{
+            return value.toString();
+          }}
+          if (typeof Request !== "undefined" && value instanceof Request) {{
+            return value.url;
+          }}
+          if (value && typeof value.url === "string" && value.url) {{
+            return value.url;
+          }}
+          if (value && typeof value.href === "string" && value.href) {{
+            return value.href;
+          }}
+          if (value && typeof value.toString === "function") {{
+            const converted = String(value);
+            if (converted && converted !== "[object Object]") {{
+              return converted;
+            }}
+          }}
+          return "";
+        }}
+
+        function createFetchStubWrapper(target, initialFetch) {{
+          let currentFetch =
+            typeof initialFetch === "function" ? initialFetch.bind(target) : null;
+          const wrappedFetch = function (input, init) {{
+            const rawUrl = extractRequestUrl(input);
+            const rewrittenUrl = rawUrl ? rewriteUrlValue(rawUrl) : rawUrl;
+            const stub = getNetworkStubDescriptor(rewrittenUrl || rawUrl);
+            if (stub) {{
+              return Promise.resolve(createNetworkStubResponse(stub, rewrittenUrl || rawUrl));
+            }}
+            if (typeof currentFetch !== "function") {{
+              return Promise.reject(new Error("Fetch is unavailable."));
+            }}
             if (typeof input === "string") {{
-              return originalFetch(rewriteUrlValue(input), init);
+              return currentFetch(rewrittenUrl, init);
             }}
             if (typeof Request !== "undefined" && input instanceof Request) {{
-              return originalFetch(new Request(rewriteUrlValue(input.url), input), init);
+              return currentFetch(new Request(rewrittenUrl, input), init);
             }}
-            return originalFetch(input, init);
+            return currentFetch(input, init);
           }};
+          wrappedFetch.__unityStandaloneSetFetchTarget = function (nextFetch) {{
+            if (typeof nextFetch === "function") {{
+              currentFetch = nextFetch;
+            }}
+          }};
+          return wrappedFetch;
+        }}
+
+        function installPersistentFetchStub(target) {{
+          if (!target || typeof target.fetch !== "function") {{
+            return;
+          }}
+          if (target.__unityStandaloneFetchStubInstalled) {{
+            return;
+          }}
+          const wrappedFetch = createFetchStubWrapper(target, target.fetch);
+          try {{
+            Object.defineProperty(target, "fetch", {{
+              configurable: true,
+              enumerable: true,
+              get: function () {{
+                return wrappedFetch;
+              }},
+              set: function (value) {{
+                if (typeof value === "function") {{
+                  wrappedFetch.__unityStandaloneSetFetchTarget(value.bind(target));
+                }}
+              }},
+            }});
+            target.__unityStandaloneFetchStubInstalled = true;
+          }} catch (err) {{
+            const fallbackFetch = createFetchStubWrapper(target, target.fetch);
+            target.fetch = fallbackFetch;
+            target.__unityStandaloneFetchStubInstalled = true;
+          }}
+        }}
+
+        if (typeof window.fetch === "function") {{
+          installPersistentFetchStub(window);
+          if (typeof globalThis !== "undefined" && globalThis && globalThis !== window) {{
+            installPersistentFetchStub(globalThis);
+          }}
         }}
 
         if (window.XMLHttpRequest && window.XMLHttpRequest.prototype) {{
           const originalOpen = window.XMLHttpRequest.prototype.open;
           window.XMLHttpRequest.prototype.open = function (method, url) {{
-            arguments[1] = rewriteUrlValue(typeof url === "string" ? url : String(url || ""));
+            const originalUrl = typeof url === "string" ? url : String(url || "");
+            const rewrittenUrl = rewriteUrlValue(originalUrl);
+            const stub = getNetworkStubDescriptor(rewrittenUrl || originalUrl);
+            if (stub) {{
+              arguments[0] = "GET";
+              arguments[1] = buildNetworkStubDataUrl(stub);
+              return originalOpen.apply(this, arguments);
+            }}
+            arguments[1] = rewrittenUrl;
             return originalOpen.apply(this, arguments);
           }};
+        }}
+
+        if (
+          typeof navigator !== "undefined" &&
+          navigator &&
+          typeof navigator.sendBeacon === "function" &&
+          !window.__unityStandaloneBeaconPatched
+        ) {{
+          const originalSendBeacon = navigator.sendBeacon.bind(navigator);
+          navigator.sendBeacon = function (url, data) {{
+            const rawUrl = extractRequestUrl(url);
+            const rewrittenUrl = rewriteUrlValue(rawUrl);
+            if (getNetworkStubDescriptor(rewrittenUrl || rawUrl)) {{
+              return true;
+            }}
+            return originalSendBeacon(rewrittenUrl, data);
+          }};
+          window.__unityStandaloneBeaconPatched = true;
         }}
 
         function patchSrcDescriptor(prototype) {{

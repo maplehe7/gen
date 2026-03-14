@@ -4,7 +4,9 @@ const BATCH_SELECTIONS_KEY = "standalone-forge-batch-selections";
 const PENDING_DELETES_KEY = "standalone-forge-pending-deletes";
 const JOB_STORAGE_VERSION = 3;
 const WORKFLOW_FILE = "build-game.yml";
+const TARGET_SUCCESSFUL_CANDIDATES = 3;
 const SEARCH_CANDIDATE_COUNT = 3;
+const SEARCH_POOL_COUNT = 6;
 const DEFAULT_STEP_SECONDS = 55;
 const PLACEHOLDER_WORKER_URL = "PASTE_CLOUDFLARE_WORKER_URL_HERE";
 const STATUS_REFRESH_MS = 8000;
@@ -74,6 +76,7 @@ let jobHistory = {
   recordedRunIds: [],
 };
 let activeFavoriteBatchId = "";
+let refreshInFlight = false;
 let appConfig = {
   workerUrl: "",
   owner: "",
@@ -97,6 +100,20 @@ function looksLikeUrl(value) {
 
 function normalizeUrl(value) {
   return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function uniqueBy(items, keyFn) {
+  const results = [];
+  const seen = new Set();
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const key = keyFn(item);
+    if (!key || seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    results.push(item);
+  });
+  return results;
 }
 
 function candidateSourceKey(value) {
@@ -625,6 +642,7 @@ function serializeJobForStorage(job) {
     thumbnailPath: stringValue(job.thumbnailPath),
     entryId: stringValue(job.entryId),
     error: stringValue(job.error),
+    failureLoggedAt: timestampMs(job.failureLoggedAt || 0),
     failedAt: isFailedJob(job) ? timestampMs(job.failedAt || job.lastServerUpdateAt || job.progressUpdatedAt || Date.now()) : 0,
     lastServerUpdateAt: timestampMs(job.lastServerUpdateAt || job.progressUpdatedAt || Date.now()),
     lastSyncAttemptAt: timestampMs(job.lastSyncAttemptAt || job.progressUpdatedAt || Date.now()),
@@ -759,11 +777,45 @@ function batchSuccessfulJobs(batchJobs) {
   return batchJobs.filter((job) => successfulJob(job));
 }
 
+function desiredSuccessCountForBatch(batchId) {
+  const desired = Number(batchSelectionFor(batchId)?.desiredSuccessCount);
+  if (!Number.isFinite(desired) || desired <= 0) {
+    return TARGET_SUCCESSFUL_CANDIDATES;
+  }
+  return Math.round(desired);
+}
+
+function candidatePoolForBatch(batchId) {
+  const pool = batchSelectionFor(batchId)?.candidatePool;
+  return Array.isArray(pool) ? pool : [];
+}
+
+function batchHasRemainingCandidates(batchJobs) {
+  const batchId = String(batchJobs[0]?.batchId || "").trim();
+  const pool = candidatePoolForBatch(batchId);
+  if (!pool.length) {
+    return false;
+  }
+  const attempted = new Set(batchJobs.map((job) => candidateSourceKey(job.sourceUrl)).filter(Boolean));
+  return pool.some((candidate) => {
+    const key = candidateSourceKey(candidate?.sourceUrl || "");
+    return key && !attempted.has(key);
+  });
+}
+
 function batchReadyForFavorite(batchJobs) {
-  if (!batchIsComplete(batchJobs) || batchJobs.length < 2) {
+  if (batchJobs.length < 2) {
     return false;
   }
   const successful = batchSuccessfulJobs(batchJobs);
+  const desired = desiredSuccessCountForBatch(batchJobs[0]?.batchId);
+  const noRemaining = !batchHasRemainingCandidates(batchJobs) && batchIsComplete(batchJobs);
+  if (successful.length >= desired) {
+    return successful.every((job) => String(job.entryId || "").trim() && String(job.playPath || "").trim());
+  }
+  if (!noRemaining) {
+    return false;
+  }
   return successful.length >= 2 && successful.every((job) => String(job.entryId || "").trim() && String(job.playPath || "").trim());
 }
 
@@ -1138,6 +1190,7 @@ function resolveCatalogSource(inputValue) {
 
 function normalizeResolvedCandidate(candidate, fallbackName = "") {
   return {
+    rank: Math.max(Number(candidate?.rank) || 1, 1),
     sourceUrl: String(candidate?.sourceUrl || "").trim(),
     displayName: String(candidate?.displayName || fallbackName || "game").trim(),
     sourceMode: String(candidate?.sourceMode || "search").trim() || "search",
@@ -1419,6 +1472,165 @@ async function deletePublishedGame(job, requestId) {
   });
 }
 
+function createBatchDraftJob(batchId, batchLabel, batchSubmittedAt, candidate, poolSize) {
+  const candidateRank = Math.max(Number(candidate?.rank) || 1, 1);
+  return {
+    requestId: createRequestId(),
+    batchId,
+    batchLabel,
+    batchSubmittedAt,
+    candidateRank,
+    candidateTotal: Math.max(Number(poolSize) || candidateRank, candidateRank),
+    candidateReason: String(candidate?.resolutionReason || "").trim(),
+    candidateConfidence: Number(candidate?.confidence) || 0,
+    owner: appConfig.owner,
+    repo: appConfig.repo,
+    ref: appConfig.ref,
+    sourceInput: batchLabel,
+    sourceUrl: String(candidate?.sourceUrl || "").trim(),
+    displayName: String(candidate?.displayName || batchLabel || "game").trim(),
+    sourceMode: String(candidate?.sourceMode || "search").trim() || "search",
+    matchedName: String(candidate?.matchedName || candidate?.displayName || batchLabel || "game").trim(),
+    submittedAt: nowIso(),
+    status: "queued",
+    conclusion: "",
+    progressPercent: candidateRank === 1 ? 6 : 4,
+    progressUpdatedAt: Date.now(),
+    phase: "Dispatching workflow",
+    etaLabel: "Calculating...",
+    etaSeconds: 0,
+    etaUpdatedAt: Date.now(),
+    runId: "",
+    runUrl: "",
+    jobsUrl: "",
+    htmlUrl: "",
+    playPath: "",
+    thumbnailPath: "",
+    entryId: "",
+    folder: "",
+    error: "",
+    failureLoggedAt: 0,
+  };
+}
+
+async function logFailedJob(job) {
+  if (!workerConfigured(appConfig.workerUrl) || !isFailedJob(job) || Number(job.failureLoggedAt) > 0) {
+    return false;
+  }
+
+  await fetchJson(workerEndpoint("/log-failure"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      requestId: job.requestId,
+      batchId: job.batchId || "",
+      batchLabel: job.batchLabel || "",
+      candidateRank: job.candidateRank || 0,
+      candidateTotal: job.candidateTotal || 0,
+      displayName: job.displayName || "",
+      matchedName: job.matchedName || "",
+      sourceInput: job.sourceInput || "",
+      sourceUrl: job.sourceUrl || "",
+      sourceMode: job.sourceMode || "",
+      candidateReason: job.candidateReason || "",
+      candidateConfidence: job.candidateConfidence || 0,
+      status: job.status || "",
+      conclusion: job.conclusion || "",
+      phase: job.phase || "",
+      error: job.error || "",
+      runId: job.runId || "",
+      runUrl: job.runUrl || "",
+      htmlUrl: job.htmlUrl || "",
+      jobsUrl: job.jobsUrl || "",
+      failedAt: job.failedAt || Date.now(),
+    }),
+  });
+
+  upsertJob({
+    ...job,
+    failureLoggedAt: Date.now(),
+  });
+  return true;
+}
+
+async function maybeDispatchBatchFallback(batchId) {
+  const normalizedBatchId = String(batchId || "").trim();
+  const selection = batchSelectionFor(normalizedBatchId);
+  if (!normalizedBatchId || !selection || selection.dispatchingFallback) {
+    return false;
+  }
+  if (selection.state === "complete" || selection.state === "auto-kept" || selection.state === "keeping") {
+    return false;
+  }
+
+  const batchJobs = jobsForBatch(normalizedBatchId);
+  const desired = desiredSuccessCountForBatch(normalizedBatchId);
+  const successfulCount = batchSuccessfulJobs(batchJobs).length;
+  const activeCount = batchJobs.filter((job) => !isTerminalJob(job)).length;
+  if (successfulCount >= desired || successfulCount + activeCount >= desired) {
+    return false;
+  }
+
+  const candidatePool = candidatePoolForBatch(normalizedBatchId);
+  const attempted = new Set(batchJobs.map((job) => candidateSourceKey(job.sourceUrl)).filter(Boolean));
+  const nextCandidate = candidatePool.find((candidate) => {
+    const key = candidateSourceKey(candidate?.sourceUrl || "");
+    return key && !attempted.has(key);
+  });
+  if (!nextCandidate) {
+    return false;
+  }
+
+  updateBatchSelection(normalizedBatchId, {
+    dispatchingFallback: true,
+    state: "backfilling",
+  });
+  try {
+    const draftJob = createBatchDraftJob(
+      normalizedBatchId,
+      String(selection.batchLabel || batchJobs[0]?.batchLabel || batchJobs[0]?.sourceInput || "").trim(),
+      String(selection.batchSubmittedAt || batchJobs[0]?.batchSubmittedAt || nowIso()),
+      nextCandidate,
+      candidatePool.length,
+    );
+    const result = await dispatchCandidateJob(draftJob);
+    updateBatchSelection(normalizedBatchId, {
+      dispatchingFallback: false,
+      state: result.ok ? "pending" : "backfill-failed",
+      lastFallbackAt: nowIso(),
+    });
+    return result.ok;
+  } catch (_error) {
+    updateBatchSelection(normalizedBatchId, {
+      dispatchingFallback: false,
+      state: "backfill-failed",
+      lastFallbackAt: nowIso(),
+    });
+    return false;
+  }
+}
+
+async function syncBatchRecoveryAndFailureLogs() {
+  const failedJobs = jobs.filter((job) => isFailedJob(job) && Number(job.failureLoggedAt) <= 0);
+  for (const job of failedJobs) {
+    try {
+      await logFailedJob(job);
+    } catch (_error) {
+      // Leave the job unmarked so the next refresh can retry logging.
+    }
+  }
+
+  const batchIds = uniqueBy(
+    jobs.map((job) => String(job.batchId || "").trim()).filter(Boolean),
+    (value) => value,
+  );
+  for (const batchId of batchIds) {
+    await maybeDispatchBatchFallback(batchId);
+  }
+}
+
 function renderActions(job, actionsRoot) {
   if (!actionsRoot) {
     return;
@@ -1617,7 +1829,7 @@ function syncFavoriteChooser() {
   [...batches.entries()].forEach(([batchId, batchJobs]) => {
     const selection = batchSelectionFor(batchId);
     const successful = batchSuccessfulJobs(batchJobs);
-    if (!selection && batchIsComplete(batchJobs) && successful.length === 1) {
+    if ((!selection || !selection.favoriteRequestId) && batchIsComplete(batchJobs) && !batchHasRemainingCandidates(batchJobs) && successful.length === 1) {
       updateBatchSelection(batchId, {
         favoriteRequestId: successful[0].requestId,
         state: "auto-kept",
@@ -1742,6 +1954,11 @@ function renderPublished() {
 }
 
 async function refreshJobStatuses() {
+  if (refreshInFlight) {
+    return;
+  }
+  refreshInFlight = true;
+  try {
   if (!jobs.length || !workerConfigured(appConfig.workerUrl)) {
     renderJobs();
     return;
@@ -1817,8 +2034,12 @@ async function refreshJobStatuses() {
     }),
   );
   saveJobs();
+  await syncBatchRecoveryAndFailureLogs();
   renderJobs();
   renderPublished();
+  } finally {
+    refreshInFlight = false;
+  }
 }
 
 async function dispatchCandidateJob(draftJob) {
@@ -1882,67 +2103,46 @@ async function queueSourceBatch(rawInput, index, total) {
 
   try {
     const resolvedCandidates = dedupeResolvedCandidates(
-      await resolveSourceCandidates(inputValue, SEARCH_CANDIDATE_COUNT),
-    ).slice(0, SEARCH_CANDIDATE_COUNT);
+      await resolveSourceCandidates(inputValue, SEARCH_POOL_COUNT),
+    ).slice(0, SEARCH_POOL_COUNT);
     if (!resolvedCandidates.length) {
       throw new Error(`No distinct candidates were found for ${inputValue}.`);
     }
 
-    const results = [];
-    for (const [candidateIndex, candidate] of resolvedCandidates.entries()) {
-      formMessage.textContent = `Queueing ${inputValue}: candidate ${candidateIndex + 1} of ${resolvedCandidates.length}`;
-      const draftJob = {
-        requestId: createRequestId(),
-        batchId,
-        batchLabel: inputValue,
-        batchSubmittedAt,
-        candidateRank: candidateIndex + 1,
-        candidateTotal: resolvedCandidates.length,
-        candidateReason: candidate.resolutionReason,
-        candidateConfidence: candidate.confidence,
-        owner: appConfig.owner,
-        repo: appConfig.repo,
-        ref: appConfig.ref,
-        sourceInput: inputValue,
-        sourceUrl: candidate.sourceUrl,
-        displayName: candidate.displayName,
-        sourceMode: candidate.sourceMode,
-        matchedName: candidate.matchedName,
-        submittedAt: nowIso(),
-        status: "queued",
-        conclusion: "",
-        progressPercent: candidateIndex === 0 ? 6 : 4,
-        progressUpdatedAt: Date.now(),
-        phase: "Dispatching workflow",
-        etaLabel: "Calculating...",
-        etaSeconds: 0,
-        etaUpdatedAt: Date.now(),
-        runId: "",
-        runUrl: "",
-        jobsUrl: "",
-        htmlUrl: "",
-        playPath: "",
-        thumbnailPath: "",
-        entryId: "",
-        folder: "",
-        error: "",
-      };
+    updateBatchSelection(batchId, {
+      batchId,
+      batchLabel: inputValue,
+      batchSubmittedAt,
+      desiredSuccessCount: Math.min(TARGET_SUCCESSFUL_CANDIDATES, resolvedCandidates.length),
+      state: "pending",
+      candidatePool: resolvedCandidates.map((candidate, poolIndex) => ({
+        ...candidate,
+        rank: Math.max(Number(candidate?.rank) || poolIndex + 1, poolIndex + 1),
+      })),
+    });
 
+    const results = [];
+    for (const [candidateIndex, candidate] of resolvedCandidates.slice(0, TARGET_SUCCESSFUL_CANDIDATES).entries()) {
+      formMessage.textContent = `Queueing ${inputValue}: candidate ${candidateIndex + 1} of ${Math.min(TARGET_SUCCESSFUL_CANDIDATES, resolvedCandidates.length)}`;
+      const draftJob = createBatchDraftJob(batchId, inputValue, batchSubmittedAt, candidate, resolvedCandidates.length);
       results.push(await dispatchCandidateJob(draftJob));
     }
 
-    const successCount = results.filter((result) => result.ok).length;
-    const failureCount = results.length - successCount;
+    const queuedCount = results.filter((result) => result.ok).length;
+    const failureCount = results.length - queuedCount;
+    await syncBatchRecoveryAndFailureLogs();
+    const batchJobsAfterRecovery = jobsForBatch(batchId);
+    const dispatchCount = batchJobsAfterRecovery.filter((job) => String(job.runId || "").trim()).length;
     return {
-      ok: successCount > 0,
+      ok: dispatchCount > 0,
       inputValue,
       batchId,
-      candidateCount: resolvedCandidates.length,
-      successCount,
+      candidateCount: Math.min(TARGET_SUCCESSFUL_CANDIDATES, resolvedCandidates.length),
+      successCount: dispatchCount,
       failureCount,
       displayName: resolvedCandidates[0]?.displayName || inputValue,
       resolutionReason: resolvedCandidates[0]?.resolutionReason || "",
-      error: successCount > 0 ? "" : (results.find((result) => !result.ok)?.error || "No workflows were queued."),
+      error: dispatchCount > 0 ? "" : (results.find((result) => !result.ok)?.error || "No workflows were queued."),
     };
   } catch (error) {
     upsertJob({
@@ -1983,6 +2183,7 @@ async function queueSourceBatch(rawInput, index, total) {
       syncFailureCount: 0,
     });
     renderJobs();
+    await syncBatchRecoveryAndFailureLogs();
     return {
       ok: false,
       inputValue,

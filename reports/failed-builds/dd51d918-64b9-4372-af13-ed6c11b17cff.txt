@@ -1,0 +1,257 @@
+logged_at: 2026-03-14T16:06:58.568Z
+request_id: dd51d918-64b9-4372-af13-ed6c11b17cff
+batch_id: 10f44864-885e-4e58-920b-3da91e40790c
+batch_label: Geometry dash
+candidate_rank: 2
+candidate_total: 2
+display_name: Geometry Dash geometrydashfullversion.io Geometry Dash Full Version
+matched_name: Geometry Dash geometrydashfullversion.io Geometry Dash Full Version
+source_input: Geometry dash
+source_url: https://geometrydashfullversion.io/search?q={search_term_string}
+source_mode: web-search
+candidate_reason: matched web fallback hosted online data file, hosted asset
+candidate_confidence: 100
+status: completed
+conclusion: cancelled
+phase: Build failed
+error: Workflow finished with conclusion: cancelled
+run_id: 23091455367
+run_url: https://api.github.com/repos/maplehe7/gen/actions/runs/23091455367
+html_url: https://github.com/maplehe7/gen/actions/runs/23091455367
+jobs_url: https://api.github.com/repos/maplehe7/gen/actions/runs/23091455367/jobs
+failed_at: 1773504412862
+
+run_payload:
+{
+  "id": 23091455367,
+  "name": "dd51d918-64b9-4372-af13-ed6c11b17cff",
+  "node_id": "WFR_kwLORlpVlc8AAAAFYFulhw",
+  "head_branch": "main",
+  "head_sha": "8b134b41378015e7be738f54d2a7d0b8d4022223",
+  "path": ".github/workflows/build-game.yml",
+  "display_title": "dd51d918-64b9-4372-af13-ed6c11b17cff",
+  "run_number": 272,
+  "event": "workflow_dispatch",
+  "status": "completed",
+  "conclusion": "cancelled",
+  "workflow_id": 245399170,
+  "check_suite_id": 60611067594,
+  "check_suite_node_id": "CS_kwDORlpVlc8AAAAOHLN-yg",
+  "url": "https://api.github.com/repos/maplehe7/gen/actions/runs/23091455367",
+  "html_url": "https://github.com/maplehe7/gen/actions/runs/23091455367",
+  "pull_requests": [],
+  "created_at": "2026-03-14T16:06:45Z",
+  "updated_at": "2026-03-14T16:06:49Z",
+  "actor": {
+    "login": "maplehe7",
+    "id": 144498852,
+    "node_id": "U_kgDOCJzgpA",
+    "avatar_url": "https://avatars.githubusercontent.com/u/144498852?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/maplehe7",
+    "html_url": "https://github.com/maplehe7",
+    "followers_url": "https://api.github.com/users/maplehe7/followers",
+    "following_url": "https://api.github.com/users/maplehe7/following{/other_user}",
+    "gists_url": "https://api.github.com/users/maplehe7/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/maplehe7/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/maplehe7/subscriptions",
+    "organizations_url": "https://api.github.com/users/maplehe7/orgs",
+    "repos_url": "https://api.github.com/users/maplehe7/repos",
+    "events_url": "https://api.github.com/users/maplehe7/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/maplehe7/received_events",
+    "type": "User",
+    "user_view_type": "public",
+    "site_admin": false
+  },
+  "run_attempt": 1,
+  "referenced_workflows": [],
+  "run_started_at": "2026-03-14T16:06:45Z",
+  "triggering_actor": {
+    "login": "maplehe7",
+    "id": 144498852,
+    "node_id": "U_kgDOCJzgpA",
+    "avatar_url": "https://avatars.githubusercontent.com/u/144498852?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/maplehe7",
+    "html_url": "https://github.com/maplehe7",
+    "followers_url": "https://api.github.com/users/maplehe7/followers",
+    "following_url": "https://api.github.com/users/maplehe7/following{/other_user}",
+    "gists_url": "https://api.github.com/users/maplehe7/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/maplehe7/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/maplehe7/subscriptions",
+    "organizations_url": "https://api.github.com/users/maplehe7/orgs",
+    "repos_url": "https://api.github.com/users/maplehe7/repos",
+    "events_url": "https://api.github.com/users/maplehe7/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/maplehe7/received_events",
+    "type": "User",
+    "user_view_type": "public",
+    "site_admin": false
+  },
+  "jobs_url": "https://api.github.com/repos/maplehe7/gen/actions/runs/23091455367/jobs",
+  "logs_url": "https://api.github.com/repos/maplehe7/gen/actions/runs/23091455367/logs",
+  "check_suite_url": "https://api.github.com/repos/maplehe7/gen/check-suites/60611067594",
+  "artifacts_url": "https://api.github.com/repos/maplehe7/gen/actions/runs/23091455367/artifacts",
+  "cancel_url": "https://api.github.com/repos/maplehe7/gen/actions/runs/23091455367/cancel",
+  "rerun_url": "https://api.github.com/repos/maplehe7/gen/actions/runs/23091455367/rerun",
+  "previous_attempt_url": null,
+  "workflow_url": "https://api.github.com/repos/maplehe7/gen/actions/workflows/245399170",
+  "head_commit": {
+    "id": "8b134b41378015e7be738f54d2a7d0b8d4022223",
+    "tree_id": "eda2f6cc94255650726e9fd8eb8485efda997f5d",
+    "message": "Merge branch 'main' of https://github.com/maplehe7/gen",
+    "timestamp": "2026-03-14T15:48:05Z",
+    "author": {
+      "name": "maplehe7",
+      "email": "144498852+maplehe7@users.noreply.github.com"
+    },
+    "committer": {
+      "name": "maplehe7",
+      "email": "144498852+maplehe7@users.noreply.github.com"
+    }
+  },
+  "repository": {
+    "id": 1180325269,
+    "node_id": "R_kgDORlpVlQ",
+    "name": "gen",
+    "full_name": "maplehe7/gen",
+    "private": false,
+    "owner": {
+      "login": "maplehe7",
+      "id": 144498852,
+      "node_id": "U_kgDOCJzgpA",
+      "avatar_url": "https://avatars.githubusercontent.com/u/144498852?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/maplehe7",
+      "html_url": "https://github.com/maplehe7",
+      "followers_url": "https://api.github.com/users/maplehe7/followers",
+      "following_url": "https://api.github.com/users/maplehe7/following{/other_user}",
+      "gists_url": "https://api.github.com/users/maplehe7/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/maplehe7/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/maplehe7/subscriptions",
+      "organizations_url": "https://api.github.com/users/maplehe7/orgs",
+      "repos_url": "https://api.github.com/users/maplehe7/repos",
+      "events_url": "https://api.github.com/users/maplehe7/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/maplehe7/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "html_url": "https://github.com/maplehe7/gen",
+    "description": null,
+    "fork": false,
+    "url": "https://api.github.com/repos/maplehe7/gen",
+    "forks_url": "https://api.github.com/repos/maplehe7/gen/forks",
+    "keys_url": "https://api.github.com/repos/maplehe7/gen/keys{/key_id}",
+    "collaborators_url": "https://api.github.com/repos/maplehe7/gen/collaborators{/collaborator}",
+    "teams_url": "https://api.github.com/repos/maplehe7/gen/teams",
+    "hooks_url": "https://api.github.com/repos/maplehe7/gen/hooks",
+    "issue_events_url": "https://api.github.com/repos/maplehe7/gen/issues/events{/number}",
+    "events_url": "https://api.github.com/repos/maplehe7/gen/events",
+    "assignees_url": "https://api.github.com/repos/maplehe7/gen/assignees{/user}",
+    "branches_url": "https://api.github.com/repos/maplehe7/gen/branches{/branch}",
+    "tags_url": "https://api.github.com/repos/maplehe7/gen/tags",
+    "blobs_url": "https://api.github.com/repos/maplehe7/gen/git/blobs{/sha}",
+    "git_tags_url": "https://api.github.com/repos/maplehe7/gen/git/tags{/sha}",
+    "git_refs_url": "https://api.github.com/repos/maplehe7/gen/git/refs{/sha}",
+    "trees_url": "https://api.github.com/repos/maplehe7/gen/git/trees{/sha}",
+    "statuses_url": "https://api.github.com/repos/maplehe7/gen/statuses/{sha}",
+    "languages_url": "https://api.github.com/repos/maplehe7/gen/languages",
+    "stargazers_url": "https://api.github.com/repos/maplehe7/gen/stargazers",
+    "contributors_url": "https://api.github.com/repos/maplehe7/gen/contributors",
+    "subscribers_url": "https://api.github.com/repos/maplehe7/gen/subscribers",
+    "subscription_url": "https://api.github.com/repos/maplehe7/gen/subscription",
+    "commits_url": "https://api.github.com/repos/maplehe7/gen/commits{/sha}",
+    "git_commits_url": "https://api.github.com/repos/maplehe7/gen/git/commits{/sha}",
+    "comments_url": "https://api.github.com/repos/maplehe7/gen/comments{/number}",
+    "issue_comment_url": "https://api.github.com/repos/maplehe7/gen/issues/comments{/number}",
+    "contents_url": "https://api.github.com/repos/maplehe7/gen/contents/{+path}",
+    "compare_url": "https://api.github.com/repos/maplehe7/gen/compare/{base}...{head}",
+    "merges_url": "https://api.github.com/repos/maplehe7/gen/merges",
+    "archive_url": "https://api.github.com/repos/maplehe7/gen/{archive_format}{/ref}",
+    "downloads_url": "https://api.github.com/repos/maplehe7/gen/downloads",
+    "issues_url": "https://api.github.com/repos/maplehe7/gen/issues{/number}",
+    "pulls_url": "https://api.github.com/repos/maplehe7/gen/pulls{/number}",
+    "milestones_url": "https://api.github.com/repos/maplehe7/gen/milestones{/number}",
+    "notifications_url": "https://api.github.com/repos/maplehe7/gen/notifications{?since,all,participating}",
+    "labels_url": "https://api.github.com/repos/maplehe7/gen/labels{/name}",
+    "releases_url": "https://api.github.com/repos/maplehe7/gen/releases{/id}",
+    "deployments_url": "https://api.github.com/repos/maplehe7/gen/deployments"
+  },
+  "head_repository": {
+    "id": 1180325269,
+    "node_id": "R_kgDORlpVlQ",
+    "name": "gen",
+    "full_name": "maplehe7/gen",
+    "private": false,
+    "owner": {
+      "login": "maplehe7",
+      "id": 144498852,
+      "node_id": "U_kgDOCJzgpA",
+      "avatar_url": "https://avatars.githubusercontent.com/u/144498852?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/maplehe7",
+      "html_url": "https://github.com/maplehe7",
+      "followers_url": "https://api.github.com/users/maplehe7/followers",
+      "following_url": "https://api.github.com/users/maplehe7/following{/other_user}",
+      "gists_url": "https://api.github.com/users/maplehe7/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/maplehe7/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/maplehe7/subscriptions",
+      "organizations_url": "https://api.github.com/users/maplehe7/orgs",
+      "repos_url": "https://api.github.com/users/maplehe7/repos",
+      "events_url": "https://api.github.com/users/maplehe7/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/maplehe7/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "html_url": "https://github.com/maplehe7/gen",
+    "description": null,
+    "fork": false,
+    "url": "https://api.github.com/repos/maplehe7/gen",
+    "forks_url": "https://api.github.com/repos/maplehe7/gen/forks",
+    "keys_url": "https://api.github.com/repos/maplehe7/gen/keys{/key_id}",
+    "collaborators_url": "https://api.github.com/repos/maplehe7/gen/collaborators{/collaborator}",
+    "teams_url": "https://api.github.com/repos/maplehe7/gen/teams",
+    "hooks_url": "https://api.github.com/repos/maplehe7/gen/hooks",
+    "issue_events_url": "https://api.github.com/repos/maplehe7/gen/issues/events{/number}",
+    "events_url": "https://api.github.com/repos/maplehe7/gen/events",
+    "assignees_url": "https://api.github.com/repos/maplehe7/gen/assignees{/user}",
+    "branches_url": "https://api.github.com/repos/maplehe7/gen/branches{/branch}",
+    "tags_url": "https://api.github.com/repos/maplehe7/gen/tags",
+    "blobs_url": "https://api.github.com/repos/maplehe7/gen/git/blobs{/sha}",
+    "git_tags_url": "https://api.github.com/repos/maplehe7/gen/git/tags{/sha}",
+    "git_refs_url": "https://api.github.com/repos/maplehe7/gen/git/refs{/sha}",
+    "trees_url": "https://api.github.com/repos/maplehe7/gen/git/trees{/sha}",
+    "statuses_url": "https://api.github.com/repos/maplehe7/gen/statuses/{sha}",
+    "languages_url": "https://api.github.com/repos/maplehe7/gen/languages",
+    "stargazers_url": "https://api.github.com/repos/maplehe7/gen/stargazers",
+    "contributors_url": "https://api.github.com/repos/maplehe7/gen/contributors",
+    "subscribers_url": "https://api.github.com/repos/maplehe7/gen/subscribers",
+    "subscription_url": "https://api.github.com/repos/maplehe7/gen/subscription",
+    "commits_url": "https://api.github.com/repos/maplehe7/gen/commits{/sha}",
+    "git_commits_url": "https://api.github.com/repos/maplehe7/gen/git/commits{/sha}",
+    "comments_url": "https://api.github.com/repos/maplehe7/gen/comments{/number}",
+    "issue_comment_url": "https://api.github.com/repos/maplehe7/gen/issues/comments{/number}",
+    "contents_url": "https://api.github.com/repos/maplehe7/gen/contents/{+path}",
+    "compare_url": "https://api.github.com/repos/maplehe7/gen/compare/{base}...{head}",
+    "merges_url": "https://api.github.com/repos/maplehe7/gen/merges",
+    "archive_url": "https://api.github.com/repos/maplehe7/gen/{archive_format}{/ref}",
+    "downloads_url": "https://api.github.com/repos/maplehe7/gen/downloads",
+    "issues_url": "https://api.github.com/repos/maplehe7/gen/issues{/number}",
+    "pulls_url": "https://api.github.com/repos/maplehe7/gen/pulls{/number}",
+    "milestones_url": "https://api.github.com/repos/maplehe7/gen/milestones{/number}",
+    "notifications_url": "https://api.github.com/repos/maplehe7/gen/notifications{?since,all,participating}",
+    "labels_url": "https://api.github.com/repos/maplehe7/gen/labels{/name}",
+    "releases_url": "https://api.github.com/repos/maplehe7/gen/releases{/id}",
+    "deployments_url": "https://api.github.com/repos/maplehe7/gen/deployments"
+  }
+}
+
+jobs_payload:
+{
+  "total_count": 0,
+  "jobs": []
+}
+
+job_logs:
+

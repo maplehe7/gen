@@ -744,7 +744,11 @@ function normalizeStoredJobs(rawJobs) {
     const sourceKey = candidateSourceKey(job?.sourceUrl || "");
     const rank = candidateRankValue(job);
     const batchKey = batchId
-      ? `batch:${batchId}:${sourceKey || `rank:${rank}`}`
+      ? (
+        !isTerminalJob(job) && rank !== 999
+          ? `batch:${batchId}:active-rank:${rank}`
+          : `batch:${batchId}:${sourceKey || `rank:${rank}`}`
+      )
       : dedupeJobKey(job);
     const current = batchDeduped.get(batchKey);
     const currentPriority = current ? jobSortPriority(current) : Number.POSITIVE_INFINITY;
@@ -2610,6 +2614,14 @@ async function init() {
   renderPublished();
   await refreshJobStatuses();
   window.setInterval(refreshJobStatuses, STATUS_REFRESH_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      void refreshJobStatuses();
+    }
+  });
+  window.addEventListener("focus", () => {
+    void refreshJobStatuses();
+  });
   window.setInterval(() => {
     if (jobs.some((job) => job.status !== "completed")) {
       renderJobs();

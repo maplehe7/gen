@@ -9418,6 +9418,115 @@ def generate_index_html(
           return Array.from(hosts);
         }}
 
+        function build1gamesApiStubDescriptor(pathname) {{
+          const normalizedPath = String(pathname || "").toLowerCase();
+          const jsonDescriptor = function (payload) {{
+            return {{
+              status: 200,
+              contentType: "application/json; charset=utf-8",
+              body: JSON.stringify(payload),
+            }};
+          }};
+          const emptyCollectionPayload = {{
+            success: true,
+            signed: "local",
+            message: "standalone-local",
+            data: [],
+            items: [],
+            list: [],
+            levels: [],
+            records: [],
+            results: [],
+            characters: [],
+            sounds: [],
+            achievements: [],
+            leaderboard: [],
+            total: 0,
+            page: 1,
+            pages: 1,
+          }};
+          const acknowledgedPayload = {{
+            success: true,
+            signed: "local",
+            message: "standalone-local",
+            data: {{}},
+          }};
+
+          if (normalizedPath.indexOf("/config/load") === 0) {{
+            return jsonDescriptor({{
+              signed: "local",
+              gameinfo: {{
+                allow_play: "yes",
+                unlock_timer: 0,
+                image: "",
+                title: "",
+                description: "",
+                redirect_url: "",
+                signed: "local",
+              }},
+              regisinfo: {{
+                sdktype: "disabled",
+                more_games_url: "",
+                promotion: {{}},
+              }},
+              adsinfo: {{
+                enable: "no",
+                sdk_type: "disabled",
+                reward: false,
+                enable_reward: "no",
+                enable_interstitial: "no",
+                enable_preroll: "no",
+                time_show_inter: 999999,
+                time_show_reward: 999999,
+                ads_debug: "no",
+              }},
+            }});
+          }}
+          if (normalizedPath === "/api/ping" || normalizedPath === "/ping") {{
+            return jsonDescriptor({{
+              success: true,
+              signed: "local",
+              message: "pong",
+              data: {{}},
+            }});
+          }}
+          if (normalizedPath === "/level/main") {{
+            return jsonDescriptor({{
+              ...emptyCollectionPayload,
+              main: [],
+            }});
+          }}
+          if (normalizedPath === "/level/endless") {{
+            return jsonDescriptor({{
+              ...emptyCollectionPayload,
+              endless: [],
+            }});
+          }}
+          if (normalizedPath === "/item/list") {{
+            return jsonDescriptor(emptyCollectionPayload);
+          }}
+          if (
+            normalizedPath.indexOf("/level/") === 0 ||
+            normalizedPath.indexOf("/leaderboard/") === 0 ||
+            normalizedPath.indexOf("/records/") === 0 ||
+            normalizedPath.indexOf("/character/") === 0 ||
+            normalizedPath.indexOf("/achievement/") === 0 ||
+            normalizedPath.indexOf("/sound/") === 0
+          ) {{
+            return jsonDescriptor({{
+              ...emptyCollectionPayload,
+              level: null,
+            }});
+          }}
+          if (normalizedPath.indexOf("/user/") === 0) {{
+            return jsonDescriptor({{
+              ...acknowledgedPayload,
+              stats: {{}},
+            }});
+          }}
+          return jsonDescriptor(acknowledgedPayload);
+        }}
+
         function getNetworkStubDescriptor(value) {{
           if (typeof value !== "string" || !value) {{
             return null;
@@ -9430,6 +9539,9 @@ def generate_index_html(
           }}
           const hostname = String(parsedUrl.hostname || "").toLowerCase();
           const pathname = String(parsedUrl.pathname || "").toLowerCase();
+          if (hostname === "api.1games.io") {{
+            return build1gamesApiStubDescriptor(pathname);
+          }}
           if (hostname === "config.uca.cloud.unity3d.com") {{
             return {{
               status: 200,
@@ -9446,43 +9558,6 @@ def generate_index_html(
               contentType: "application/json; charset=utf-8",
               body: JSON.stringify({{
                 accepted: true,
-              }}),
-            }};
-          }}
-          if (
-            hostname === "api.1games.io" &&
-            pathname.indexOf("/config/load") === 0
-          ) {{
-            return {{
-              status: 200,
-              contentType: "application/json; charset=utf-8",
-              body: JSON.stringify({{
-                signed: "local",
-                gameinfo: {{
-                  allow_play: "yes",
-                  unlock_timer: 0,
-                  image: "",
-                  title: "",
-                  description: "",
-                  redirect_url: "",
-                  signed: "local",
-                }},
-                regisinfo: {{
-                  sdktype: "disabled",
-                  more_games_url: "",
-                  promotion: {{}},
-                }},
-                adsinfo: {{
-                  enable: "no",
-                  sdk_type: "disabled",
-                  reward: false,
-                  enable_reward: "no",
-                  enable_interstitial: "no",
-                  enable_preroll: "no",
-                  time_show_inter: 999999,
-                  time_show_reward: 999999,
-                  ads_debug: "no",
-                }},
               }}),
             }};
           }}
@@ -9593,9 +9668,11 @@ def generate_index_html(
           const wrappedFetch = function (input, init) {{
             const rawUrl = extractRequestUrl(input);
             const rewrittenUrl = rawUrl ? rewriteUrlValue(rawUrl) : rawUrl;
-            const stub = getNetworkStubDescriptor(rewrittenUrl || rawUrl);
+            const stub =
+              getNetworkStubDescriptor(rawUrl) ||
+              (rewrittenUrl && rewrittenUrl !== rawUrl ? getNetworkStubDescriptor(rewrittenUrl) : null);
             if (stub) {{
-              return Promise.resolve(createNetworkStubResponse(stub, rewrittenUrl || rawUrl));
+              return Promise.resolve(createNetworkStubResponse(stub, rawUrl || rewrittenUrl));
             }}
             if (typeof currentFetch !== "function") {{
               return Promise.reject(new Error("Fetch is unavailable."));
@@ -9657,7 +9734,9 @@ def generate_index_html(
           window.XMLHttpRequest.prototype.open = function (method, url) {{
             const originalUrl = typeof url === "string" ? url : String(url || "");
             const rewrittenUrl = rewriteUrlValue(originalUrl);
-            const stub = getNetworkStubDescriptor(rewrittenUrl || originalUrl);
+            const stub =
+              getNetworkStubDescriptor(originalUrl) ||
+              (rewrittenUrl && rewrittenUrl !== originalUrl ? getNetworkStubDescriptor(rewrittenUrl) : null);
             if (stub) {{
               arguments[0] = "GET";
               arguments[1] = buildNetworkStubDataUrl(stub);
@@ -9678,7 +9757,10 @@ def generate_index_html(
           navigator.sendBeacon = function (url, data) {{
             const rawUrl = extractRequestUrl(url);
             const rewrittenUrl = rewriteUrlValue(rawUrl);
-            if (getNetworkStubDescriptor(rewrittenUrl || rawUrl)) {{
+            if (
+              getNetworkStubDescriptor(rawUrl) ||
+              (rewrittenUrl && rewrittenUrl !== rawUrl ? getNetworkStubDescriptor(rewrittenUrl) : null)
+            ) {{
               return true;
             }}
             return originalSendBeacon(rewrittenUrl, data);
@@ -9766,6 +9848,14 @@ def generate_index_html(
           const rewrittenUrl = rewriteUrlValue(originalUrl);
           this.__unityStandaloneOriginalRequestUrl = originalUrl;
           this.__unityStandaloneRewrittenRequestUrl = rewrittenUrl;
+          const stub =
+            getNetworkStubDescriptor(originalUrl) ||
+            (rewrittenUrl && rewrittenUrl !== originalUrl ? getNetworkStubDescriptor(rewrittenUrl) : null);
+          if (stub) {{
+            arguments[0] = "GET";
+            arguments[1] = buildNetworkStubDataUrl(stub);
+            return originalOpen.apply(this, arguments);
+          }}
           arguments[1] = rewrittenUrl;
           if (this.cache && shouldBypassCacheForUrl(originalUrl)) {{
             this.cache.control = "no-cache";
@@ -11377,30 +11467,180 @@ def prepare_gmsoft_local_assets(
             if path and path.name
         )
 
-    if not references_any(b"UnityServicesProjectConfiguration.json", b"player-auth.services.api.unity.com"):
-        return {}, {}
-
     relative_dir = normalize_relative_output_path(streaming_assets_url)
     if not relative_dir:
         return {}, {}
 
-    target_relative_path = f"{relative_dir}/UnityServicesProjectConfiguration.json"
-    target_path = output_dir / Path(target_relative_path)
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    target_payload = {
-        "projectId": "standalone-local",
-        "cloudProjectId": "standalone-local",
-        "environmentId": "local",
-        "enabled": False,
-        "analyticsEnabled": False,
-        "crashReportingEnabled": False,
-        "messagingEnabled": False,
-        "services": [],
-    }
-    target_path.write_text(json.dumps(target_payload, indent=2), encoding="utf-8")
-    return {}, {
-        "mirrored_streaming_asset_files": [target_relative_path],
-        "gmsoft_local_stub_files": [target_relative_path],
+    rewrites: dict[str, str] = {}
+    mirrored_streaming_asset_files: list[str] = []
+    gmsoft_local_stub_files: list[str] = []
+
+    if references_any(b"UnityServicesProjectConfiguration.json", b"player-auth.services.api.unity.com"):
+        target_relative_path = f"{relative_dir}/UnityServicesProjectConfiguration.json"
+        target_path = output_dir / Path(target_relative_path)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_payload = {
+            "projectId": "standalone-local",
+            "cloudProjectId": "standalone-local",
+            "environmentId": "local",
+            "enabled": False,
+            "analyticsEnabled": False,
+            "crashReportingEnabled": False,
+            "messagingEnabled": False,
+            "services": [],
+        }
+        target_path.write_text(json.dumps(target_payload, indent=2), encoding="utf-8")
+        mirrored_streaming_asset_files.append(target_relative_path)
+        gmsoft_local_stub_files.append(target_relative_path)
+
+    if references_any(b"api.1games.io", b"https://api.1games.io", b"games.1games.io/lib/gmsdkv1.js"):
+        api_stub_dir = output_dir / "support" / "api.1games.io"
+        api_stub_dir.mkdir(parents=True, exist_ok=True)
+
+        config_payload = {
+            "signed": "local",
+            "gameinfo": {
+                "allow_play": "yes",
+                "unlock_timer": 0,
+                "image": "",
+                "title": "",
+                "description": "",
+                "redirect_url": "",
+                "signed": "local",
+            },
+            "regisinfo": {
+                "sdktype": "disabled",
+                "more_games_url": "",
+                "promotion": {},
+            },
+            "adsinfo": {
+                "enable": "no",
+                "sdk_type": "disabled",
+                "reward": False,
+                "enable_reward": "no",
+                "enable_interstitial": "no",
+                "enable_preroll": "no",
+                "time_show_inter": 999999,
+                "time_show_reward": 999999,
+                "ads_debug": "no",
+            },
+        }
+        empty_collection_payload = {
+            "success": True,
+            "signed": "local",
+            "message": "standalone-local",
+            "data": [],
+            "items": [],
+            "list": [],
+            "levels": [],
+            "records": [],
+            "results": [],
+            "characters": [],
+            "sounds": [],
+            "achievements": [],
+            "leaderboard": [],
+            "total": 0,
+            "page": 1,
+            "pages": 1,
+        }
+        acknowledged_payload = {
+            "success": True,
+            "signed": "local",
+            "message": "standalone-local",
+            "data": {},
+        }
+        endpoint_specs = (
+            (
+                "config-load.json",
+                config_payload,
+                ("https://api.1games.io/config/load",),
+            ),
+            (
+                "api-ping.json",
+                {
+                    "success": True,
+                    "signed": "local",
+                    "message": "pong",
+                    "data": {},
+                },
+                (
+                    "https://api.1games.io/api/ping",
+                    "https://api.1games.io/ping",
+                ),
+            ),
+            (
+                "level-main.json",
+                {
+                    **empty_collection_payload,
+                    "main": [],
+                },
+                ("https://api.1games.io/level/main",),
+            ),
+            (
+                "level-endless.json",
+                {
+                    **empty_collection_payload,
+                    "endless": [],
+                },
+                ("https://api.1games.io/level/endless",),
+            ),
+            (
+                "item-list.json",
+                empty_collection_payload,
+                ("https://api.1games.io/item/list",),
+            ),
+            (
+                "level-load.json",
+                {
+                    **acknowledged_payload,
+                    "level": None,
+                },
+                (
+                    "https://api.1games.io/level/load",
+                    "https://api.1games.io/level/tracking",
+                    "https://api.1games.io/level/check",
+                    "https://api.1games.io/level/list",
+                    "https://api.1games.io/level/list_endless",
+                    "https://api.1games.io/level/popular",
+                    "https://api.1games.io/level/featured",
+                    "https://api.1games.io/level/trending",
+                    "https://api.1games.io/level/public",
+                    "https://api.1games.io/level/demon",
+                ),
+            ),
+            (
+                "user-stats-get.json",
+                {
+                    **acknowledged_payload,
+                    "stats": {},
+                },
+                (
+                    "https://api.1games.io/user/user-stats-get",
+                    "https://api.1games.io/leaderboard/get",
+                    "https://api.1games.io/records/list",
+                    "https://api.1games.io/character/list",
+                    "https://api.1games.io/character/all",
+                    "https://api.1games.io/achievement/list",
+                    "https://api.1games.io/achievement/my_list",
+                ),
+            ),
+        )
+
+        for file_name, payload, endpoint_urls in endpoint_specs:
+            relative_path = f"support/api.1games.io/{file_name}"
+            destination = output_dir / Path(relative_path)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            gmsoft_local_stub_files.append(relative_path)
+            for endpoint_url in endpoint_urls:
+                rewrites[endpoint_url] = relative_path
+
+    if not mirrored_streaming_asset_files and not gmsoft_local_stub_files and not rewrites:
+        return {}, {}
+
+    return rewrites, {
+        "mirrored_streaming_asset_files": mirrored_streaming_asset_files,
+        "gmsoft_local_stub_files": gmsoft_local_stub_files,
     }
 
 

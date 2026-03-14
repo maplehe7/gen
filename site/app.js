@@ -1,7 +1,10 @@
 const JOBS_KEY = "standalone-forge-pages-jobs";
 const JOB_HISTORY_KEY = "standalone-forge-pages-job-history";
-const JOB_STORAGE_VERSION = 2;
+const BATCH_SELECTIONS_KEY = "standalone-forge-batch-selections";
+const PENDING_DELETES_KEY = "standalone-forge-pending-deletes";
+const JOB_STORAGE_VERSION = 3;
 const WORKFLOW_FILE = "build-game.yml";
+const SEARCH_CANDIDATE_COUNT = 3;
 const DEFAULT_STEP_SECONDS = 55;
 const PLACEHOLDER_WORKER_URL = "PASTE_CLOUDFLARE_WORKER_URL_HERE";
 const STATUS_REFRESH_MS = 8000;
@@ -55,15 +58,22 @@ const jobsContainer = document.getElementById("jobs");
 const publishedContainer = document.getElementById("published-games");
 const jobTemplate = document.getElementById("job-template");
 const publishedTemplate = document.getElementById("published-template");
+const favoriteModal = document.getElementById("favorite-modal");
+const favoriteTitle = document.getElementById("favorite-title");
+const favoriteCopy = document.getElementById("favorite-copy");
+const favoriteGrid = document.getElementById("favorite-grid");
+const favoriteStatus = document.getElementById("favorite-status");
 
 let catalogEntries = [];
 let publishedCatalog = [];
 let jobs = [];
+let batchSelections = {};
 let jobHistory = {
   stepDurations: {},
   totalDurations: [],
   recordedRunIds: [],
 };
+let activeFavoriteBatchId = "";
 let appConfig = {
   workerUrl: "",
   owner: "",
@@ -87,6 +97,22 @@ function looksLikeUrl(value) {
 
 function normalizeUrl(value) {
   return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function candidateSourceKey(value) {
+  const normalized = normalizeUrl(value);
+  if (!normalized) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    parsed.hash = "";
+    const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    return `${parsed.protocol}//${parsed.hostname.toLowerCase()}${pathname}${parsed.search}`;
+  } catch (_error) {
+    return normalized.toLowerCase();
+  }
 }
 
 function clampPercent(value) {
@@ -197,6 +223,58 @@ function createRequestId() {
     return window.crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function loadBatchSelections() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(BATCH_SELECTIONS_KEY) || "{}");
+    batchSelections = parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_error) {
+    batchSelections = {};
+  }
+}
+
+function saveBatchSelections() {
+  window.localStorage.setItem(BATCH_SELECTIONS_KEY, JSON.stringify(batchSelections || {}));
+}
+
+function batchSelectionFor(batchId) {
+  return batchSelections?.[String(batchId || "").trim()] || null;
+}
+
+function updateBatchSelection(batchId, patch) {
+  const key = String(batchId || "").trim();
+  if (!key) {
+    return;
+  }
+  batchSelections[key] = {
+    ...(batchSelections[key] || {}),
+    ...patch,
+    batchId: key,
+    updatedAt: nowIso(),
+  };
+  saveBatchSelections();
+}
+
+function rememberPendingGalleryDelete(job) {
+  const entryId = String(job?.entryId || "").trim();
+  if (!entryId) {
+    return;
+  }
+  let pendingDeletes = {};
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(PENDING_DELETES_KEY) || "{}");
+    pendingDeletes = parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_error) {
+    pendingDeletes = {};
+  }
+  pendingDeletes[entryId] = {
+    startedAt: Date.now(),
+    state: "accepted",
+    runId: "",
+    htmlUrl: "",
+  };
+  window.localStorage.setItem(PENDING_DELETES_KEY, JSON.stringify(pendingDeletes));
 }
 
 function bulkModeEnabled() {
@@ -468,6 +546,18 @@ function jobCreatedTimestamp(job) {
   return timestampMs(job?.submittedAt);
 }
 
+function batchCreatedTimestamp(job) {
+  return timestampMs(job?.batchSubmittedAt || job?.submittedAt);
+}
+
+function candidateRankValue(job) {
+  const rank = Number(job?.candidateRank);
+  if (!Number.isFinite(rank) || rank <= 0) {
+    return 999;
+  }
+  return Math.round(rank);
+}
+
 function jobSortPriority(job) {
   const status = String(job?.status || "");
   const conclusion = String(job?.conclusion || "");
@@ -502,6 +592,13 @@ function jobRetentionMs(job) {
 function serializeJobForStorage(job) {
   return {
     requestId: stringValue(job.requestId),
+    batchId: stringValue(job.batchId),
+    batchLabel: stringValue(job.batchLabel),
+    batchSubmittedAt: stringValue(job.batchSubmittedAt, stringValue(job.submittedAt, nowIso())),
+    candidateRank: candidateRankValue(job),
+    candidateTotal: Math.max(Number(job.candidateTotal) || 1, 1),
+    candidateReason: stringValue(job.candidateReason),
+    candidateConfidence: Math.max(Number(job.candidateConfidence) || 0, 0),
     owner: stringValue(job.owner),
     repo: stringValue(job.repo),
     ref: stringValue(job.ref, "main"),
@@ -524,6 +621,8 @@ function serializeJobForStorage(job) {
     jobsUrl: stringValue(job.jobsUrl),
     htmlUrl: stringValue(job.htmlUrl),
     playPath: stringValue(job.playPath),
+    folder: stringValue(job.folder),
+    thumbnailPath: stringValue(job.thumbnailPath),
     entryId: stringValue(job.entryId),
     error: stringValue(job.error),
     failedAt: isFailedJob(job) ? timestampMs(job.failedAt || job.lastServerUpdateAt || job.progressUpdatedAt || Date.now()) : 0,
@@ -571,14 +670,26 @@ function normalizeStoredJobs(rawJobs) {
 
   return [...deduped.values()]
     .sort((left, right) => {
-      const createdDelta = jobCreatedTimestamp(right) - jobCreatedTimestamp(left);
-      if (createdDelta !== 0) {
-        return createdDelta;
+      const batchDelta = batchCreatedTimestamp(right) - batchCreatedTimestamp(left);
+      if (batchDelta !== 0) {
+        return batchDelta;
+      }
+
+      if (left.batchId && left.batchId === right.batchId) {
+        const rankDelta = candidateRankValue(left) - candidateRankValue(right);
+        if (rankDelta !== 0) {
+          return rankDelta;
+        }
       }
 
       const priorityDelta = jobSortPriority(left) - jobSortPriority(right);
       if (priorityDelta !== 0) {
         return priorityDelta;
+      }
+
+      const createdDelta = jobCreatedTimestamp(right) - jobCreatedTimestamp(left);
+      if (createdDelta !== 0) {
+        return createdDelta;
       }
 
       return jobSortTimestamp(right) - jobSortTimestamp(left);
@@ -599,6 +710,61 @@ function formatJobStatus(job) {
     return String(job?.conclusion || "") === "success" ? "Complete" : "Failed";
   }
   return formatStatus(job?.status);
+}
+
+function candidateRankLabel(job) {
+  const rank = candidateRankValue(job);
+  const total = Math.max(Number(job?.candidateTotal) || 1, 1);
+  if (rank === 999 || total <= 1) {
+    return "";
+  }
+  if (rank === 1) {
+    return `Best match of ${total}`;
+  }
+  if (rank === total) {
+    return `Last backup of ${total}`;
+  }
+  return `Backup ${rank} of ${total}`;
+}
+
+function candidateSubtitle(job) {
+  const parts = [];
+  const batchLabel = String(job?.batchLabel || "").trim();
+  const matchedName = String(job?.matchedName || "").trim();
+  if (batchLabel && normalizeSearchVariantKey(batchLabel) !== normalizeSearchVariantKey(job?.displayName || "")) {
+    parts.push(batchLabel);
+  }
+  if (matchedName && normalizeSearchVariantKey(matchedName) !== normalizeSearchVariantKey(job?.displayName || "")) {
+    parts.push(`Matched ${matchedName}`);
+  }
+  return parts.join(" • ");
+}
+
+function successfulJob(job) {
+  return String(job?.status || "") === "completed" && String(job?.conclusion || "") === "success";
+}
+
+function jobsForBatch(batchId) {
+  const normalizedBatchId = String(batchId || "").trim();
+  return jobs
+    .filter((job) => String(job?.batchId || "").trim() === normalizedBatchId)
+    .sort((left, right) => candidateRankValue(left) - candidateRankValue(right));
+}
+
+function batchIsComplete(batchJobs) {
+  return batchJobs.length > 0 && batchJobs.every((job) => isTerminalJob(job));
+}
+
+function batchSuccessfulJobs(batchJobs) {
+  return batchJobs.filter((job) => successfulJob(job));
+}
+
+function batchReadyForFavorite(batchJobs) {
+  if (!batchIsComplete(batchJobs) || batchJobs.length < 2) {
+    return false;
+  }
+  const successful = batchSuccessfulJobs(batchJobs);
+  return successful.length >= 2 && successful.every((job) => String(job.entryId || "").trim() && String(job.playPath || "").trim());
 }
 
 function formatDuration(seconds) {
@@ -970,14 +1136,40 @@ function resolveCatalogSource(inputValue) {
   throw new Error("Enter a full game URL, a bare domain like example.com, or a name from game_catalog.json.");
 }
 
-async function searchForGameByName(query) {
+function normalizeResolvedCandidate(candidate, fallbackName = "") {
+  return {
+    sourceUrl: String(candidate?.sourceUrl || "").trim(),
+    displayName: String(candidate?.displayName || fallbackName || "game").trim(),
+    sourceMode: String(candidate?.sourceMode || "search").trim() || "search",
+    matchedName: String(candidate?.matchedName || candidate?.displayName || fallbackName || "game").trim(),
+    provider: String(candidate?.provider || "search").trim() || "search",
+    confidence: Number(candidate?.confidence) || 0,
+    hostedOnline: Boolean(candidate?.hostedOnline),
+    resolutionReason: String(candidate?.reason || "").trim(),
+  };
+}
+
+function dedupeResolvedCandidates(candidates) {
+  const seen = new Set();
+  return (Array.isArray(candidates) ? candidates : []).filter((candidate) => {
+    const key = candidateSourceKey(candidate?.sourceUrl || "");
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+async function searchForGameByName(query, limit = 1) {
   const searchUrl = new URL(workerEndpoint("/search"));
   searchUrl.searchParams.set("query", String(query || "").trim());
+  searchUrl.searchParams.set("limit", String(Math.max(Number(limit) || 1, 1)));
   searchUrl.searchParams.set("_", String(Date.now()));
   return fetchJson(searchUrl.toString());
 }
 
-async function resolveSource(inputValue) {
+async function resolveSourceCandidates(inputValue, limit = SEARCH_CANDIDATE_COUNT) {
   const trimmed = String(inputValue || "").trim();
   if (!trimmed) {
     throw new Error("Enter a game URL or a game name.");
@@ -985,7 +1177,7 @@ async function resolveSource(inputValue) {
 
   const normalizedUrl = coerceInputToUrl(trimmed);
   if (normalizedUrl) {
-    return {
+    return [normalizeResolvedCandidate({
       sourceUrl: normalizedUrl,
       displayName: deriveNameFromUrl(normalizedUrl),
       sourceMode: "url",
@@ -993,29 +1185,32 @@ async function resolveSource(inputValue) {
       provider: "direct-url",
       confidence: 100,
       hostedOnline: true,
-      resolutionReason: "",
-    };
+      reason: "",
+    })];
   }
 
   const attemptedQueries = [];
   let lastSearchError = null;
+  let candidates = [];
   for (const variant of buildSearchQueryVariants(trimmed)) {
     try {
-      const result = await searchForGameByName(variant);
-      return {
-        sourceUrl: result?.sourceUrl || "",
-        displayName: result?.displayName || trimmed,
-        sourceMode: result?.sourceMode || "search",
-        matchedName: result?.matchedName || result?.displayName || trimmed,
-        provider: result?.provider || "search",
-        confidence: Number(result?.confidence) || 0,
-        hostedOnline: Boolean(result?.hostedOnline),
-        resolutionReason: String(result?.reason || "").trim(),
-      };
+      const result = await searchForGameByName(variant, limit);
+      const rawCandidates = Array.isArray(result?.candidates) ? result.candidates : [result];
+      candidates = dedupeResolvedCandidates([
+        ...candidates,
+        ...rawCandidates.map((candidate) => normalizeResolvedCandidate(candidate, trimmed)),
+      ]);
+      if (candidates.length >= limit) {
+        return candidates.slice(0, limit);
+      }
     } catch (searchError) {
       lastSearchError = searchError;
       attemptedQueries.push(variant);
     }
+  }
+
+  if (candidates.length) {
+    return candidates.slice(0, limit);
   }
 
   if (lastSearchError) {
@@ -1024,32 +1219,34 @@ async function resolveSource(inputValue) {
     );
     for (const candidate of closestMatches.slice(0, 3)) {
       try {
-        const result = await searchForGameByName(candidate);
-        return {
-          sourceUrl: result?.sourceUrl || "",
-          displayName: result?.displayName || candidate,
-          sourceMode: result?.sourceMode || "search",
-          matchedName: result?.matchedName || result?.displayName || candidate,
-          provider: result?.provider || "search",
-          confidence: Number(result?.confidence) || 0,
-          hostedOnline: Boolean(result?.hostedOnline),
-          resolutionReason: String(result?.reason || "").trim(),
-        };
+        const result = await searchForGameByName(candidate, limit);
+        const rawCandidates = Array.isArray(result?.candidates) ? result.candidates : [result];
+        candidates = dedupeResolvedCandidates([
+          ...candidates,
+          ...rawCandidates.map((item) => normalizeResolvedCandidate(item, candidate)),
+        ]);
+        if (candidates.length >= limit) {
+          return candidates.slice(0, limit);
+        }
       } catch (_closestError) {
         // Keep falling through to catalog and then the original error.
       }
     }
   }
 
+  if (candidates.length) {
+    return candidates.slice(0, limit);
+  }
+
   try {
     const catalogResolved = resolveCatalogSource(trimmed);
-    return {
+    return [normalizeResolvedCandidate({
       ...catalogResolved,
       provider: "catalog",
       confidence: 80,
       hostedOnline: true,
-      resolutionReason: "Used local game catalog fallback.",
-    };
+      reason: "Used local game catalog fallback.",
+    })];
   } catch (_catalogError) {
     throw lastSearchError || new Error("No compatible hosted result was found.");
   }
@@ -1151,11 +1348,11 @@ function galleryUrlForEntry(entryId = "") {
 }
 
 function publishedEntryForJob(job) {
-  const jobSourceUrl = normalizeUrl(job.sourceUrl || "");
+  const jobSourceUrl = candidateSourceKey(job.sourceUrl || "");
   return publishedCatalog.find(
     (entry) =>
       String(entry.request_id || "") === String(job.requestId || "") ||
-      normalizeUrl(entry.source_url || "") === jobSourceUrl,
+      candidateSourceKey(entry.source_url || "") === jobSourceUrl,
   );
 }
 
@@ -1199,19 +1396,255 @@ function upsertJob(nextJob) {
   saveJobs();
 }
 
+async function deletePublishedGame(job, requestId) {
+  const publishedEntry = publishedEntryForJob(job);
+  const entryId = String(job.entryId || publishedEntry?.id || "").trim();
+  const folder = String(job.folder || publishedEntry?.folder || "").trim();
+  if (!entryId) {
+    return;
+  }
+
+  rememberPendingGalleryDelete({ ...job, entryId, folder });
+  await fetchJson(workerEndpoint("/delete"), {
+    method: "POST",
+    keepalive: true,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      entryId,
+      folder,
+      requestId,
+    }),
+  });
+}
+
 function renderActions(job, actionsRoot) {
   if (!actionsRoot) {
     return;
   }
   actionsRoot.innerHTML = "";
 
-  if (job.playPath || (job.status === "completed" && job.conclusion === "success")) {
+  if (successfulJob(job) && job.playPath) {
+    const playLink = document.createElement("a");
+    playLink.className = "job-link";
+    playLink.href = playUrlForPath(job.playPath);
+    playLink.target = "_blank";
+    playLink.rel = "noreferrer";
+    playLink.textContent = job.candidateTotal > 1 ? "Play candidate" : "Play game";
+    actionsRoot.append(playLink);
+
     const galleryLink = document.createElement("a");
-    galleryLink.className = "job-link";
+    galleryLink.className = "job-link secondary";
     galleryLink.href = galleryUrlForEntry(job.entryId || "");
     galleryLink.textContent = "Open gallery";
     actionsRoot.append(galleryLink);
   }
+}
+
+function setFavoriteModalVisible(visible) {
+  if (!favoriteModal) {
+    return;
+  }
+  favoriteModal.hidden = !visible;
+}
+
+function closeFavoriteModal() {
+  activeFavoriteBatchId = "";
+  if (favoriteGrid) {
+    favoriteGrid.innerHTML = "";
+  }
+  if (favoriteStatus) {
+    favoriteStatus.textContent = "";
+  }
+  setFavoriteModalVisible(false);
+}
+
+async function keepFavoriteCandidate(batchId, favoriteRequestId) {
+  const batchJobs = jobsForBatch(batchId);
+  const favoriteJob = batchJobs.find((job) => String(job.requestId || "") === String(favoriteRequestId || ""));
+  if (!favoriteJob) {
+    return;
+  }
+
+  updateBatchSelection(batchId, {
+    favoriteRequestId,
+    state: "keeping",
+    startedAt: nowIso(),
+  });
+  if (favoriteStatus) {
+    favoriteStatus.textContent = `Keeping ${favoriteJob.displayName} and removing the other builds...`;
+  }
+
+  const loserJobs = batchJobs.filter((job) => String(job.requestId || "") !== String(favoriteRequestId || ""));
+  const successfulLosers = loserJobs.filter((job) => successfulJob(job));
+  const deletionErrors = [];
+
+  for (const [index, job] of successfulLosers.entries()) {
+    try {
+      await deletePublishedGame(job, `cleanup-${batchId}-${index + 1}-${Date.now()}`);
+    } catch (error) {
+      deletionErrors.push(`${job.displayName}: ${error.message}`);
+    }
+  }
+
+  if (deletionErrors.length) {
+    updateBatchSelection(batchId, {
+      favoriteRequestId,
+      state: "error",
+      error: deletionErrors.join(" | "),
+    });
+    if (favoriteStatus) {
+      favoriteStatus.textContent = deletionErrors.join(" | ");
+    }
+    return;
+  }
+
+  jobs = normalizeStoredJobs(
+    jobs
+      .filter((job) => String(job.batchId || "") !== String(batchId || "") || String(job.requestId || "") === String(favoriteRequestId || ""))
+      .map((job) =>
+        String(job.requestId || "") === String(favoriteRequestId || "")
+          ? {
+              ...job,
+              phase: "Kept after comparison",
+              error: "",
+            }
+          : job,
+      ),
+  );
+  saveJobs();
+  updateBatchSelection(batchId, {
+    favoriteRequestId,
+    state: "complete",
+    keptAt: nowIso(),
+  });
+  closeFavoriteModal();
+  renderJobs();
+}
+
+function renderFavoriteChooser(batchJobs) {
+  if (!favoriteGrid || !favoriteTitle || !favoriteCopy) {
+    return;
+  }
+
+  const batchLabel = String(batchJobs[0]?.batchLabel || batchJobs[0]?.sourceInput || batchJobs[0]?.displayName || "this game").trim();
+  favoriteTitle.textContent = `Pick which ${batchLabel} build to keep`;
+  favoriteCopy.textContent = "Candidate 1 is the strongest match. You can preview any finished build, then keep one and remove the rest.";
+  favoriteGrid.innerHTML = "";
+  if (favoriteStatus) {
+    favoriteStatus.textContent = "";
+  }
+
+  batchJobs.forEach((job) => {
+    const card = document.createElement("article");
+    card.className = "favorite-card";
+    card.classList.toggle("is-success", successfulJob(job));
+    card.classList.toggle("is-failed", isFailedJob(job));
+
+    const rank = document.createElement("p");
+    rank.className = "favorite-rank";
+    rank.textContent = candidateRankLabel(job) || `Candidate ${candidateRankValue(job)}`;
+    card.append(rank);
+
+    if (job.thumbnailPath) {
+      const image = document.createElement("img");
+      image.className = "favorite-thumb";
+      image.src = new URL(job.thumbnailPath, window.location.href).toString();
+      image.alt = job.displayName;
+      card.append(image);
+    }
+
+    const title = document.createElement("h3");
+    title.className = "favorite-card-title";
+    title.textContent = job.displayName;
+    card.append(title);
+
+    if (job.candidateReason) {
+      const reason = document.createElement("p");
+      reason.className = "favorite-reason";
+      reason.textContent = job.candidateReason;
+      card.append(reason);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "favorite-actions";
+
+    if (successfulJob(job) && job.playPath) {
+      const previewLink = document.createElement("a");
+      previewLink.className = "job-link secondary";
+      previewLink.href = playUrlForPath(job.playPath);
+      previewLink.target = "_blank";
+      previewLink.rel = "noreferrer";
+      previewLink.textContent = "Preview";
+      actions.append(previewLink);
+
+      const keepButton = document.createElement("button");
+      keepButton.className = "job-link favorite-button";
+      keepButton.type = "button";
+      keepButton.textContent = "Keep this one";
+      keepButton.addEventListener("click", () => {
+        if (favoriteStatus) {
+          favoriteStatus.textContent = "";
+        }
+        keepFavoriteCandidate(job.batchId, job.requestId);
+      });
+      actions.append(keepButton);
+    } else {
+      const failedText = document.createElement("p");
+      failedText.className = "favorite-failed-text";
+      failedText.textContent = job.error || "This candidate failed.";
+      actions.append(failedText);
+    }
+
+    card.append(actions);
+    favoriteGrid.append(card);
+  });
+}
+
+function syncFavoriteChooser() {
+  const batches = new Map();
+  jobs.forEach((job) => {
+    const batchId = String(job.batchId || "").trim();
+    if (!batchId) {
+      return;
+    }
+    const current = batches.get(batchId) || [];
+    current.push(job);
+    batches.set(batchId, current);
+  });
+
+  [...batches.entries()].forEach(([batchId, batchJobs]) => {
+    const selection = batchSelectionFor(batchId);
+    const successful = batchSuccessfulJobs(batchJobs);
+    if (!selection && batchIsComplete(batchJobs) && successful.length === 1) {
+      updateBatchSelection(batchId, {
+        favoriteRequestId: successful[0].requestId,
+        state: "auto-kept",
+        keptAt: nowIso(),
+      });
+    }
+  });
+
+  const nextBatch = [...batches.entries()]
+    .sort((left, right) => batchCreatedTimestamp(right[1][0]) - batchCreatedTimestamp(left[1][0]))
+    .find(([batchId, batchJobs]) => {
+      const selection = batchSelectionFor(batchId);
+      if (selection?.state === "complete" || selection?.state === "auto-kept") {
+        return false;
+      }
+      return batchReadyForFavorite(batchJobs);
+    });
+
+  if (!nextBatch) {
+    closeFavoriteModal();
+    return;
+  }
+
+  const [batchId, batchJobs] = nextBatch;
+  activeFavoriteBatchId = batchId;
+  renderFavoriteChooser(batchJobs);
+  setFavoriteModalVisible(true);
 }
 
 function renderJobs() {
@@ -1221,6 +1654,7 @@ function renderJobs() {
   jobsContainer.innerHTML = "";
 
   if (!jobs.length) {
+    closeFavoriteModal();
     const empty = document.createElement("div");
     empty.className = "empty-state";
     empty.textContent = "No workflow requests yet.";
@@ -1234,8 +1668,10 @@ function renderJobs() {
     const roundedProgress = Math.round(progressPercent);
     const fragment = jobTemplate.content.cloneNode(true);
     const card = fragment.querySelector(".job-card");
+    const rank = fragment.querySelector(".job-rank");
     const status = fragment.querySelector(".job-status");
     const title = fragment.querySelector(".job-title");
+    const subtitle = fragment.querySelector(".job-subtitle");
     const percent = fragment.querySelector(".job-percent");
     const fill = fragment.querySelector(".meter-fill");
     const phase = fragment.querySelector(".job-phase");
@@ -1245,9 +1681,15 @@ function renderJobs() {
 
     card.classList.toggle("is-completed", job.status === "completed" && job.conclusion === "success");
     card.classList.toggle("is-error", isFailedJob(job));
+    card.classList.toggle(
+      "is-favorite",
+      String(batchSelectionFor(job.batchId)?.favoriteRequestId || "") === String(job.requestId || ""),
+    );
 
     status.textContent = formatJobStatus(job);
+    rank.textContent = candidateRankLabel(job);
     title.textContent = job.displayName;
+    subtitle.textContent = candidateSubtitle(job);
     percent.textContent = `${roundedProgress}%`;
     fill.style.width = `${progressPercent.toFixed(1)}%`;
     phase.textContent = job.phase || "Queued";
@@ -1261,6 +1703,7 @@ function renderJobs() {
 
     jobsContainer.append(fragment);
   });
+  syncFavoriteChooser();
 }
 
 function renderPublished() {
@@ -1335,7 +1778,9 @@ async function refreshJobStatuses() {
           etaSeconds: derived.etaSeconds,
           etaUpdatedAt: Date.now(),
           etaLabel: derived.etaLabel,
+          folder: entry?.folder || job.folder || "",
           playPath: entry?.play_path || job.playPath || "",
+          thumbnailPath: entry?.thumbnail_path || job.thumbnailPath || "",
           entryId: entry?.id || job.entryId || "",
           failedAt:
             derived.conclusion && derived.conclusion !== "success"
@@ -1376,50 +1821,11 @@ async function refreshJobStatuses() {
   renderPublished();
 }
 
-async function queueSingleSource(rawInput, index, total) {
-  const inputValue = String(rawInput || "").trim();
-  const progressLabel = total > 1 ? `${index + 1} of ${total}` : "";
-  let pendingRequestId = "";
-
-  formMessage.textContent = progressLabel
-    ? `Searching ${progressLabel}: ${inputValue}`
-    : "Searching for the best hosted match...";
+async function dispatchCandidateJob(draftJob) {
+  upsertJob(draftJob);
+  renderJobs();
 
   try {
-    const resolved = await resolveSource(inputValue);
-    const displayName = resolved.displayName;
-    const requestId = createRequestId();
-    pendingRequestId = requestId;
-    const draftJob = {
-      requestId,
-      owner: appConfig.owner,
-      repo: appConfig.repo,
-      ref: appConfig.ref,
-      sourceInput: inputValue,
-      sourceUrl: resolved.sourceUrl,
-      displayName,
-      sourceMode: resolved.sourceMode,
-      matchedName: resolved.matchedName,
-      submittedAt: nowIso(),
-      status: "queued",
-      conclusion: "",
-      progressPercent: 6,
-      progressUpdatedAt: Date.now(),
-      phase: "Dispatching workflow",
-      etaLabel: "Calculating...",
-      etaSeconds: 0,
-      etaUpdatedAt: Date.now(),
-      runId: "",
-      runUrl: "",
-      jobsUrl: "",
-      htmlUrl: "",
-      playPath: "",
-      error: "",
-    };
-
-    upsertJob(draftJob);
-    renderJobs();
-
     const runInfo = await dispatchWorkflow(draftJob);
     upsertJob({
       ...draftJob,
@@ -1434,15 +1840,120 @@ async function queueSingleSource(rawInput, index, total) {
       etaUpdatedAt: Date.now(),
     });
     renderJobs();
-
     return {
       ok: true,
-      displayName,
-      resolutionReason: resolved.resolutionReason,
+      job: draftJob,
     };
   } catch (error) {
     upsertJob({
-      requestId: pendingRequestId || createRequestId(),
+      ...draftJob,
+      status: "completed",
+      conclusion: "failure",
+      progressPercent: 0,
+      progressUpdatedAt: Date.now(),
+      phase: "Build failed",
+      etaLabel: "Failed",
+      etaSeconds: 0,
+      etaUpdatedAt: Date.now(),
+      error: error.message,
+      failedAt: Date.now(),
+      lastServerUpdateAt: Date.now(),
+      lastSyncAttemptAt: Date.now(),
+      syncFailureCount: 0,
+    });
+    renderJobs();
+    return {
+      ok: false,
+      job: draftJob,
+      error: error.message,
+    };
+  }
+}
+
+async function queueSourceBatch(rawInput, index, total) {
+  const inputValue = String(rawInput || "").trim();
+  const progressLabel = total > 1 ? `${index + 1} of ${total}` : "";
+  const batchId = createRequestId();
+  const batchSubmittedAt = nowIso();
+
+  formMessage.textContent = progressLabel
+    ? `Searching ${progressLabel}: ${inputValue}`
+    : "Searching for the best hosted matches...";
+
+  try {
+    const resolvedCandidates = dedupeResolvedCandidates(
+      await resolveSourceCandidates(inputValue, SEARCH_CANDIDATE_COUNT),
+    ).slice(0, SEARCH_CANDIDATE_COUNT);
+    if (!resolvedCandidates.length) {
+      throw new Error(`No distinct candidates were found for ${inputValue}.`);
+    }
+
+    const results = [];
+    for (const [candidateIndex, candidate] of resolvedCandidates.entries()) {
+      formMessage.textContent = `Queueing ${inputValue}: candidate ${candidateIndex + 1} of ${resolvedCandidates.length}`;
+      const draftJob = {
+        requestId: createRequestId(),
+        batchId,
+        batchLabel: inputValue,
+        batchSubmittedAt,
+        candidateRank: candidateIndex + 1,
+        candidateTotal: resolvedCandidates.length,
+        candidateReason: candidate.resolutionReason,
+        candidateConfidence: candidate.confidence,
+        owner: appConfig.owner,
+        repo: appConfig.repo,
+        ref: appConfig.ref,
+        sourceInput: inputValue,
+        sourceUrl: candidate.sourceUrl,
+        displayName: candidate.displayName,
+        sourceMode: candidate.sourceMode,
+        matchedName: candidate.matchedName,
+        submittedAt: nowIso(),
+        status: "queued",
+        conclusion: "",
+        progressPercent: candidateIndex === 0 ? 6 : 4,
+        progressUpdatedAt: Date.now(),
+        phase: "Dispatching workflow",
+        etaLabel: "Calculating...",
+        etaSeconds: 0,
+        etaUpdatedAt: Date.now(),
+        runId: "",
+        runUrl: "",
+        jobsUrl: "",
+        htmlUrl: "",
+        playPath: "",
+        thumbnailPath: "",
+        entryId: "",
+        folder: "",
+        error: "",
+      };
+
+      results.push(await dispatchCandidateJob(draftJob));
+    }
+
+    const successCount = results.filter((result) => result.ok).length;
+    const failureCount = results.length - successCount;
+    return {
+      ok: successCount > 0,
+      inputValue,
+      batchId,
+      candidateCount: resolvedCandidates.length,
+      successCount,
+      failureCount,
+      displayName: resolvedCandidates[0]?.displayName || inputValue,
+      resolutionReason: resolvedCandidates[0]?.resolutionReason || "",
+      error: successCount > 0 ? "" : (results.find((result) => !result.ok)?.error || "No workflows were queued."),
+    };
+  } catch (error) {
+    upsertJob({
+      requestId: createRequestId(),
+      batchId,
+      batchLabel: inputValue,
+      batchSubmittedAt,
+      candidateRank: 1,
+      candidateTotal: 1,
+      candidateReason: "",
+      candidateConfidence: 0,
       owner: appConfig.owner,
       repo: appConfig.repo,
       ref: appConfig.ref,
@@ -1504,7 +2015,7 @@ async function handleSubmit(event) {
     const successes = [];
     const failures = [];
     for (const [index, inputValue] of requestedSources.entries()) {
-      const result = await queueSingleSource(inputValue, index, requestedSources.length);
+      const result = await queueSourceBatch(inputValue, index, requestedSources.length);
       if (result.ok) {
         successes.push(result);
       } else {
@@ -1519,11 +2030,14 @@ async function handleSubmit(event) {
     resetSourceInputs();
     if (successes.length === 1 && !failures.length) {
       const success = successes[0];
+      const candidateText = `${success.successCount || success.candidateCount} of ${success.candidateCount} candidate${success.candidateCount === 1 ? "" : "s"}`;
+      const failureText = success.failureCount ? ` ${success.failureCount} failed to queue.` : "";
       formMessage.textContent = success.resolutionReason
-        ? `Workflow started for ${success.displayName}. ${success.resolutionReason}`
-        : `Workflow started for ${success.displayName}`;
+        ? `Queued ${candidateText} for ${success.displayName}.${failureText} ${success.resolutionReason}`.trim()
+        : `Queued ${candidateText} for ${success.displayName}.${failureText}`.trim();
     } else {
-      const successText = `Queued ${successes.length} game${successes.length === 1 ? "" : "s"}.`;
+      const totalCandidates = successes.reduce((sum, item) => sum + (item.candidateCount || 0), 0);
+      const successText = `Queued ${totalCandidates} candidate build${totalCandidates === 1 ? "" : "s"} across ${successes.length} request${successes.length === 1 ? "" : "s"}.`;
       const failureText = failures.length
         ? ` Failed: ${failures
             .slice(0, 3)
@@ -1548,6 +2062,7 @@ bulkToggleButton?.addEventListener("click", () => {
 async function init() {
   loadConfig();
   loadJobs();
+  loadBatchSelections();
   loadJobHistory();
   await loadCatalog();
   await loadPublishedCatalog();

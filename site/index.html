@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Standalone Forge</title>
-    <link rel="stylesheet" href="./app.css?v=20260313-4" />
+    <link rel="stylesheet" href="./app.css?v=20260313-5" />
   </head>
   <body>
     <div class="page-shell">
@@ -53,10 +53,26 @@
       </main>
     </div>
 
+    <div id="favorite-modal" class="favorite-modal" hidden>
+      <div class="favorite-dialog">
+        <div class="favorite-header">
+          <p class="favorite-kicker">All candidates finished</p>
+          <h2 id="favorite-title" class="favorite-title">Pick the one you want to keep</h2>
+          <p id="favorite-copy" class="favorite-copy"></p>
+        </div>
+        <div id="favorite-grid" class="favorite-grid"></div>
+        <p id="favorite-status" class="favorite-status" aria-live="polite"></p>
+      </div>
+    </div>
+
     <template id="job-template">
       <article class="job-card">
         <div class="job-topline">
-          <h3 class="job-title"></h3>
+          <div class="job-heading">
+            <p class="job-rank"></p>
+            <h3 class="job-title"></h3>
+            <p class="job-subtitle"></p>
+          </div>
           <p class="job-percent"></p>
         </div>
 
@@ -75,7 +91,7 @@
       </article>
     </template>
 
-    <script src="./config.js?v=20260313-4"></script>
-    <script src="./app.js?v=20260313-4" defer></script>
+    <script src="./config.js?v=20260313-5"></script>
+    <script src="./app.js?v=20260313-5" defer></script>
   </body>
 </html>

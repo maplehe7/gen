@@ -791,6 +791,35 @@ function summarizeCandidate(candidate) {
   };
 }
 
+function canonicalCandidateKey(candidate) {
+  const normalized = cleanExtractedUrl(candidate?.sourceUrl || candidate?.url || "");
+  if (!normalized) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    parsed.hash = "";
+    const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    return `${parsed.protocol}//${parsed.hostname.toLowerCase()}${pathname}${parsed.search}`;
+  } catch (_error) {
+    return normalized.replace(/\/+$/, "").toLowerCase();
+  }
+}
+
+function withReasonSuffix(candidate, suffix = "") {
+  const trimmedSuffix = String(suffix || "").trim();
+  if (!trimmedSuffix) {
+    return candidate;
+  }
+  return {
+    ...candidate,
+    reason: candidate.reason
+      ? `${candidate.reason}${trimmedSuffix}`
+      : trimmedSuffix.replace(/^\s*\|\s*/, ""),
+  };
+}
+
 function analyzeCandidateHtml(candidate, html) {
   const htmlLower = html.toLowerCase();
   const rawTitle =
@@ -1089,6 +1118,77 @@ function isSafeBestEffortSearchResult(candidate) {
   return candidate.totalScore >= 75 || candidate.brandMatchScore >= 45;
 }
 
+function selectRankedCandidates(candidates, limit = 1, reasonSuffix = "") {
+  const ranked = sortCandidates(candidates);
+  const selected = [];
+  const seenKeys = new Set();
+
+  const pushCandidates = (predicate, suffix = "", forceHostedOnline = false) => {
+    ranked.forEach((candidate) => {
+      if (selected.length >= limit || !predicate(candidate)) {
+        return;
+      }
+      const key = canonicalCandidateKey(candidate);
+      if (!key || seenKeys.has(key)) {
+        return;
+      }
+      seenKeys.add(key);
+      selected.push(
+        withReasonSuffix(
+          forceHostedOnline ? { ...candidate, hostedOnline: true } : candidate,
+          suffix || reasonSuffix,
+        ),
+      );
+    });
+  };
+
+  pushCandidates((candidate) => isAcceptableSearchResult(candidate));
+  pushCandidates((candidate) => isFallbackSearchResult(candidate), reasonSuffix || " | best available match");
+  pushCandidates(
+    (candidate) => isClosestPlayableSearchResult(candidate),
+    reasonSuffix || " | closest playable match",
+  );
+  pushCandidates(
+    (candidate) => isSafeBestEffortSearchResult(candidate),
+    reasonSuffix || " | safe closest match",
+    true,
+  );
+
+  return {
+    candidates: selected.slice(0, limit),
+    alternatives: listAlternativeNames(ranked, selected[0]?.url || ""),
+  };
+}
+
+function mergeCandidateSelections(selections, limit = 1) {
+  const selected = [];
+  const seenKeys = new Set();
+  const alternativeNames = [];
+
+  (Array.isArray(selections) ? selections : []).forEach((selection) => {
+    (selection?.candidates || []).forEach((candidate) => {
+      if (selected.length >= limit) {
+        return;
+      }
+      const key = canonicalCandidateKey(candidate);
+      if (!key || seenKeys.has(key)) {
+        return;
+      }
+      seenKeys.add(key);
+      selected.push(candidate);
+    });
+    alternativeNames.push(...(selection?.alternatives || []));
+  });
+
+  return {
+    candidates: selected.slice(0, limit),
+    alternatives: uniqueBy(
+      alternativeNames.map((name) => String(name || "").trim()).filter(Boolean),
+      (name) => normalizeSearchText(name),
+    ).slice(0, 6),
+  };
+}
+
 async function loadDriveSiteIndex(siteConfig) {
   const cacheEntry = driveSiteIndexCache[siteConfig.id] || {
     loadedAt: 0,
@@ -1379,85 +1479,39 @@ async function searchWebFallback(query) {
   return sortCandidates(inspected);
 }
 
-function resolveSearchCandidates(candidates, reasonSuffix = "") {
-  const ranked = sortCandidates(candidates);
-  const bestCandidate = ranked.find((candidate) => isAcceptableSearchResult(candidate)) || null;
-
-  if (bestCandidate) {
-    return {
-      candidate: bestCandidate,
-      alternatives: listAlternativeNames(ranked, bestCandidate.url),
-    };
-  }
-
-  const fallbackCandidate = ranked.find((candidate) => isFallbackSearchResult(candidate)) || null;
-  if (fallbackCandidate) {
-    return {
-      candidate: {
-        ...fallbackCandidate,
-        reason: fallbackCandidate.reason
-          ? `${fallbackCandidate.reason}${reasonSuffix || " | best available match"}`
-          : (reasonSuffix || "best available match").replace(/^\s*\|\s*/, ""),
-      },
-      alternatives: listAlternativeNames(ranked, fallbackCandidate.url),
-    };
-  }
-
-  const closestPlayableCandidate = ranked.find((candidate) => isClosestPlayableSearchResult(candidate)) || null;
-  if (closestPlayableCandidate) {
-    return {
-      candidate: {
-        ...closestPlayableCandidate,
-        reason: closestPlayableCandidate.reason
-          ? `${closestPlayableCandidate.reason}${reasonSuffix || " | closest playable match"}`
-          : (reasonSuffix || "closest playable match").replace(/^\s*\|\s*/, ""),
-      },
-      alternatives: listAlternativeNames(ranked, closestPlayableCandidate.url),
-    };
-  }
-
-  const bestEffortCandidate = ranked.find((candidate) => isSafeBestEffortSearchResult(candidate)) || null;
-  if (bestEffortCandidate) {
-    return {
-      candidate: {
-        ...bestEffortCandidate,
-        hostedOnline: true,
-        reason: bestEffortCandidate.reason
-          ? `${bestEffortCandidate.reason}${reasonSuffix || " | safe closest match"}`
-          : (reasonSuffix || "safe closest match").replace(/^\s*\|\s*/, ""),
-      },
-      alternatives: listAlternativeNames(ranked, bestEffortCandidate.url),
-    };
-  }
-
-  return {
-    candidate: null,
-    alternatives: listAlternativeNames(ranked),
-  };
-}
-
-async function findBestSearchResult(query) {
+async function findSearchResults(query, limit = 1) {
   const driveCandidates = await searchDriveSite(query);
-  const driveResult = resolveSearchCandidates(
+  const driveResult = selectRankedCandidates(
     driveCandidates,
+    limit,
     " | preferred Google Sites match",
   );
-  if (driveResult.candidate) {
+  if (driveResult.candidates.length >= limit) {
     return driveResult;
   }
 
   const directHostCandidates = await searchDirectHostHeuristic(query);
-  const directHostResult = resolveSearchCandidates(
+  const directHostResult = selectRankedCandidates(
     sortCandidates([...driveCandidates, ...directHostCandidates]),
+    limit,
     " | direct host fallback",
   );
-  if (directHostResult.candidate) {
-    return directHostResult;
+  if (directHostResult.candidates.length >= limit) {
+    return mergeCandidateSelections([driveResult, directHostResult], limit);
   }
 
   const webCandidates = await searchWebFallback(query);
   const combined = sortCandidates([...driveCandidates, ...directHostCandidates, ...webCandidates]);
-  return resolveSearchCandidates(combined);
+  const webResult = selectRankedCandidates(combined, limit);
+  return mergeCandidateSelections([driveResult, directHostResult, webResult], limit);
+}
+
+async function findBestSearchResult(query) {
+  const result = await findSearchResults(query, 1);
+  return {
+    candidate: result.candidates[0] || null,
+    alternatives: result.alternatives || [],
+  };
 }
 
 function encodeBase64Utf8(value) {
@@ -1784,6 +1838,8 @@ async function handleConfig(request, env) {
 async function handleSearch(request, env) {
   const url = new URL(request.url);
   const query = collapseWhitespace(url.searchParams.get("query") || "");
+  const requestedLimit = Number.parseInt(String(url.searchParams.get("limit") || "1"), 10);
+  const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 1, 1), 6);
   if (!query) {
     return json(
       { error: "query is required." },
@@ -1794,8 +1850,8 @@ async function handleSearch(request, env) {
     );
   }
 
-  const result = await findBestSearchResult(query);
-  if (!result.candidate) {
+  const result = await findSearchResults(query, limit);
+  if (!result.candidates.length) {
     const alternatives = result.alternatives.length ? ` Closest matches: ${result.alternatives.join(", ")}.` : "";
     return json(
       { error: `No compatible hosted result was found for "${query}".${alternatives}` },
@@ -1806,7 +1862,19 @@ async function handleSearch(request, env) {
     );
   }
 
-  return json(summarizeCandidate(result.candidate), {
+  const summarizedCandidates = result.candidates.map((candidate, index) => ({
+    ...summarizeCandidate(candidate),
+    rank: index + 1,
+  }));
+  const payload = limit === 1
+    ? summarizedCandidates[0]
+    : {
+        query,
+        candidates: summarizedCandidates,
+        alternatives: result.alternatives,
+      };
+
+  return json(payload, {
     headers: corsHeaders(request, env),
   });
 }

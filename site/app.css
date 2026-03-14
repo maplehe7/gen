@@ -341,6 +341,11 @@ body {
   gap: 10px;
 }
 
+.job-card.is-favorite {
+  border-color: rgba(13, 111, 184, 0.45);
+  box-shadow: 0 0 0 1px rgba(13, 111, 184, 0.08);
+}
+
 .job-card.is-error {
   border-color: rgba(192, 54, 44, 0.45);
 }
@@ -350,6 +355,28 @@ body {
   justify-content: space-between;
   gap: 10px;
   align-items: flex-start;
+}
+
+.job-heading {
+  display: grid;
+  gap: 2px;
+}
+
+.job-rank,
+.job-subtitle {
+  margin: 0;
+  color: var(--muted);
+}
+
+.job-rank {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.job-subtitle {
+  font-size: 0.84rem;
 }
 
 .job-title,
@@ -402,6 +429,103 @@ body {
 .job-error {
   margin: 0;
   color: var(--error);
+}
+
+.favorite-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(12, 18, 24, 0.56);
+  backdrop-filter: blur(8px);
+}
+
+.favorite-dialog {
+  width: min(960px, 100%);
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(10, 53, 87, 0.12);
+  border-radius: 18px;
+  box-shadow: 0 24px 80px rgba(12, 18, 24, 0.18);
+}
+
+.favorite-header {
+  display: grid;
+  gap: 4px;
+}
+
+.favorite-kicker,
+.favorite-copy,
+.favorite-status,
+.favorite-rank,
+.favorite-reason,
+.favorite-failed-text {
+  margin: 0;
+  color: var(--muted);
+}
+
+.favorite-kicker {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.favorite-title,
+.favorite-card-title {
+  margin: 0;
+}
+
+.favorite-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.favorite-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.favorite-card.is-success {
+  border-color: rgba(13, 111, 184, 0.26);
+}
+
+.favorite-card.is-failed {
+  opacity: 0.82;
+}
+
+.favorite-thumb {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #ececec;
+}
+
+.favorite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.favorite-button {
+  background: var(--accent);
+  color: #fff;
+}
+
+.favorite-button:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
 }
 
 .empty-state {

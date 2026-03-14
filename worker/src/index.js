@@ -2236,6 +2236,30 @@ async function findRunByRequestId(env, requestId) {
   }) || null;
 }
 
+async function waitForRunByRequestId(env, requestId, attempts = 8, delayMs = 1500) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const run = await findRunByRequestId(env, requestId);
+    if (run) {
+      return run;
+    }
+    if (attempt < attempts - 1) {
+      await sleep(delayMs);
+    }
+  }
+  return null;
+}
+
+async function cancelWorkflowRun(env, runId) {
+  await githubNoContent(
+    `${githubApiBase(env)}/actions/runs/${encodeURIComponent(String(runId || "").trim())}/cancel`,
+    env,
+    {
+      method: "POST",
+    },
+    "Cancel workflow run",
+  );
+}
+
 async function handleConfig(request, env) {
   validateEnv(env);
   return json(
@@ -2322,6 +2346,79 @@ async function handleDispatch(request, env) {
       runUrl: run.url,
       htmlUrl: run.html_url,
       jobsUrl: run.jobs_url,
+    },
+    {
+      headers: corsHeaders(request, env),
+    },
+  );
+}
+
+async function handleCancel(request, env) {
+  validateEnv(env);
+  const body = await request.json().catch(() => null);
+  const runId = String(body?.runId || "").trim();
+  const requestId = String(body?.requestId || "").trim();
+  if (!runId && !requestId) {
+    return json(
+      { error: "runId or requestId is required." },
+      {
+        status: 400,
+        headers: corsHeaders(request, env),
+      },
+    );
+  }
+
+  const run = runId
+    ? await githubJsonOrNull(
+        `${githubApiBase(env)}/actions/runs/${encodeURIComponent(runId)}`,
+        env,
+        {},
+        "Get workflow run",
+      )
+    : await waitForRunByRequestId(env, requestId);
+
+  if (!run) {
+    return json(
+      {
+        ok: true,
+        cancelled: false,
+        found: false,
+        requestId,
+        runId: "",
+      },
+      {
+        headers: corsHeaders(request, env),
+      },
+    );
+  }
+
+  const runStatus = String(run?.status || "").trim();
+  const runConclusion = String(run?.conclusion || "").trim();
+  if (runStatus === "completed") {
+    return json(
+      {
+        ok: true,
+        cancelled: runConclusion === "cancelled",
+        found: true,
+        alreadyCompleted: true,
+        requestId,
+        runId: String(run?.id || "").trim(),
+        conclusion: runConclusion,
+      },
+      {
+        headers: corsHeaders(request, env),
+      },
+    );
+  }
+
+  await cancelWorkflowRun(env, run.id);
+  return json(
+    {
+      ok: true,
+      cancelled: true,
+      found: true,
+      requestId,
+      runId: String(run?.id || "").trim(),
     },
     {
       headers: corsHeaders(request, env),
@@ -2730,6 +2827,9 @@ export default {
       }
       if (request.method === "POST" && url.pathname === "/delete") {
         return await handleDelete(request, env);
+      }
+      if (request.method === "POST" && url.pathname === "/cancel") {
+        return await handleCancel(request, env);
       }
       if (request.method === "POST" && url.pathname === "/log-failure") {
         return await handleLogFailure(request, env);

@@ -1,0 +1,1066 @@
+logged_at: 2026-03-14T05:58:15.405Z
+request_id: 21c36f6d-4fc8-4dcf-a679-7de1616a34e3
+batch_id: ba981d12-9302-458a-9a42-1631d9f4fd48
+batch_label: Geometry Dash
+candidate_rank: 8
+candidate_total: 9
+display_name: Geometry Dash
+matched_name: Geometry Dash
+source_input: Geometry Dash
+source_url: https://geometry-dashonline.com/
+source_mode: web-search
+candidate_reason: matched web fallback data file, iframe, hosted asset safe closest match
+candidate_confidence: 100
+status: completed
+conclusion: failure
+phase: Build failed
+error: Workflow finished with conclusion: failure
+run_id: 23081830481
+run_url: https://api.github.com/repos/maplehe7/gen/actions/runs/23081830481
+html_url: https://github.com/maplehe7/gen/actions/runs/23081830481
+jobs_url: https://api.github.com/repos/maplehe7/gen/actions/runs/23081830481/jobs
+failed_at: 1773467893665
+
+run_payload:
+{
+  "id": 23081830481,
+  "name": "21c36f6d-4fc8-4dcf-a679-7de1616a34e3",
+  "node_id": "WFR_kwLORlpVlc8AAAAFX8jIUQ",
+  "head_branch": "main",
+  "head_sha": "d016469f31a9f3171f45d1dcc9420f486eb07582",
+  "path": ".github/workflows/build-game.yml",
+  "display_title": "21c36f6d-4fc8-4dcf-a679-7de1616a34e3",
+  "run_number": 103,
+  "event": "workflow_dispatch",
+  "status": "completed",
+  "conclusion": "failure",
+  "workflow_id": 245399170,
+  "check_suite_id": 60584433357,
+  "check_suite_node_id": "CS_kwDORlpVlc8AAAAOGx0WzQ",
+  "url": "https://api.github.com/repos/maplehe7/gen/actions/runs/23081830481",
+  "html_url": "https://github.com/maplehe7/gen/actions/runs/23081830481",
+  "pull_requests": [],
+  "created_at": "2026-03-14T05:56:02Z",
+  "updated_at": "2026-03-14T05:57:13Z",
+  "actor": {
+    "login": "maplehe7",
+    "id": 144498852,
+    "node_id": "U_kgDOCJzgpA",
+    "avatar_url": "https://avatars.githubusercontent.com/u/144498852?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/maplehe7",
+    "html_url": "https://github.com/maplehe7",
+    "followers_url": "https://api.github.com/users/maplehe7/followers",
+    "following_url": "https://api.github.com/users/maplehe7/following{/other_user}",
+    "gists_url": "https://api.github.com/users/maplehe7/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/maplehe7/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/maplehe7/subscriptions",
+    "organizations_url": "https://api.github.com/users/maplehe7/orgs",
+    "repos_url": "https://api.github.com/users/maplehe7/repos",
+    "events_url": "https://api.github.com/users/maplehe7/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/maplehe7/received_events",
+    "type": "User",
+    "user_view_type": "public",
+    "site_admin": false
+  },
+  "run_attempt": 1,
+  "referenced_workflows": [],
+  "run_started_at": "2026-03-14T05:56:02Z",
+  "triggering_actor": {
+    "login": "maplehe7",
+    "id": 144498852,
+    "node_id": "U_kgDOCJzgpA",
+    "avatar_url": "https://avatars.githubusercontent.com/u/144498852?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/maplehe7",
+    "html_url": "https://github.com/maplehe7",
+    "followers_url": "https://api.github.com/users/maplehe7/followers",
+    "following_url": "https://api.github.com/users/maplehe7/following{/other_user}",
+    "gists_url": "https://api.github.com/users/maplehe7/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/maplehe7/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/maplehe7/subscriptions",
+    "organizations_url": "https://api.github.com/users/maplehe7/orgs",
+    "repos_url": "https://api.github.com/users/maplehe7/repos",
+    "events_url": "https://api.github.com/users/maplehe7/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/maplehe7/received_events",
+    "type": "User",
+    "user_view_type": "public",
+    "site_admin": false
+  },
+  "jobs_url": "https://api.github.com/repos/maplehe7/gen/actions/runs/23081830481/jobs",
+  "logs_url": "https://api.github.com/repos/maplehe7/gen/actions/runs/23081830481/logs",
+  "check_suite_url": "https://api.github.com/repos/maplehe7/gen/check-suites/60584433357",
+  "artifacts_url": "https://api.github.com/repos/maplehe7/gen/actions/runs/23081830481/artifacts",
+  "cancel_url": "https://api.github.com/repos/maplehe7/gen/actions/runs/23081830481/cancel",
+  "rerun_url": "https://api.github.com/repos/maplehe7/gen/actions/runs/23081830481/rerun",
+  "previous_attempt_url": null,
+  "workflow_url": "https://api.github.com/repos/maplehe7/gen/actions/workflows/245399170",
+  "head_commit": {
+    "id": "d016469f31a9f3171f45d1dcc9420f486eb07582",
+    "tree_id": "ccf60c3c20fa5eb8900fc8d1022d86790343b1db",
+    "message": "Index failed build for Play Geometry Dash Games Online for Free",
+    "timestamp": "2026-03-14T05:55:50Z",
+    "author": {
+      "name": "maplehe7",
+      "email": "144498852+maplehe7@users.noreply.github.com"
+    },
+    "committer": {
+      "name": "maplehe7",
+      "email": "144498852+maplehe7@users.noreply.github.com"
+    }
+  },
+  "repository": {
+    "id": 1180325269,
+    "node_id": "R_kgDORlpVlQ",
+    "name": "gen",
+    "full_name": "maplehe7/gen",
+    "private": false,
+    "owner": {
+      "login": "maplehe7",
+      "id": 144498852,
+      "node_id": "U_kgDOCJzgpA",
+      "avatar_url": "https://avatars.githubusercontent.com/u/144498852?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/maplehe7",
+      "html_url": "https://github.com/maplehe7",
+      "followers_url": "https://api.github.com/users/maplehe7/followers",
+      "following_url": "https://api.github.com/users/maplehe7/following{/other_user}",
+      "gists_url": "https://api.github.com/users/maplehe7/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/maplehe7/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/maplehe7/subscriptions",
+      "organizations_url": "https://api.github.com/users/maplehe7/orgs",
+      "repos_url": "https://api.github.com/users/maplehe7/repos",
+      "events_url": "https://api.github.com/users/maplehe7/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/maplehe7/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "html_url": "https://github.com/maplehe7/gen",
+    "description": null,
+    "fork": false,
+    "url": "https://api.github.com/repos/maplehe7/gen",
+    "forks_url": "https://api.github.com/repos/maplehe7/gen/forks",
+    "keys_url": "https://api.github.com/repos/maplehe7/gen/keys{/key_id}",
+    "collaborators_url": "https://api.github.com/repos/maplehe7/gen/collaborators{/collaborator}",
+    "teams_url": "https://api.github.com/repos/maplehe7/gen/teams",
+    "hooks_url": "https://api.github.com/repos/maplehe7/gen/hooks",
+    "issue_events_url": "https://api.github.com/repos/maplehe7/gen/issues/events{/number}",
+    "events_url": "https://api.github.com/repos/maplehe7/gen/events",
+    "assignees_url": "https://api.github.com/repos/maplehe7/gen/assignees{/user}",
+    "branches_url": "https://api.github.com/repos/maplehe7/gen/branches{/branch}",
+    "tags_url": "https://api.github.com/repos/maplehe7/gen/tags",
+    "blobs_url": "https://api.github.com/repos/maplehe7/gen/git/blobs{/sha}",
+    "git_tags_url": "https://api.github.com/repos/maplehe7/gen/git/tags{/sha}",
+    "git_refs_url": "https://api.github.com/repos/maplehe7/gen/git/refs{/sha}",
+    "trees_url": "https://api.github.com/repos/maplehe7/gen/git/trees{/sha}",
+    "statuses_url": "https://api.github.com/repos/maplehe7/gen/statuses/{sha}",
+    "languages_url": "https://api.github.com/repos/maplehe7/gen/languages",
+    "stargazers_url": "https://api.github.com/repos/maplehe7/gen/stargazers",
+    "contributors_url": "https://api.github.com/repos/maplehe7/gen/contributors",
+    "subscribers_url": "https://api.github.com/repos/maplehe7/gen/subscribers",
+    "subscription_url": "https://api.github.com/repos/maplehe7/gen/subscription",
+    "commits_url": "https://api.github.com/repos/maplehe7/gen/commits{/sha}",
+    "git_commits_url": "https://api.github.com/repos/maplehe7/gen/git/commits{/sha}",
+    "comments_url": "https://api.github.com/repos/maplehe7/gen/comments{/number}",
+    "issue_comment_url": "https://api.github.com/repos/maplehe7/gen/issues/comments{/number}",
+    "contents_url": "https://api.github.com/repos/maplehe7/gen/contents/{+path}",
+    "compare_url": "https://api.github.com/repos/maplehe7/gen/compare/{base}...{head}",
+    "merges_url": "https://api.github.com/repos/maplehe7/gen/merges",
+    "archive_url": "https://api.github.com/repos/maplehe7/gen/{archive_format}{/ref}",
+    "downloads_url": "https://api.github.com/repos/maplehe7/gen/downloads",
+    "issues_url": "https://api.github.com/repos/maplehe7/gen/issues{/number}",
+    "pulls_url": "https://api.github.com/repos/maplehe7/gen/pulls{/number}",
+    "milestones_url": "https://api.github.com/repos/maplehe7/gen/milestones{/number}",
+    "notifications_url": "https://api.github.com/repos/maplehe7/gen/notifications{?since,all,participating}",
+    "labels_url": "https://api.github.com/repos/maplehe7/gen/labels{/name}",
+    "releases_url": "https://api.github.com/repos/maplehe7/gen/releases{/id}",
+    "deployments_url": "https://api.github.com/repos/maplehe7/gen/deployments"
+  },
+  "head_repository": {
+    "id": 1180325269,
+    "node_id": "R_kgDORlpVlQ",
+    "name": "gen",
+    "full_name": "maplehe7/gen",
+    "private": false,
+    "owner": {
+      "login": "maplehe7",
+      "id": 144498852,
+      "node_id": "U_kgDOCJzgpA",
+      "avatar_url": "https://avatars.githubusercontent.com/u/144498852?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/maplehe7",
+      "html_url": "https://github.com/maplehe7",
+      "followers_url": "https://api.github.com/users/maplehe7/followers",
+      "following_url": "https://api.github.com/users/maplehe7/following{/other_user}",
+      "gists_url": "https://api.github.com/users/maplehe7/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/maplehe7/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/maplehe7/subscriptions",
+      "organizations_url": "https://api.github.com/users/maplehe7/orgs",
+      "repos_url": "https://api.github.com/users/maplehe7/repos",
+      "events_url": "https://api.github.com/users/maplehe7/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/maplehe7/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "html_url": "https://github.com/maplehe7/gen",
+    "description": null,
+    "fork": false,
+    "url": "https://api.github.com/repos/maplehe7/gen",
+    "forks_url": "https://api.github.com/repos/maplehe7/gen/forks",
+    "keys_url": "https://api.github.com/repos/maplehe7/gen/keys{/key_id}",
+    "collaborators_url": "https://api.github.com/repos/maplehe7/gen/collaborators{/collaborator}",
+    "teams_url": "https://api.github.com/repos/maplehe7/gen/teams",
+    "hooks_url": "https://api.github.com/repos/maplehe7/gen/hooks",
+    "issue_events_url": "https://api.github.com/repos/maplehe7/gen/issues/events{/number}",
+    "events_url": "https://api.github.com/repos/maplehe7/gen/events",
+    "assignees_url": "https://api.github.com/repos/maplehe7/gen/assignees{/user}",
+    "branches_url": "https://api.github.com/repos/maplehe7/gen/branches{/branch}",
+    "tags_url": "https://api.github.com/repos/maplehe7/gen/tags",
+    "blobs_url": "https://api.github.com/repos/maplehe7/gen/git/blobs{/sha}",
+    "git_tags_url": "https://api.github.com/repos/maplehe7/gen/git/tags{/sha}",
+    "git_refs_url": "https://api.github.com/repos/maplehe7/gen/git/refs{/sha}",
+    "trees_url": "https://api.github.com/repos/maplehe7/gen/git/trees{/sha}",
+    "statuses_url": "https://api.github.com/repos/maplehe7/gen/statuses/{sha}",
+    "languages_url": "https://api.github.com/repos/maplehe7/gen/languages",
+    "stargazers_url": "https://api.github.com/repos/maplehe7/gen/stargazers",
+    "contributors_url": "https://api.github.com/repos/maplehe7/gen/contributors",
+    "subscribers_url": "https://api.github.com/repos/maplehe7/gen/subscribers",
+    "subscription_url": "https://api.github.com/repos/maplehe7/gen/subscription",
+    "commits_url": "https://api.github.com/repos/maplehe7/gen/commits{/sha}",
+    "git_commits_url": "https://api.github.com/repos/maplehe7/gen/git/commits{/sha}",
+    "comments_url": "https://api.github.com/repos/maplehe7/gen/comments{/number}",
+    "issue_comment_url": "https://api.github.com/repos/maplehe7/gen/issues/comments{/number}",
+    "contents_url": "https://api.github.com/repos/maplehe7/gen/contents/{+path}",
+    "compare_url": "https://api.github.com/repos/maplehe7/gen/compare/{base}...{head}",
+    "merges_url": "https://api.github.com/repos/maplehe7/gen/merges",
+    "archive_url": "https://api.github.com/repos/maplehe7/gen/{archive_format}{/ref}",
+    "downloads_url": "https://api.github.com/repos/maplehe7/gen/downloads",
+    "issues_url": "https://api.github.com/repos/maplehe7/gen/issues{/number}",
+    "pulls_url": "https://api.github.com/repos/maplehe7/gen/pulls{/number}",
+    "milestones_url": "https://api.github.com/repos/maplehe7/gen/milestones{/number}",
+    "notifications_url": "https://api.github.com/repos/maplehe7/gen/notifications{?since,all,participating}",
+    "labels_url": "https://api.github.com/repos/maplehe7/gen/labels{/name}",
+    "releases_url": "https://api.github.com/repos/maplehe7/gen/releases{/id}",
+    "deployments_url": "https://api.github.com/repos/maplehe7/gen/deployments"
+  }
+}
+
+jobs_payload:
+{
+  "total_count": 2,
+  "jobs": [
+    {
+      "id": 67052356943,
+      "run_id": 23081830481,
+      "workflow_name": "21c36f6d-4fc8-4dcf-a679-7de1616a34e3",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/maplehe7/gen/actions/runs/23081830481",
+      "run_attempt": 1,
+      "node_id": "CR_kwDORlpVlc8AAAAPnKHFTw",
+      "head_sha": "d016469f31a9f3171f45d1dcc9420f486eb07582",
+      "url": "https://api.github.com/repos/maplehe7/gen/actions/jobs/67052356943",
+      "html_url": "https://github.com/maplehe7/gen/actions/runs/23081830481/job/67052356943",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-03-14T05:56:21Z",
+      "started_at": "2026-03-14T05:56:23Z",
+      "completed_at": "2026-03-14T05:57:12Z",
+      "name": "build",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-03-14T05:56:24Z",
+          "completed_at": "2026-03-14T05:56:25Z"
+        },
+        {
+          "name": "Checkout source",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-03-14T05:56:25Z",
+          "completed_at": "2026-03-14T05:56:29Z"
+        },
+        {
+          "name": "Restore previous Pages state",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-03-14T05:56:29Z",
+          "completed_at": "2026-03-14T05:56:30Z"
+        },
+        {
+          "name": "Setup Python",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-03-14T05:56:30Z",
+          "completed_at": "2026-03-14T05:56:30Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-03-14T05:56:30Z",
+          "completed_at": "2026-03-14T05:56:54Z"
+        },
+        {
+          "name": "Resolve workflow inputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-03-14T05:56:54Z",
+          "completed_at": "2026-03-14T05:56:54Z"
+        },
+        {
+          "name": "Build or update Pages site",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 7,
+          "started_at": "2026-03-14T05:56:54Z",
+          "completed_at": "2026-03-14T05:57:11Z"
+        },
+        {
+          "name": "Persist Pages state branch",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 8,
+          "started_at": "2026-03-14T05:57:11Z",
+          "completed_at": "2026-03-14T05:57:11Z"
+        },
+        {
+          "name": "Configure GitHub Pages",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 9,
+          "started_at": "2026-03-14T05:57:11Z",
+          "completed_at": "2026-03-14T05:57:11Z"
+        },
+        {
+          "name": "Upload Pages artifact",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 10,
+          "started_at": "2026-03-14T05:57:11Z",
+          "completed_at": "2026-03-14T05:57:11Z"
+        },
+        {
+          "name": "Post Setup Python",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 19,
+          "started_at": "2026-03-14T05:57:11Z",
+          "completed_at": "2026-03-14T05:57:11Z"
+        },
+        {
+          "name": "Post Checkout source",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 20,
+          "started_at": "2026-03-14T05:57:11Z",
+          "completed_at": "2026-03-14T05:57:11Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 21,
+          "started_at": "2026-03-14T05:57:11Z",
+          "completed_at": "2026-03-14T05:57:11Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/maplehe7/gen/check-runs/67052356943",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000000617,
+      "runner_name": "GitHub Actions 1000000617",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 67052387188,
+      "run_id": 23081830481,
+      "workflow_name": "21c36f6d-4fc8-4dcf-a679-7de1616a34e3",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/maplehe7/gen/actions/runs/23081830481",
+      "run_attempt": 1,
+      "node_id": "CR_kwDORlpVlc8AAAAPnKI7dA",
+      "head_sha": "d016469f31a9f3171f45d1dcc9420f486eb07582",
+      "url": "https://api.github.com/repos/maplehe7/gen/actions/jobs/67052387188",
+      "html_url": "https://github.com/maplehe7/gen/actions/runs/23081830481/job/67052387188",
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-03-14T05:57:13Z",
+      "started_at": "2026-03-14T05:57:13Z",
+      "completed_at": "2026-03-14T05:57:13Z",
+      "name": "deploy",
+      "steps": [],
+      "check_run_url": "https://api.github.com/repos/maplehe7/gen/check-runs/67052387188",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": null,
+      "runner_name": null,
+      "runner_group_id": null,
+      "runner_group_name": null
+    }
+  ]
+}
+
+job_logs:
+Job: build
+id: 67052356943
+status: completed
+conclusion: failure
+started_at: 2026-03-14T05:56:23Z
+completed_at: 2026-03-14T05:57:12Z
+steps:
+- Set up job | status=completed | conclusion=success
+- Checkout source | status=completed | conclusion=success
+- Restore previous Pages state | status=completed | conclusion=success
+- Setup Python | status=completed | conclusion=success
+- Install dependencies | status=completed | conclusion=success
+- Resolve workflow inputs | status=completed | conclusion=success
+- Build or update Pages site | status=completed | conclusion=failure
+- Persist Pages state branch | status=completed | conclusion=skipped
+- Configure GitHub Pages | status=completed | conclusion=skipped
+- Upload Pages artifact | status=completed | conclusion=skipped
+- Post Setup Python | status=completed | conclusion=skipped
+- Post Checkout source | status=completed | conclusion=success
+- Complete job | status=completed | conclusion=success
+
+full_log:
+2026-03-14T05:56:24.1617395Z Current runner version: '2.332.0'
+2026-03-14T05:56:24.1651637Z ##[group]Runner Image Provisioner
+2026-03-14T05:56:24.1652764Z Hosted Compute Agent
+2026-03-14T05:56:24.1653874Z Version: 20260213.493
+2026-03-14T05:56:24.1654900Z Commit: 5c115507f6dd24b8de37d8bbe0bb4509d0cc0fa3
+2026-03-14T05:56:24.1656099Z Build Date: 2026-02-13T00:28:41Z
+2026-03-14T05:56:24.1657566Z Worker ID: {bd04b5b8-5750-4966-bbc0-a34be89b46dc}
+2026-03-14T05:56:24.1658820Z Azure Region: eastus2
+2026-03-14T05:56:24.1659800Z ##[endgroup]
+2026-03-14T05:56:24.1661931Z ##[group]Operating System
+2026-03-14T05:56:24.1663004Z Ubuntu
+2026-03-14T05:56:24.1663722Z 24.04.3
+2026-03-14T05:56:24.1664564Z LTS
+2026-03-14T05:56:24.1665359Z ##[endgroup]
+2026-03-14T05:56:24.1666304Z ##[group]Runner Image
+2026-03-14T05:56:24.1667576Z Image: ubuntu-24.04
+2026-03-14T05:56:24.1668490Z Version: 20260309.50.1
+2026-03-14T05:56:24.1670495Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260309.50/images/ubuntu/Ubuntu2404-Readme.md
+2026-03-14T05:56:24.1673259Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260309.50
+2026-03-14T05:56:24.1674914Z ##[endgroup]
+2026-03-14T05:56:24.1677015Z ##[group]GITHUB_TOKEN Permissions
+2026-03-14T05:56:24.1679743Z Contents: write
+2026-03-14T05:56:24.1680606Z Metadata: read
+2026-03-14T05:56:24.1681559Z Pages: write
+2026-03-14T05:56:24.1682388Z ##[endgroup]
+2026-03-14T05:56:24.1685045Z Secret source: Actions
+2026-03-14T05:56:24.1686481Z Prepare workflow directory
+2026-03-14T05:56:24.2137740Z Prepare all required actions
+2026-03-14T05:56:24.2192026Z Getting action download info
+2026-03-14T05:56:24.5054335Z Download action repository 'actions/checkout@v4' (SHA:34e114876b0b11c390a56381ad16ebd13914f8d5)
+2026-03-14T05:56:24.6329748Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-03-14T05:56:24.7541711Z Download action repository 'actions/configure-pages@v5' (SHA:983d7736d9b0ae728b81ab479565c72886d7745b)
+2026-03-14T05:56:24.9859536Z Download action repository 'actions/upload-pages-artifact@v3' (SHA:56afc609e74202658d3ffba0e8f6dda462b719fa)
+2026-03-14T05:56:25.2872277Z Getting action download info
+2026-03-14T05:56:25.3859996Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-03-14T05:56:25.5374303Z Complete job name: build
+2026-03-14T05:56:25.6246564Z ##[group]Run actions/checkout@v4
+2026-03-14T05:56:25.6248299Z with:
+2026-03-14T05:56:25.6248966Z   fetch-depth: 0
+2026-03-14T05:56:25.6249701Z   repository: maplehe7/gen
+2026-03-14T05:56:25.6250812Z   token: ***
+2026-03-14T05:56:25.6251493Z   ssh-strict: true
+2026-03-14T05:56:25.6252224Z   ssh-user: git
+2026-03-14T05:56:25.6252959Z   persist-credentials: true
+2026-03-14T05:56:25.6253777Z   clean: true
+2026-03-14T05:56:25.6254516Z   sparse-checkout-cone-mode: true
+2026-03-14T05:56:25.6255426Z   fetch-tags: false
+2026-03-14T05:56:25.6256167Z   show-progress: true
+2026-03-14T05:56:25.6257055Z   lfs: false
+2026-03-14T05:56:25.6257762Z   submodules: false
+2026-03-14T05:56:25.6258510Z   set-safe-directory: true
+2026-03-14T05:56:25.6259580Z ##[endgroup]
+2026-03-14T05:56:25.7371961Z Syncing repository: maplehe7/gen
+2026-03-14T05:56:25.7374297Z ##[group]Getting Git version info
+2026-03-14T05:56:25.7375431Z Working directory is '/home/runner/work/gen/gen'
+2026-03-14T05:56:25.7377376Z [command]/usr/bin/git version
+2026-03-14T05:56:25.7450406Z git version 2.53.0
+2026-03-14T05:56:25.7477907Z ##[endgroup]
+2026-03-14T05:56:25.7491607Z Temporarily overriding HOME='/home/runner/work/_temp/cb1d42f7-7555-4651-a1e9-234fd1a961c6' before making global git config changes
+2026-03-14T05:56:25.7494356Z Adding repository directory to the temporary git global config as a safe directory
+2026-03-14T05:56:25.7503303Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/gen/gen
+2026-03-14T05:56:25.7545580Z Deleting the contents of '/home/runner/work/gen/gen'
+2026-03-14T05:56:25.7549809Z ##[group]Initializing the repository
+2026-03-14T05:56:25.7553549Z [command]/usr/bin/git init /home/runner/work/gen/gen
+2026-03-14T05:56:25.7682032Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-03-14T05:56:25.7683973Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-03-14T05:56:25.7686601Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-03-14T05:56:25.7689316Z hint: call:
+2026-03-14T05:56:25.7690529Z hint:
+2026-03-14T05:56:25.7692076Z hint: 	git config --global init.defaultBranch <name>
+2026-03-14T05:56:25.7694143Z hint:
+2026-03-14T05:56:25.7695970Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-03-14T05:56:25.7699346Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-03-14T05:56:25.7701854Z hint:
+2026-03-14T05:56:25.7702972Z hint: 	git branch -m <name>
+2026-03-14T05:56:25.7704284Z hint:
+2026-03-14T05:56:25.7706278Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-03-14T05:56:25.7708750Z Initialized empty Git repository in /home/runner/work/gen/gen/.git/
+2026-03-14T05:56:25.7711551Z [command]/usr/bin/git remote add origin https://github.com/maplehe7/gen
+2026-03-14T05:56:25.7738870Z ##[endgroup]
+2026-03-14T05:56:25.7741153Z ##[group]Disabling automatic garbage collection
+2026-03-14T05:56:25.7743341Z [command]/usr/bin/git config --local gc.auto 0
+2026-03-14T05:56:25.7774617Z ##[endgroup]
+2026-03-14T05:56:25.7776968Z ##[group]Setting up auth
+2026-03-14T05:56:25.7782432Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-03-14T05:56:25.7817476Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-03-14T05:56:25.8181020Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-03-14T05:56:25.8213132Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-03-14T05:56:25.8444015Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-03-14T05:56:25.8477771Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-03-14T05:56:25.8714203Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-03-14T05:56:25.8750170Z ##[endgroup]
+2026-03-14T05:56:25.8752427Z ##[group]Fetching the repository
+2026-03-14T05:56:25.8761529Z [command]/usr/bin/git -c protocol.version=2 fetch --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/*
+2026-03-14T05:56:28.9811992Z From https://github.com/maplehe7/gen
+2026-03-14T05:56:28.9814070Z  * [new branch]      main        -> origin/main
+2026-03-14T05:56:28.9814884Z  * [new branch]      pages-state -> origin/pages-state
+2026-03-14T05:56:28.9857991Z [command]/usr/bin/git branch --list --remote origin/main
+2026-03-14T05:56:28.9883056Z   origin/main
+2026-03-14T05:56:28.9891730Z [command]/usr/bin/git rev-parse refs/remotes/origin/main
+2026-03-14T05:56:28.9917690Z d377d621a75288417bb8365bcd5d973cca1ed654
+2026-03-14T05:56:28.9928111Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules origin +d016469f31a9f3171f45d1dcc9420f486eb07582:refs/remotes/origin/main
+2026-03-14T05:56:28.9972467Z From https://github.com/maplehe7/gen
+2026-03-14T05:56:28.9973388Z  + d377d62...d016469 d016469f31a9f3171f45d1dcc9420f486eb07582 -> origin/main  (forced update)
+2026-03-14T05:56:28.9999488Z ##[endgroup]
+2026-03-14T05:56:28.9999934Z ##[group]Determining the checkout info
+2026-03-14T05:56:29.0000662Z ##[endgroup]
+2026-03-14T05:56:29.0005267Z [command]/usr/bin/git sparse-checkout disable
+2026-03-14T05:56:29.0042732Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-03-14T05:56:29.0069617Z ##[group]Checking out the ref
+2026-03-14T05:56:29.0074355Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-03-14T05:56:29.0182676Z Switched to a new branch 'main'
+2026-03-14T05:56:29.0185560Z branch 'main' set up to track 'origin/main'.
+2026-03-14T05:56:29.0192305Z ##[endgroup]
+2026-03-14T05:56:29.0229910Z [command]/usr/bin/git log -1 --format=%H
+2026-03-14T05:56:29.0253295Z d016469f31a9f3171f45d1dcc9420f486eb07582
+2026-03-14T05:56:29.0438247Z ##[group]Run mkdir -p state
+2026-03-14T05:56:29.0438653Z [36;1mmkdir -p state[0m
+2026-03-14T05:56:29.0439065Z [36;1mif git ls-remote --exit-code --heads origin pages-state; then[0m
+2026-03-14T05:56:29.0439481Z [36;1m  git fetch origin pages-state[0m
+2026-03-14T05:56:29.0439856Z [36;1m  git archive origin/pages-state | tar -x -C state[0m
+2026-03-14T05:56:29.0440195Z [36;1mfi[0m
+2026-03-14T05:56:29.0494324Z shell: /usr/bin/bash -e {0}
+2026-03-14T05:56:29.0494669Z ##[endgroup]
+2026-03-14T05:56:29.1895080Z 39b4a261b3172ae58fb499e55a345ad5bbd62d86	refs/heads/pages-state
+2026-03-14T05:56:29.3360677Z From https://github.com/maplehe7/gen
+2026-03-14T05:56:29.3361125Z  * branch            pages-state -> FETCH_HEAD
+2026-03-14T05:56:30.5234825Z ##[group]Run actions/setup-python@v5
+2026-03-14T05:56:30.5235105Z with:
+2026-03-14T05:56:30.5235271Z   python-version: 3.12
+2026-03-14T05:56:30.5235473Z   check-latest: false
+2026-03-14T05:56:30.5235786Z   token: ***
+2026-03-14T05:56:30.5235972Z   update-environment: true
+2026-03-14T05:56:30.5236184Z   allow-prereleases: false
+2026-03-14T05:56:30.5236391Z   freethreaded: false
+2026-03-14T05:56:30.5236580Z ##[endgroup]
+2026-03-14T05:56:30.6911353Z ##[group]Installed versions
+2026-03-14T05:56:30.7013062Z Successfully set up CPython (3.12.13)
+2026-03-14T05:56:30.7013826Z ##[endgroup]
+2026-03-14T05:56:30.7113360Z ##[group]Run python -m pip install brotli playwright
+2026-03-14T05:56:30.7113755Z [36;1mpython -m pip install brotli playwright[0m
+2026-03-14T05:56:30.7114116Z [36;1mpython -m playwright install --with-deps chromium[0m
+2026-03-14T05:56:30.7171584Z shell: /usr/bin/bash -e {0}
+2026-03-14T05:56:30.7171818Z env:
+2026-03-14T05:56:30.7172055Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-03-14T05:56:30.7172489Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+2026-03-14T05:56:30.7172902Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-03-14T05:56:30.7173260Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-03-14T05:56:30.7173620Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-03-14T05:56:30.7173979Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+2026-03-14T05:56:30.7174277Z ##[endgroup]
+2026-03-14T05:56:33.0182539Z Collecting brotli
+2026-03-14T05:56:33.0856525Z   Downloading brotli-1.2.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (6.1 kB)
+2026-03-14T05:56:33.1333869Z Collecting playwright
+2026-03-14T05:56:33.1407234Z   Downloading playwright-1.58.0-py3-none-manylinux1_x86_64.whl.metadata (3.5 kB)
+2026-03-14T05:56:33.1594196Z Collecting pyee<14,>=13 (from playwright)
+2026-03-14T05:56:33.1666644Z   Downloading pyee-13.0.1-py3-none-any.whl.metadata (3.0 kB)
+2026-03-14T05:56:33.3236028Z Collecting greenlet<4.0.0,>=3.1.1 (from playwright)
+2026-03-14T05:56:33.3312798Z   Downloading greenlet-3.3.2-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (3.7 kB)
+2026-03-14T05:56:33.3687577Z Collecting typing-extensions (from pyee<14,>=13->playwright)
+2026-03-14T05:56:33.3761598Z   Downloading typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+2026-03-14T05:56:33.3877287Z Downloading brotli-1.2.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.4 MB)
+2026-03-14T05:56:33.4292542Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.4/1.4 MB 60.7 MB/s  0:00:00
+2026-03-14T05:56:33.4365746Z Downloading playwright-1.58.0-py3-none-manylinux1_x86_64.whl (46.2 MB)
+2026-03-14T05:56:33.5989682Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 46.2/46.2 MB 288.2 MB/s  0:00:00
+2026-03-14T05:56:33.6062612Z Downloading greenlet-3.3.2-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (613 kB)
+2026-03-14T05:56:33.6126308Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 613.9/613.9 kB 87.8 MB/s  0:00:00
+2026-03-14T05:56:33.6195537Z Downloading pyee-13.0.1-py3-none-any.whl (15 kB)
+2026-03-14T05:56:33.6285075Z Downloading typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+2026-03-14T05:56:33.6975460Z Installing collected packages: brotli, typing-extensions, greenlet, pyee, playwright
+2026-03-14T05:56:34.6179547Z 
+2026-03-14T05:56:34.6193195Z Successfully installed brotli-1.2.0 greenlet-3.3.2 playwright-1.58.0 pyee-13.0.1 typing-extensions-4.15.0
+2026-03-14T05:56:35.2483305Z Installing dependencies...
+2026-03-14T05:56:35.2569756Z Switching to root user to install dependencies...
+2026-03-14T05:56:35.3440895Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2026-03-14T05:56:35.3774581Z Hit:2 http://azure.archive.ubuntu.com/ubuntu noble InRelease
+2026-03-14T05:56:35.3780558Z Hit:6 https://packages.microsoft.com/repos/azure-cli noble InRelease
+2026-03-14T05:56:35.3782551Z Get:7 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease [3600 B]
+2026-03-14T05:56:35.3799853Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+2026-03-14T05:56:35.3849457Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+2026-03-14T05:56:35.3879748Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+2026-03-14T05:56:35.5556624Z Get:8 https://packages.microsoft.com/ubuntu/24.04/prod noble/main arm64 Packages [79.6 kB]
+2026-03-14T05:56:35.5692578Z Get:9 https://packages.microsoft.com/ubuntu/24.04/prod noble/main amd64 Packages [101 kB]
+2026-03-14T05:56:35.5730504Z Get:10 https://packages.microsoft.com/ubuntu/24.04/prod noble/main armhf Packages [11.4 kB]
+2026-03-14T05:56:35.6060465Z Get:11 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1835 kB]
+2026-03-14T05:56:35.6187873Z Get:12 http://azure.archive.ubuntu.com/ubuntu noble-updates/main Translation-en [336 kB]
+2026-03-14T05:56:35.6246021Z Get:13 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Components [177 kB]
+2026-03-14T05:56:35.6251482Z Get:14 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 c-n-f Metadata [16.7 kB]
+2026-03-14T05:56:35.6262406Z Get:15 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1566 kB]
+2026-03-14T05:56:35.6348482Z Get:16 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe Translation-en [319 kB]
+2026-03-14T05:56:35.6374358Z Get:17 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Components [387 kB]
+2026-03-14T05:56:35.6404822Z Get:18 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 c-n-f Metadata [33.0 kB]
+2026-03-14T05:56:35.6419139Z Get:19 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [2813 kB]
+2026-03-14T05:56:35.6559274Z Get:20 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted Translation-en [650 kB]
+2026-03-14T05:56:35.7031397Z Get:21 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Components [212 B]
+2026-03-14T05:56:35.7041241Z Get:22 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 c-n-f Metadata [556 B]
+2026-03-14T05:56:35.7052773Z Get:23 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Components [940 B]
+2026-03-14T05:56:35.7061293Z Get:24 http://azure.archive.ubuntu.com/ubuntu noble-backports/main amd64 Packages [65.0 kB]
+2026-03-14T05:56:35.7073287Z Get:25 http://azure.archive.ubuntu.com/ubuntu noble-backports/main amd64 Components [7368 B]
+2026-03-14T05:56:35.7081400Z Get:26 http://azure.archive.ubuntu.com/ubuntu noble-backports/main amd64 c-n-f Metadata [368 B]
+2026-03-14T05:56:35.7090949Z Get:27 http://azure.archive.ubuntu.com/ubuntu noble-backports/universe amd64 Packages [34.2 kB]
+2026-03-14T05:56:35.7100184Z Get:28 http://azure.archive.ubuntu.com/ubuntu noble-backports/universe Translation-en [18.3 kB]
+2026-03-14T05:56:35.7110473Z Get:29 http://azure.archive.ubuntu.com/ubuntu noble-backports/universe amd64 Components [13.2 kB]
+2026-03-14T05:56:35.7118943Z Get:30 http://azure.archive.ubuntu.com/ubuntu noble-backports/universe amd64 c-n-f Metadata [1480 B]
+2026-03-14T05:56:35.7127021Z Get:31 http://azure.archive.ubuntu.com/ubuntu noble-backports/restricted amd64 Components [216 B]
+2026-03-14T05:56:35.7135035Z Get:32 http://azure.archive.ubuntu.com/ubuntu noble-backports/multiverse amd64 Packages [780 B]
+2026-03-14T05:56:35.7143178Z Get:33 http://azure.archive.ubuntu.com/ubuntu noble-backports/multiverse Translation-en [372 B]
+2026-03-14T05:56:35.7152502Z Get:34 http://azure.archive.ubuntu.com/ubuntu noble-backports/multiverse amd64 Components [212 B]
+2026-03-14T05:56:35.7689680Z Get:35 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Packages [1538 kB]
+2026-03-14T05:56:35.7767680Z Get:36 http://azure.archive.ubuntu.com/ubuntu noble-security/main Translation-en [246 kB]
+2026-03-14T05:56:35.7786341Z Get:37 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Components [21.5 kB]
+2026-03-14T05:56:35.7798812Z Get:38 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 c-n-f Metadata [10.6 kB]
+2026-03-14T05:56:35.7807437Z Get:39 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Packages [976 kB]
+2026-03-14T05:56:35.7863201Z Get:40 http://azure.archive.ubuntu.com/ubuntu noble-security/universe Translation-en [219 kB]
+2026-03-14T05:56:35.7884717Z Get:41 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Components [74.2 kB]
+2026-03-14T05:56:35.7898380Z Get:42 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 c-n-f Metadata [20.8 kB]
+2026-03-14T05:56:35.7913495Z Get:43 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [2677 kB]
+2026-03-14T05:56:35.8050745Z Get:44 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted Translation-en [622 kB]
+2026-03-14T05:56:35.8091545Z Get:45 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted amd64 Components [212 B]
+2026-03-14T05:56:35.8098889Z Get:46 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted amd64 c-n-f Metadata [544 B]
+2026-03-14T05:56:35.8111897Z Get:47 http://azure.archive.ubuntu.com/ubuntu noble-security/multiverse amd64 Components [212 B]
+2026-03-14T05:56:41.4840934Z Fetched 15.3 MB in 2s (8529 kB/s)
+2026-03-14T05:56:42.2716276Z Reading package lists...
+2026-03-14T05:56:42.2993231Z Reading package lists...
+2026-03-14T05:56:42.4866023Z Building dependency tree...
+2026-03-14T05:56:42.4874325Z Reading state information...
+2026-03-14T05:56:42.6610260Z libasound2t64 is already the newest version (1.2.11-1ubuntu0.2).
+2026-03-14T05:56:42.6610884Z libasound2t64 set to manually installed.
+2026-03-14T05:56:42.6611534Z libatk-bridge2.0-0t64 is already the newest version (2.52.0-1build1).
+2026-03-14T05:56:42.6612242Z libatk-bridge2.0-0t64 set to manually installed.
+2026-03-14T05:56:42.6612895Z libatk1.0-0t64 is already the newest version (2.52.0-1build1).
+2026-03-14T05:56:42.6613471Z libatk1.0-0t64 set to manually installed.
+2026-03-14T05:56:42.6614030Z libatspi2.0-0t64 is already the newest version (2.52.0-1build1).
+2026-03-14T05:56:42.6614686Z libatspi2.0-0t64 set to manually installed.
+2026-03-14T05:56:42.6615221Z libcairo2 is already the newest version (1.18.0-3build1).
+2026-03-14T05:56:42.6615741Z libcairo2 set to manually installed.
+2026-03-14T05:56:42.6616258Z libcups2t64 is already the newest version (2.4.7-1.2ubuntu7.9).
+2026-03-14T05:56:42.6617308Z libcups2t64 set to manually installed.
+2026-03-14T05:56:42.6617847Z libdbus-1-3 is already the newest version (1.14.10-4ubuntu4.1).
+2026-03-14T05:56:42.6618405Z libdbus-1-3 set to manually installed.
+2026-03-14T05:56:42.6618944Z libdrm2 is already the newest version (2.4.125-1ubuntu0.1~24.04.1).
+2026-03-14T05:56:42.6619531Z libdrm2 set to manually installed.
+2026-03-14T05:56:42.6620045Z libgbm1 is already the newest version (25.2.8-0ubuntu0.24.04.1).
+2026-03-14T05:56:42.6621166Z libgbm1 set to manually installed.
+2026-03-14T05:56:42.6621729Z libnspr4 is already the newest version (2:4.35-1.1build1).
+2026-03-14T05:56:42.6622247Z libnspr4 set to manually installed.
+2026-03-14T05:56:42.6622836Z libnss3 is already the newest version (2:3.98-1ubuntu0.1).
+2026-03-14T05:56:42.6623393Z libnss3 set to manually installed.
+2026-03-14T05:56:42.6623913Z libpango-1.0-0 is already the newest version (1.52.1+ds-1build1).
+2026-03-14T05:56:42.6624476Z libpango-1.0-0 set to manually installed.
+2026-03-14T05:56:42.6624977Z libx11-6 is already the newest version (2:1.8.7-1build1).
+2026-03-14T05:56:42.6625446Z libx11-6 set to manually installed.
+2026-03-14T05:56:42.6625868Z libxcb1 is already the newest version (1.15-1ubuntu2).
+2026-03-14T05:56:42.6626301Z libxcb1 set to manually installed.
+2026-03-14T05:56:42.6626610Z libxcomposite1 is already the newest version (1:0.4.5-1build3).
+2026-03-14T05:56:42.6627221Z libxcomposite1 set to manually installed.
+2026-03-14T05:56:42.6627552Z libxdamage1 is already the newest version (1:1.1.6-1build1).
+2026-03-14T05:56:42.6627877Z libxdamage1 set to manually installed.
+2026-03-14T05:56:42.6628165Z libxext6 is already the newest version (2:1.3.4-1build2).
+2026-03-14T05:56:42.6628452Z libxext6 set to manually installed.
+2026-03-14T05:56:42.6628755Z libxfixes3 is already the newest version (1:6.0.0-2build1).
+2026-03-14T05:56:42.6629053Z libxfixes3 set to manually installed.
+2026-03-14T05:56:42.6629497Z libxkbcommon0 is already the newest version (1.6.0-1build1).
+2026-03-14T05:56:42.6629957Z libxkbcommon0 set to manually installed.
+2026-03-14T05:56:42.6630268Z libxrandr2 is already the newest version (2:1.5.2-2build1).
+2026-03-14T05:56:42.6630572Z libxrandr2 set to manually installed.
+2026-03-14T05:56:42.6631040Z xvfb is already the newest version (2:21.1.12-1ubuntu1.5).
+2026-03-14T05:56:42.6631460Z fonts-noto-color-emoji is already the newest version (2.047-0ubuntu0.24.04.1).
+2026-03-14T05:56:42.6631914Z libfontconfig1 is already the newest version (2.15.0-1.1ubuntu2).
+2026-03-14T05:56:42.6632248Z libfontconfig1 set to manually installed.
+2026-03-14T05:56:42.6632547Z fonts-liberation is already the newest version (1:2.1.5-3).
+2026-03-14T05:56:42.6632866Z fonts-liberation set to manually installed.
+2026-03-14T05:56:42.6633346Z The following additional packages will be installed:
+2026-03-14T05:56:42.6633786Z   gir1.2-glib-2.0 libglib2.0-bin libglib2.0-data xfonts-encodings xfonts-utils
+2026-03-14T05:56:42.6634145Z Suggested packages:
+2026-03-14T05:56:42.6634327Z   low-memory-monitor
+2026-03-14T05:56:42.6634518Z Recommended packages:
+2026-03-14T05:56:42.6634725Z   fonts-ipafont-mincho fonts-tlwg-loma
+2026-03-14T05:56:42.6899342Z The following NEW packages will be installed:
+2026-03-14T05:56:42.6900179Z   fonts-freefont-ttf fonts-ipafont-gothic fonts-tlwg-loma-otf fonts-unifont
+2026-03-14T05:56:42.6906970Z   fonts-wqy-zenhei xfonts-cyrillic xfonts-encodings xfonts-scalable
+2026-03-14T05:56:42.6907580Z   xfonts-utils
+2026-03-14T05:56:42.6911496Z The following packages will be upgraded:
+2026-03-14T05:56:42.6919709Z   gir1.2-glib-2.0 libfreetype6 libglib2.0-0t64 libglib2.0-bin libglib2.0-data
+2026-03-14T05:56:42.7095983Z 5 upgraded, 9 newly installed, 0 to remove and 85 not upgraded.
+2026-03-14T05:56:42.7096598Z Need to get 23.4 MB of archives.
+2026-03-14T05:56:42.7097514Z After this operation, 79.5 MB of additional disk space will be used.
+2026-03-14T05:56:42.7098216Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2026-03-14T05:56:42.7306191Z Get:2 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-ipafont-gothic all 00303-21ubuntu1 [3513 kB]
+2026-03-14T05:56:42.7634702Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libglib2.0-data all 2.80.0-6ubuntu3.8 [49.6 kB]
+2026-03-14T05:56:42.7661941Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libglib2.0-bin amd64 2.80.0-6ubuntu3.8 [97.9 kB]
+2026-03-14T05:56:42.7697254Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 gir1.2-glib-2.0 amd64 2.80.0-6ubuntu3.8 [183 kB]
+2026-03-14T05:56:42.7740403Z Get:6 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libglib2.0-0t64 amd64 2.80.0-6ubuntu3.8 [1545 kB]
+2026-03-14T05:56:42.7888631Z Get:7 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 fonts-freefont-ttf all 20211204+svn4273-2 [5641 kB]
+2026-03-14T05:56:42.8375219Z Get:8 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-tlwg-loma-otf all 1:0.7.3-1 [107 kB]
+2026-03-14T05:56:42.8406356Z Get:9 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-unifont all 1:15.1.01-1build1 [2993 kB]
+2026-03-14T05:56:42.8700935Z Get:10 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-wqy-zenhei all 0.9.45-8 [7472 kB]
+2026-03-14T05:56:42.9333456Z Get:11 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libfreetype6 amd64 2.13.2+dfsg-1ubuntu0.1 [402 kB]
+2026-03-14T05:56:42.9386613Z Get:12 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xfonts-encodings all 1:1.0.5-0ubuntu2 [578 kB]
+2026-03-14T05:56:42.9449353Z Get:13 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xfonts-utils amd64 1:7.7+6build3 [94.4 kB]
+2026-03-14T05:56:42.9476945Z Get:14 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 xfonts-cyrillic all 1:1.0.5+nmu1 [384 kB]
+2026-03-14T05:56:42.9530360Z Get:15 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xfonts-scalable all 1:1.0.3-1.3 [304 kB]
+2026-03-14T05:56:43.2186709Z Fetched 23.4 MB in 0s (91.0 MB/s)
+2026-03-14T05:56:43.2451049Z Selecting previously unselected package fonts-ipafont-gothic.
+2026-03-14T05:56:43.2768965Z (Reading database ... 
+2026-03-14T05:56:43.2769512Z (Reading database ... 5%
+2026-03-14T05:56:43.2769958Z (Reading database ... 10%
+2026-03-14T05:56:43.2770323Z (Reading database ... 15%
+2026-03-14T05:56:43.2770767Z (Reading database ... 20%
+2026-03-14T05:56:43.2770968Z (Reading database ... 25%
+2026-03-14T05:56:43.2771164Z (Reading database ... 30%
+2026-03-14T05:56:43.2771364Z (Reading database ... 35%
+2026-03-14T05:56:43.2771560Z (Reading database ... 40%
+2026-03-14T05:56:43.2771749Z (Reading database ... 45%
+2026-03-14T05:56:43.2771938Z (Reading database ... 50%
+2026-03-14T05:56:43.2890522Z (Reading database ... 55%
+2026-03-14T05:56:43.3536402Z (Reading database ... 60%
+2026-03-14T05:56:43.4026145Z (Reading database ... 65%
+2026-03-14T05:56:43.4528835Z (Reading database ... 70%
+2026-03-14T05:56:43.5037822Z (Reading database ... 75%
+2026-03-14T05:56:43.6536435Z (Reading database ... 80%
+2026-03-14T05:56:43.8180719Z (Reading database ... 85%
+2026-03-14T05:56:44.0272603Z (Reading database ... 90%
+2026-03-14T05:56:44.1597193Z (Reading database ... 95%
+2026-03-14T05:56:44.1597641Z (Reading database ... 100%
+2026-03-14T05:56:44.1598177Z (Reading database ... 219144 files and directories currently installed.)
+2026-03-14T05:56:44.1644848Z Preparing to unpack .../00-fonts-ipafont-gothic_00303-21ubuntu1_all.deb ...
+2026-03-14T05:56:44.1738532Z Unpacking fonts-ipafont-gothic (00303-21ubuntu1) ...
+2026-03-14T05:56:44.4165119Z Preparing to unpack .../01-libglib2.0-data_2.80.0-6ubuntu3.8_all.deb ...
+2026-03-14T05:56:44.4195958Z Unpacking libglib2.0-data (2.80.0-6ubuntu3.8) over (2.80.0-6ubuntu3.7) ...
+2026-03-14T05:56:44.4632846Z Preparing to unpack .../02-libglib2.0-bin_2.80.0-6ubuntu3.8_amd64.deb ...
+2026-03-14T05:56:44.4662352Z Unpacking libglib2.0-bin (2.80.0-6ubuntu3.8) over (2.80.0-6ubuntu3.7) ...
+2026-03-14T05:56:44.5305482Z Preparing to unpack .../03-gir1.2-glib-2.0_2.80.0-6ubuntu3.8_amd64.deb ...
+2026-03-14T05:56:44.5334072Z Unpacking gir1.2-glib-2.0:amd64 (2.80.0-6ubuntu3.8) over (2.80.0-6ubuntu3.7) ...
+2026-03-14T05:56:44.5784093Z Preparing to unpack .../04-libglib2.0-0t64_2.80.0-6ubuntu3.8_amd64.deb ...
+2026-03-14T05:56:44.5862521Z Unpacking libglib2.0-0t64:amd64 (2.80.0-6ubuntu3.8) over (2.80.0-6ubuntu3.7) ...
+2026-03-14T05:56:44.6321976Z Selecting previously unselected package fonts-freefont-ttf.
+2026-03-14T05:56:44.6483219Z Preparing to unpack .../05-fonts-freefont-ttf_20211204+svn4273-2_all.deb ...
+2026-03-14T05:56:44.6494502Z Unpacking fonts-freefont-ttf (20211204+svn4273-2) ...
+2026-03-14T05:56:44.7369240Z Selecting previously unselected package fonts-tlwg-loma-otf.
+2026-03-14T05:56:44.7530043Z Preparing to unpack .../06-fonts-tlwg-loma-otf_1%3a0.7.3-1_all.deb ...
+2026-03-14T05:56:44.7541108Z Unpacking fonts-tlwg-loma-otf (1:0.7.3-1) ...
+2026-03-14T05:56:44.7765074Z Selecting previously unselected package fonts-unifont.
+2026-03-14T05:56:44.7927413Z Preparing to unpack .../07-fonts-unifont_1%3a15.1.01-1build1_all.deb ...
+2026-03-14T05:56:44.7939583Z Unpacking fonts-unifont (1:15.1.01-1build1) ...
+2026-03-14T05:56:44.9212203Z Selecting previously unselected package fonts-wqy-zenhei.
+2026-03-14T05:56:44.9374531Z Preparing to unpack .../08-fonts-wqy-zenhei_0.9.45-8_all.deb ...
+2026-03-14T05:56:44.9482365Z Unpacking fonts-wqy-zenhei (0.9.45-8) ...
+2026-03-14T05:56:45.4269034Z Preparing to unpack .../09-libfreetype6_2.13.2+dfsg-1ubuntu0.1_amd64.deb ...
+2026-03-14T05:56:45.4343506Z Unpacking libfreetype6:amd64 (2.13.2+dfsg-1ubuntu0.1) over (2.13.2+dfsg-1build3) ...
+2026-03-14T05:56:45.4655104Z Selecting previously unselected package xfonts-encodings.
+2026-03-14T05:56:45.4817826Z Preparing to unpack .../10-xfonts-encodings_1%3a1.0.5-0ubuntu2_all.deb ...
+2026-03-14T05:56:45.4828498Z Unpacking xfonts-encodings (1:1.0.5-0ubuntu2) ...
+2026-03-14T05:56:45.5142189Z Selecting previously unselected package xfonts-utils.
+2026-03-14T05:56:45.5300695Z Preparing to unpack .../11-xfonts-utils_1%3a7.7+6build3_amd64.deb ...
+2026-03-14T05:56:45.5310363Z Unpacking xfonts-utils (1:7.7+6build3) ...
+2026-03-14T05:56:45.5769892Z Selecting previously unselected package xfonts-cyrillic.
+2026-03-14T05:56:45.5927616Z Preparing to unpack .../12-xfonts-cyrillic_1%3a1.0.5+nmu1_all.deb ...
+2026-03-14T05:56:45.5938221Z Unpacking xfonts-cyrillic (1:1.0.5+nmu1) ...
+2026-03-14T05:56:45.6298810Z Selecting previously unselected package xfonts-scalable.
+2026-03-14T05:56:45.6456692Z Preparing to unpack .../13-xfonts-scalable_1%3a1.0.3-1.3_all.deb ...
+2026-03-14T05:56:45.6468652Z Unpacking xfonts-scalable (1:1.0.3-1.3) ...
+2026-03-14T05:56:45.6998574Z Setting up fonts-wqy-zenhei (0.9.45-8) ...
+2026-03-14T05:56:45.7135013Z Setting up fonts-freefont-ttf (20211204+svn4273-2) ...
+2026-03-14T05:56:45.7163003Z Setting up libglib2.0-0t64:amd64 (2.80.0-6ubuntu3.8) ...
+2026-03-14T05:56:45.7293979Z Setting up libglib2.0-data (2.80.0-6ubuntu3.8) ...
+2026-03-14T05:56:45.7321303Z Setting up fonts-tlwg-loma-otf (1:0.7.3-1) ...
+2026-03-14T05:56:45.7354248Z Setting up libfreetype6:amd64 (2.13.2+dfsg-1ubuntu0.1) ...
+2026-03-14T05:56:45.7382073Z Setting up xfonts-encodings (1:1.0.5-0ubuntu2) ...
+2026-03-14T05:56:45.7410104Z Setting up gir1.2-glib-2.0:amd64 (2.80.0-6ubuntu3.8) ...
+2026-03-14T05:56:45.7437241Z Setting up fonts-ipafont-gothic (00303-21ubuntu1) ...
+2026-03-14T05:56:45.7514330Z update-alternatives: using /usr/share/fonts/opentype/ipafont-gothic/ipag.ttf to provide /usr/share/fonts/truetype/fonts-japanese-gothic.ttf (fonts-japanese-gothic.ttf) in auto mode
+2026-03-14T05:56:45.7536240Z Setting up fonts-unifont (1:15.1.01-1build1) ...
+2026-03-14T05:56:45.7565036Z Setting up libglib2.0-bin (2.80.0-6ubuntu3.8) ...
+2026-03-14T05:56:45.7591422Z Setting up xfonts-utils (1:7.7+6build3) ...
+2026-03-14T05:56:45.7640139Z Setting up xfonts-cyrillic (1:1.0.5+nmu1) ...
+2026-03-14T05:56:45.7938952Z Setting up xfonts-scalable (1:1.0.3-1.3) ...
+2026-03-14T05:56:45.8234831Z Processing triggers for libc-bin (2.39-0ubuntu8.7) ...
+2026-03-14T05:56:45.8574702Z Processing triggers for man-db (2.12.0-4build2) ...
+2026-03-14T05:56:45.8601543Z Not building database; man-db/auto-update is not 'true'.
+2026-03-14T05:56:45.8617608Z Processing triggers for fontconfig (2.15.0-1.1ubuntu2) ...
+2026-03-14T05:56:46.5511772Z 
+2026-03-14T05:56:46.5512342Z Running kernel seems to be up-to-date.
+2026-03-14T05:56:46.5512852Z 
+2026-03-14T05:56:46.5513039Z Restarting services...
+2026-03-14T05:56:46.5986431Z  systemctl restart packagekit.service php8.3-fpm.service polkit.service udisks2.service
+2026-03-14T05:56:46.7377175Z 
+2026-03-14T05:56:46.7382348Z Service restarts being deferred:
+2026-03-14T05:56:46.7382863Z  systemctl restart ModemManager.service
+2026-03-14T05:56:46.7383378Z  systemctl restart networkd-dispatcher.service
+2026-03-14T05:56:46.7383727Z 
+2026-03-14T05:56:46.7383875Z No containers need to be restarted.
+2026-03-14T05:56:46.7384166Z 
+2026-03-14T05:56:46.7384349Z No user sessions are running outdated binaries.
+2026-03-14T05:56:46.7384686Z 
+2026-03-14T05:56:46.7385008Z No VM guests are running outdated hypervisor (qemu) binaries on this host.
+2026-03-14T05:56:47.9278830Z Downloading Chrome for Testing 145.0.7632.6 (playwright chromium v1208) from https://cdn.playwright.dev/chrome-for-testing-public/145.0.7632.6/linux64/chrome-linux64.zip
+2026-03-14T05:56:48.0260355Z (node:3147) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-03-14T05:56:48.0261950Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-03-14T05:56:48.0978557Z |                                                                                |   0% of 167.3 MiB
+2026-03-14T05:56:48.2666030Z |■■■■■■■■                                                                        |  10% of 167.3 MiB
+2026-03-14T05:56:48.3770718Z |■■■■■■■■■■■■■■■■                                                                |  20% of 167.3 MiB
+2026-03-14T05:56:48.4744871Z |■■■■■■■■■■■■■■■■■■■■■■■■                                                        |  30% of 167.3 MiB
+2026-03-14T05:56:48.5628555Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                                |  40% of 167.3 MiB
+2026-03-14T05:56:48.6529069Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                        |  50% of 167.3 MiB
+2026-03-14T05:56:48.7117361Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                |  60% of 167.3 MiB
+2026-03-14T05:56:48.7696120Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                        |  70% of 167.3 MiB
+2026-03-14T05:56:48.8293274Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                |  80% of 167.3 MiB
+2026-03-14T05:56:48.8878111Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■        |  90% of 167.3 MiB
+2026-03-14T05:56:48.9494092Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■| 100% of 167.3 MiB
+2026-03-14T05:56:51.6978533Z Chrome for Testing 145.0.7632.6 (playwright chromium v1208) downloaded to /home/runner/.cache/ms-playwright/chromium-1208
+2026-03-14T05:56:51.6983622Z Downloading FFmpeg (playwright ffmpeg v1011) from https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1011/ffmpeg-linux.zip
+2026-03-14T05:56:51.8029948Z (node:3158) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-03-14T05:56:51.8032338Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-03-14T05:56:51.8546334Z |                                                                                |   0% of 2.3 MiB
+2026-03-14T05:56:51.8665622Z |■■■■■■■■                                                                        |  10% of 2.3 MiB
+2026-03-14T05:56:51.8718280Z |■■■■■■■■■■■■■■■■                                                                |  20% of 2.3 MiB
+2026-03-14T05:56:51.8740876Z |■■■■■■■■■■■■■■■■■■■■■■■■                                                        |  30% of 2.3 MiB
+2026-03-14T05:56:51.8777435Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                                |  40% of 2.3 MiB
+2026-03-14T05:56:51.8792165Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                        |  50% of 2.3 MiB
+2026-03-14T05:56:51.8822944Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                |  60% of 2.3 MiB
+2026-03-14T05:56:51.8834488Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                        |  70% of 2.3 MiB
+2026-03-14T05:56:51.8850032Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                |  80% of 2.3 MiB
+2026-03-14T05:56:51.8866946Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■        |  90% of 2.3 MiB
+2026-03-14T05:56:51.8879904Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■| 100% of 2.3 MiB
+2026-03-14T05:56:51.9533479Z FFmpeg (playwright ffmpeg v1011) downloaded to /home/runner/.cache/ms-playwright/ffmpeg-1011
+2026-03-14T05:56:51.9538472Z Downloading Chrome Headless Shell 145.0.7632.6 (playwright chromium-headless-shell v1208) from https://cdn.playwright.dev/chrome-for-testing-public/145.0.7632.6/linux64/chrome-headless-shell-linux64.zip
+2026-03-14T05:56:52.0518388Z (node:3169) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-03-14T05:56:52.0520218Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-03-14T05:56:52.1276449Z |                                                                                |   0% of 110.9 MiB
+2026-03-14T05:56:52.2390833Z |■■■■■■■■                                                                        |  10% of 110.9 MiB
+2026-03-14T05:56:52.3082039Z |■■■■■■■■■■■■■■■■                                                                |  20% of 110.9 MiB
+2026-03-14T05:56:52.3612681Z |■■■■■■■■■■■■■■■■■■■■■■■■                                                        |  30% of 110.9 MiB
+2026-03-14T05:56:52.4174553Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                                |  40% of 110.9 MiB
+2026-03-14T05:56:52.4707546Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                        |  50% of 110.9 MiB
+2026-03-14T05:56:52.5192024Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                |  60% of 110.9 MiB
+2026-03-14T05:56:52.5817939Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                        |  70% of 110.9 MiB
+2026-03-14T05:56:52.6436498Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                |  80% of 110.9 MiB
+2026-03-14T05:56:52.6935283Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■        |  90% of 110.9 MiB
+2026-03-14T05:56:52.7348561Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■| 100% of 110.9 MiB
+2026-03-14T05:56:54.7904380Z Chrome Headless Shell 145.0.7632.6 (playwright chromium-headless-shell v1208) downloaded to /home/runner/.cache/ms-playwright/chromium_headless_shell-1208
+2026-03-14T05:56:54.8161630Z ##[group]Run python - <<'PY'
+2026-03-14T05:56:54.8161948Z [36;1mpython - <<'PY'[0m
+2026-03-14T05:56:54.8162149Z [36;1mimport json[0m
+2026-03-14T05:56:54.8162361Z [36;1mimport os[0m
+2026-03-14T05:56:54.8162552Z [36;1mfrom pathlib import Path[0m
+2026-03-14T05:56:54.8162794Z [36;1m[0m
+2026-03-14T05:56:54.8163149Z [36;1mevent = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))[0m
+2026-03-14T05:56:54.8163621Z [36;1minputs = event.get("inputs") or {}[0m
+2026-03-14T05:56:54.8163922Z [36;1menv_path = Path(os.environ["GITHUB_ENV"])[0m
+2026-03-14T05:56:54.8164203Z [36;1mpairs = {[0m
+2026-03-14T05:56:54.8164518Z [36;1m    "SOURCE_URL": str(inputs.get("source_url", "")).replace("\n", " ").strip(),[0m
+2026-03-14T05:56:54.8165060Z [36;1m    "DISPLAY_NAME": str(inputs.get("display_name", "")).replace("\n", " ").strip(),[0m
+2026-03-14T05:56:54.8165610Z [36;1m    "REQUEST_ID": str(inputs.get("request_id", "")).replace("\n", " ").strip(),[0m
+2026-03-14T05:56:54.8166005Z [36;1m}[0m
+2026-03-14T05:56:54.8166238Z [36;1mwith env_path.open("a", encoding="utf-8") as handle:[0m
+2026-03-14T05:56:54.8166571Z [36;1m    for key, value in pairs.items():[0m
+2026-03-14T05:56:54.8167174Z [36;1m        handle.write(f"{key}={value}\n")[0m
+2026-03-14T05:56:54.8167441Z [36;1mPY[0m
+2026-03-14T05:56:54.8216337Z shell: /usr/bin/bash -e {0}
+2026-03-14T05:56:54.8216567Z env:
+2026-03-14T05:56:54.8216946Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-03-14T05:56:54.8217385Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+2026-03-14T05:56:54.8217806Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-03-14T05:56:54.8218173Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-03-14T05:56:54.8218532Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-03-14T05:56:54.8218897Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+2026-03-14T05:56:54.8219202Z ##[endgroup]
+2026-03-14T05:56:54.8595662Z ##[group]Run python build_pages_site.py \
+2026-03-14T05:56:54.8595985Z [36;1mpython build_pages_site.py \[0m
+2026-03-14T05:56:54.8596250Z [36;1m  --state-dir state \[0m
+2026-03-14T05:56:54.8596484Z [36;1m  --dist-dir dist \[0m
+2026-03-14T05:56:54.8596715Z [36;1m  --source-url "$SOURCE_URL" \[0m
+2026-03-14T05:56:54.8597243Z [36;1m  --display-name "$DISPLAY_NAME" \[0m
+2026-03-14T05:56:54.8597516Z [36;1m  --request-id "$REQUEST_ID"[0m
+2026-03-14T05:56:54.8646231Z shell: /usr/bin/bash -e {0}
+2026-03-14T05:56:54.8646456Z env:
+2026-03-14T05:56:54.8646694Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-03-14T05:56:54.8647288Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+2026-03-14T05:56:54.8647707Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-03-14T05:56:54.8648059Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-03-14T05:56:54.8648435Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-03-14T05:56:54.8648839Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+2026-03-14T05:56:54.8649184Z   SOURCE_URL: https://geometry-dashonline.com/
+2026-03-14T05:56:54.8649760Z   DISPLAY_NAME: Geometry Dash
+2026-03-14T05:56:54.8650008Z   REQUEST_ID: 21c36f6d-4fc8-4dcf-a679-7de1616a34e3
+2026-03-14T05:56:54.8650271Z ##[endgroup]
+2026-03-14T05:56:55.1809931Z /home/runner/work/gen/gen/unity_standalone.py:10706: SyntaxWarning: invalid escape sequence '\.'
+2026-03-14T05:56:55.1823527Z   output_build_dir: Path,
+2026-03-14T05:56:55.1824312Z /home/runner/work/gen/gen/unity_standalone.py:10703: SyntaxWarning: invalid escape sequence '\/'
+2026-03-14T05:56:55.1838024Z   
+2026-03-14T05:56:55.1838445Z /home/runner/work/gen/gen/unity_standalone.py:10703: SyntaxWarning: invalid escape sequence '\/'
+2026-03-14T05:56:55.1851834Z   
+2026-03-14T05:56:55.6024743Z [unity-standalone] Mode: entry URL auto-detect
+2026-03-14T05:56:55.6025549Z [unity-standalone] Input URL: https://geometry-dashonline.com/
+2026-03-14T05:56:55.6026400Z [unity-standalone] Game root URL: https://geometry-dashonline.com/
+2026-03-14T05:56:56.4603565Z [unity-standalone] Resolved entry URL: https://1games.io/game/geometry-lite/
+2026-03-14T05:56:56.4604377Z [unity-standalone] Detected entry kind: unity
+2026-03-14T05:56:56.4808882Z [unity-standalone] Detected build kind: modern
+2026-03-14T05:56:56.4810287Z [unity-standalone] Resolved loader URL: https://play2.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.loader.js
+2026-03-14T05:56:56.4812130Z [unity-standalone] Removed existing output directory: /home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-50p6qhrx
+2026-03-14T05:56:56.6622674Z [unity-standalone] loader: downloaded geometry-lite-v26013001.loader.js
+2026-03-14T05:56:57.2720411Z [unity-standalone] framework: downloaded geometry-lite-v26013001.framework.js.unityweb
+2026-03-14T05:56:57.7150193Z [unity-standalone] data: downloaded geometry-lite-v26013001.data.unityweb
+2026-03-14T05:56:58.0754536Z [unity-standalone] wasm: downloaded geometry-lite-v26013001.wasm.unityweb
+2026-03-14T05:56:58.1348801Z [unity-standalone] support-script: downloaded gmsdkv1.js
+2026-03-14T05:56:58.1927721Z [unity-standalone] support-script: downloaded firebase-auth-compat.js
+2026-03-14T05:56:58.2214468Z [unity-standalone] support-script: downloaded firebase-analytics-compat.js
+2026-03-14T05:56:58.2515680Z [unity-standalone] support-script: downloaded firebase-app-compat.js
+2026-03-14T05:56:58.3031348Z [unity-standalone] support-script: downloaded firebase-firestore-compat.js
+2026-03-14T05:56:58.4379599Z [unity-standalone] Done.
+2026-03-14T05:56:58.4380023Z [unity-standalone] {
+2026-03-14T05:56:58.4380753Z   "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-50p6qhrx",
+2026-03-14T05:56:58.4382036Z   "index_html": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-50p6qhrx/index.html",
+2026-03-14T05:56:58.4383695Z   "embedded_entry_html": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-50p6qhrx/game-root.html",
+2026-03-14T05:56:58.4385236Z   "required_functions_file": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-50p6qhrx/required-functions.json",
+2026-03-14T05:56:58.4386412Z   "loader": "geometry-lite-v26013001.loader.js",
+2026-03-14T05:56:58.4387284Z   "framework": "geometry-lite-v26013001.framework.js.unityweb",
+2026-03-14T05:56:58.4387888Z   "data": "geometry-lite-v26013001.data.unityweb",
+2026-03-14T05:56:58.4388399Z   "wasm": "geometry-lite-v26013001.wasm.unityweb",
+2026-03-14T05:56:58.4388859Z   "required_function_count": 0,
+2026-03-14T05:56:58.4389209Z   "window_root_count": 3,
+2026-03-14T05:56:58.4389551Z   "window_callable_chain_count": 0,
+2026-03-14T05:56:58.4389970Z   "used_br_assets": true,
+2026-03-14T05:56:58.4390317Z   "used_compressed_assets": true,
+2026-03-14T05:56:58.4413464Z   "site_lock_framework_patched": false,
+2026-03-14T05:56:58.4413942Z   "unity_loader_inline_redirect_hack_patched": false,
+2026-03-14T05:56:58.4414392Z   "gmsoft_host_bridge_patched": true,
+2026-03-14T05:56:58.4414799Z   "gmsoft_sendmessage_defaults_patched": true,
+2026-03-14T05:56:58.4415533Z   "sendmessage_value_compat_patched": true,
+2026-03-14T05:56:58.4415925Z   "gd_lite_runtime_data_patched": false,
+2026-03-14T05:56:58.4416291Z   "build_kind": "modern",
+2026-03-14T05:56:58.4416584Z   "mode": "entry_auto",
+2026-03-14T05:56:58.4417080Z   "entry_kind": "unity",
+2026-03-14T05:56:58.4417495Z   "source_page_url": "https://1games.io/game/geometry-lite/",
+2026-03-14T05:56:58.4417980Z   "source_url_spoof_enabled": true,
+2026-03-14T05:56:58.4418336Z   "original_folder_url": "",
+2026-03-14T05:56:58.4418709Z   "streaming_assets_url": "26013001/StreamingAssets",
+2026-03-14T05:56:58.4419140Z   "asset_cache_buster": "0957cb013530",
+2026-03-14T05:56:58.4419499Z   "embed_cache_buster": "0edc8b6bb59d",
+2026-03-14T05:56:58.4419864Z   "launch_options": "both",
+2026-03-14T05:56:58.4420204Z   "recommended_launch_mode": "none",
+2026-03-14T05:56:58.4420614Z   "launcher": "ocean-launcher",
+2026-03-14T05:56:58.4420978Z   "gmsoft_like_build": true,
+2026-03-14T05:56:58.4421330Z   "page_config_keys": [
+2026-03-14T05:56:58.4421644Z     "companyName",
+2026-03-14T05:56:58.4421925Z     "eventLog",
+2026-03-14T05:56:58.4422181Z     "gameId",
+2026-03-14T05:56:58.4422441Z     "productName",
+2026-03-14T05:56:58.4422732Z     "productVersion"
+2026-03-14T05:56:58.4423010Z   ],
+2026-03-14T05:56:58.4423283Z   "auxiliary_asset_rewrites": {},
+2026-03-14T05:56:58.4423661Z   "launcher_support_files": [
+2026-03-14T05:56:58.4424027Z     "ocean-launcher.css",
+2026-03-14T05:56:58.4424354Z     "ocean-launcher.js"
+2026-03-14T05:56:58.4424643Z   ],
+2026-03-14T05:56:58.4424881Z   "support_files": [
+2026-03-14T05:56:58.4425188Z     "ocean-launcher.css",
+2026-03-14T05:56:58.4425511Z     "ocean-launcher.js",
+2026-03-14T05:56:58.4425846Z     "support/gmsdkv1.js",
+2026-03-14T05:56:58.4426220Z     "support/firebase-auth-compat.js",
+2026-03-14T05:56:58.4426667Z     "support/firebase-analytics-compat.js",
+2026-03-14T05:56:58.4427315Z     "support/firebase-app-compat.js",
+2026-03-14T05:56:58.4427734Z     "support/firebase-firestore-compat.js"
+2026-03-14T05:56:58.4428148Z   ],
+2026-03-14T05:56:58.4428407Z   "support_script_files": [
+2026-03-14T05:56:58.4428759Z     "support/gmsdkv1.js",
+2026-03-14T05:56:58.4429118Z     "support/firebase-auth-compat.js",
+2026-03-14T05:56:58.4429569Z     "support/firebase-analytics-compat.js",
+2026-03-14T05:56:58.4430037Z     "support/firebase-app-compat.js",
+2026-03-14T05:56:58.4430476Z     "support/firebase-firestore-compat.js"
+2026-03-14T05:56:58.4430883Z   ],
+2026-03-14T05:56:58.4431141Z   "support_script_urls": [
+2026-03-14T05:56:58.4431542Z     "https://games.1games.io/lib/gmsdkv1.js",
+2026-03-14T05:56:58.4432157Z     "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js",
+2026-03-14T05:56:58.4432928Z     "https://www.gstatic.com/firebasejs/10.9.0/firebase-analytics-compat.js",
+2026-03-14T05:56:58.4433931Z     "https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js",
+2026-03-14T05:56:58.4434719Z     "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"
+2026-03-14T05:56:58.4435326Z   ],
+2026-03-14T05:56:58.4436161Z   "progress_file": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-50p6qhrx/.standalone-progress.json"
+2026-03-14T05:56:58.4437233Z }
+2026-03-14T05:57:11.1111768Z Verification failed due to external_requests.
+2026-03-14T05:57:11.1508486Z Traceback (most recent call last):
+2026-03-14T05:57:11.1518456Z   File "/home/runner/work/gen/gen/build_pages_site.py", line 492, in <module>
+2026-03-14T05:57:11.1519023Z     raise SystemExit(main())
+2026-03-14T05:57:11.1519255Z                      ^^^^^^
+2026-03-14T05:57:11.1519656Z   File "/home/runner/work/gen/gen/build_pages_site.py", line 478, in main
+2026-03-14T05:57:11.1520018Z     new_entry = build_export(
+2026-03-14T05:57:11.1520230Z                 ^^^^^^^^^^^^^
+2026-03-14T05:57:11.1520625Z   File "/home/runner/work/gen/gen/build_pages_site.py", line 349, in build_export
+2026-03-14T05:57:11.1521068Z     verification = verify_export_output(staging_dir)
+2026-03-14T05:57:11.1521356Z                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-14T05:57:11.1522266Z   File "/home/runner/work/gen/gen/build_pages_site.py", line 314, in verify_export_output
+2026-03-14T05:57:11.1522728Z     subprocess.run(command, cwd=BASE_DIR, check=True)
+2026-03-14T05:57:11.1523217Z   File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/subprocess.py", line 571, in run
+2026-03-14T05:57:11.1560621Z     raise CalledProcessError(retcode, process.args,
+2026-03-14T05:57:11.1562643Z subprocess.CalledProcessError: Command '['/opt/hostedtoolcache/Python/3.12.13/x64/bin/python', '/home/runner/work/gen/gen/verify_generated_game.py', '--output-dir', '/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-50p6qhrx']' returned non-zero exit status 1.
+2026-03-14T05:57:11.1672884Z ##[error]Process completed with exit code 1.
+2026-03-14T05:57:11.1810177Z Post job cleanup.
+2026-03-14T05:57:11.2779125Z [command]/usr/bin/git version
+2026-03-14T05:57:11.2816556Z git version 2.53.0
+2026-03-14T05:57:11.2860599Z Temporarily overriding HOME='/home/runner/work/_temp/cef5c60c-71a2-4541-b35d-caacd44e2586' before making global git config changes
+2026-03-14T05:57:11.2862019Z Adding repository directory to the temporary git global config as a safe directory
+2026-03-14T05:57:11.2873283Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/gen/gen
+2026-03-14T05:57:11.2909752Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-03-14T05:57:11.2946206Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-03-14T05:57:11.3192026Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-03-14T05:57:11.3213622Z http.https://github.com/.extraheader
+2026-03-14T05:57:11.3226205Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-03-14T05:57:11.3258398Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-03-14T05:57:11.3491154Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-03-14T05:57:11.3523020Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-03-14T05:57:11.3882332Z Cleaning up orphan processes
+2026-03-14T05:57:11.4255049Z ##[warning]Node.js 20 actions are deprecated. The following actions are running on Node.js 20 and may not work as expected: actions/checkout@v4, actions/setup-python@v5. Actions will be forced to run with Node.js 24 by default starting June 2nd, 2026. Please check if updated versions of these actions are available that support Node.js 24. To opt into Node.js 24 now, set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true environment variable on the runner or in your workflow file. Once Node.js 24 becomes the default, you can temporarily opt out by setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+
+
+====================
+
+Job: deploy
+id: 67052387188
+status: completed
+conclusion: skipped
+started_at: 2026-03-14T05:57:13Z
+completed_at: 2026-03-14T05:57:13Z
+steps:
+
+full_log:
+<could not download logs: Download job logs for deploy failed with status 404: {"message":"Not Found","documentation_url":"https://docs.github.com/rest/actions/workflow-jobs#download-job-logs-for-a-workflow-run","status":"404"}>

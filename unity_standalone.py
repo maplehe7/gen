@@ -742,7 +742,7 @@ def candidate_index_urls(input_url: str, root_url: str) -> list[str]:
     candidates = []
 
     parsed_input = urllib.parse.urlparse(input_url)
-    if parsed_input.path and "." in parsed_input.path.rsplit("/", 1)[-1]:
+    if parsed_input.scheme in {"http", "https"} and parsed_input.netloc:
         candidates.append(input_url)
 
     candidates.append(root_url)
@@ -1210,8 +1210,12 @@ def looks_like_html_game_entry_html(index_html: str) -> bool:
     score = 0
     if re.search(r"<script\b[^>]*\bsrc\s*=", index_html, re.IGNORECASE):
         score += 2
+    if re.search(r"""<div[^>]+\bid\s*=\s*["']root["']""", index_html, re.IGNORECASE):
+        score += 1
     if "<canvas" in lower:
         score += 3
+    if "manifest.json" in lower or re.search(r"""<link\b[^>]+\brel\s*=\s*["'][^"']*\bmanifest\b""", index_html, re.IGNORECASE):
+        score += 1
     if "touch-action: none" in lower or "touch-action:none" in lower:
         score += 1
     if "overflow: hidden" in lower or "overflow:hidden" in lower:
@@ -1230,6 +1234,9 @@ def looks_like_html_game_entry_html(index_html: str) -> bool:
             "c3runtime",
             "playcanvas",
             "babylon",
+            "/static/js/",
+            "/static/css/",
+            ".main.",
         )
     ):
         score += 2
@@ -1397,6 +1404,21 @@ def extract_crazygames_loader_entry_url(index_html: str, index_url: str) -> str:
     return ""
 
 
+def extract_crazygames_desktop_entry_url(index_html: str, index_url: str) -> str:
+    patterns = (
+        r'''"desktopUrl"\s*:\s*"([^"]+)"''',
+        r"""desktopUrl\s*:\s*["']([^"']+)["']""",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, index_html, re.IGNORECASE)
+        if not match:
+            continue
+        candidate = decode_js_string_literal(html.unescape(match.group(1))).strip()
+        if candidate:
+            return normalize_url(urllib.parse.urljoin(index_url, candidate))
+    return ""
+
+
 def extract_crazygames_slug_from_url(index_url: str) -> str:
     parsed = urllib.parse.urlparse(index_url)
     segments = [segment for segment in parsed.path.split("/") if segment]
@@ -1434,14 +1456,20 @@ def discover_crazygames_entry_url(index_html: str, index_url: str) -> str:
     parsed = urllib.parse.urlparse(index_url)
     host = parsed.netloc.lower()
     if host.startswith("games.crazygames.com"):
-        return extract_crazygames_loader_entry_url(index_html, index_url)
+        return (
+            extract_crazygames_loader_entry_url(index_html, index_url)
+            or extract_crazygames_desktop_entry_url(index_html, index_url)
+        )
 
     if not host.endswith("crazygames.com"):
         return ""
 
     slug = extract_crazygames_slug_from_url(index_url)
+    desktop_entry_url = extract_crazygames_desktop_entry_url(index_html, index_url)
+    if desktop_entry_url:
+        return desktop_entry_url
     if not slug:
-        return ""
+        return extract_crazygames_loader_entry_url(index_html, index_url)
 
     last_error = None
     for locale in crazygames_locale_candidates(index_url):
@@ -3897,6 +3925,49 @@ def extract_html_external_links(document_html: str) -> dict[str, list[str]]:
     }
 
 
+def is_remote_markup_dependency_url(value: str) -> bool:
+    raw = html.unescape(str(value or "")).strip()
+    if not raw or raw.startswith(("#", "data:", "blob:", "javascript:", "mailto:", "tel:")):
+        return False
+    if raw.startswith("//"):
+        return True
+    parsed = urllib.parse.urlparse(raw)
+    return parsed.scheme in {"http", "https"}
+
+
+def collect_remote_markup_dependencies(document_html: str) -> list[str]:
+    remote_urls: list[str] = []
+    seen: set[str] = set()
+
+    for links in extract_html_external_links(document_html).values():
+        for value in links:
+            if is_remote_markup_dependency_url(value) and value not in seen:
+                seen.add(value)
+                remote_urls.append(value)
+
+    for match in re.findall(
+        r"""<(?:img|audio|video|source|track|embed)\b[^>]+src=["']([^"']+)["']""",
+        document_html,
+        re.IGNORECASE,
+    ):
+        value = html.unescape(match).strip()
+        if is_remote_markup_dependency_url(value) and value not in seen:
+            seen.add(value)
+            remote_urls.append(value)
+
+    for match in re.findall(
+        r"""<(?:object)\b[^>]+data=["']([^"']+)["']""",
+        document_html,
+        re.IGNORECASE,
+    ):
+        value = html.unescape(match).strip()
+        if is_remote_markup_dependency_url(value) and value not in seen:
+            seen.add(value)
+            remote_urls.append(value)
+
+    return remote_urls
+
+
 def strip_known_embedded_ad_markup(document_html: str) -> tuple[str, dict[str, int]]:
     cleaned = document_html
     removal_counts = {
@@ -3998,6 +4069,465 @@ def relative_asset_path_under_root(asset_url: str, source_root_url: str) -> str:
     return relative_path
 
 
+HTML_RUNTIME_TEXT_EXTENSIONS = (
+    ".appcache",
+    ".atlas",
+    ".css",
+    ".csv",
+    ".fnt",
+    ".html",
+    ".htm",
+    ".ini",
+    ".js",
+    ".json",
+    ".map",
+    ".mjs",
+    ".txt",
+    ".webmanifest",
+    ".worker",
+    ".xml",
+)
+
+HTML_RUNTIME_ASSET_EXTENSIONS = HTML_RUNTIME_TEXT_EXTENSIONS + (
+    ".aac",
+    ".bin",
+    ".br",
+    ".data",
+    ".eot",
+    ".gif",
+    ".gz",
+    ".ico",
+    ".jpeg",
+    ".jpg",
+    ".m4a",
+    ".mem",
+    ".mp3",
+    ".mp4",
+    ".ogg",
+    ".otf",
+    ".png",
+    ".svg",
+    ".ttf",
+    ".unityweb",
+    ".wav",
+    ".wasm",
+    ".webm",
+    ".webp",
+    ".woff",
+    ".woff2",
+)
+
+HTML_RUNTIME_PATH_HINTS = (
+    "/assets/",
+    "/audio/",
+    "/build",
+    "/fonts/",
+    "/images/",
+    "/img/",
+    "/scripts/",
+    "/sounds/",
+    "/sprites/",
+    "/static/",
+    "/streamingassets",
+    "/textures/",
+    "appmanifest",
+    "background.",
+    "c2runtime",
+    "data.js",
+    "gameanalytics",
+    "manifest.json",
+    "offline",
+    "service-worker",
+    "supportcheck",
+    "sw.js",
+    "worker",
+)
+
+HTML_RUNTIME_IGNORED_URL_FRAGMENTS = (
+    "about:blank",
+    "amazon-adsystem.com",
+    "cloudflareinsights.com",
+    "connect.facebook.net",
+    "doubleclick.net",
+    "facebook.com/sharer",
+    "fonts.googleapis.com",
+    "fonts.gstatic.com",
+    "google-analytics.com",
+    "googleads",
+    "googlesyndication.com",
+    "googletagmanager.com",
+    "gstatic.com/recaptcha",
+    "imasdk.googleapis.com",
+    "mgid.com",
+    "outbrain.com",
+    "pagead2.googlesyndication.com",
+    "platform.twitter.com",
+    "reddit.com/submit",
+    "taboola.com",
+    "twitter.com/intent",
+    "vconsole",
+    "whatsapp.com/send",
+    "x.com/intent",
+)
+
+HTML_RUNTIME_ALLOWED_CROSS_ORIGIN_HOSTS = (
+    "cdn.jsdelivr.net",
+    "githack.com",
+    "github.io",
+    "githubusercontent.com",
+    "neocities.org",
+    "raw.githubusercontent.com",
+    "rawcdn.githack.com",
+)
+
+
+def sanitize_runtime_path_segment(segment: str) -> str:
+    cleaned = re.sub(r"""[<>:"\\|?*\x00-\x1f]+""", "-", segment)
+    cleaned = cleaned.strip().strip(".")
+    return cleaned or "asset"
+
+
+def compute_mirrored_asset_output_path(asset_url: str, primary_root_url: str) -> str:
+    normalized_url = remove_query_and_fragment(normalize_url(asset_url))
+    relative_path = relative_asset_path_under_root(normalized_url, primary_root_url)
+    if relative_path:
+        return relative_path.replace("\\", "/")
+
+    parsed = urllib.parse.urlparse(normalized_url)
+    segments = [
+        sanitize_runtime_path_segment(urllib.parse.unquote(segment))
+        for segment in parsed.path.split("/")
+        if segment
+    ]
+    if not segments:
+        segments.append("index.html")
+    elif "." not in segments[-1]:
+        segments.append("index.html")
+    return "/".join(
+        ["_mirror", sanitize_runtime_path_segment(parsed.netloc or "remote")] + segments
+    )
+
+
+def compute_relative_local_href(current_local_path: str, target_local_path: str) -> str:
+    current_dir = os.path.dirname(current_local_path) if current_local_path else "."
+    relative_href = os.path.relpath(target_local_path, current_dir).replace("\\", "/")
+    if relative_href == ".":
+        return "./"
+    if not relative_href.startswith((".", "/")):
+        return "./" + relative_href
+    return relative_href
+
+
+def extract_inline_style_blocks(document_html: str) -> list[str]:
+    blocks: list[str] = []
+    for content in re.findall(r"<style\b[^>]*>([\s\S]*?)</style>", document_html, re.IGNORECASE):
+        decoded = html.unescape(content).strip()
+        if decoded:
+            blocks.append(decoded)
+    return blocks
+
+
+def iter_html_media_source_urls(document_html: str) -> list[str]:
+    urls: list[str] = []
+    patterns = (
+        r"""<(?:img|audio|video|source|track|embed)\b[^>]+src=["']([^"']+)["']""",
+        r"""<object\b[^>]+data=["']([^"']+)["']""",
+    )
+    for pattern in patterns:
+        for match in re.findall(pattern, document_html, re.IGNORECASE):
+            candidate = html.unescape(match).strip()
+            if candidate:
+                urls.append(candidate)
+    return urls
+
+
+def is_ignored_runtime_asset_url(url: str) -> bool:
+    lower = url.lower()
+    if lower.startswith(("data:", "blob:", "javascript:", "mailto:", "tel:")):
+        return True
+    return any(fragment in lower for fragment in HTML_RUNTIME_IGNORED_URL_FRAGMENTS)
+
+
+def is_allowed_cross_origin_runtime_host(host: str) -> bool:
+    lowered_host = host.lower().strip()
+    return any(
+        lowered_host == allowed_host or lowered_host.endswith("." + allowed_host)
+        for allowed_host in HTML_RUNTIME_ALLOWED_CROSS_ORIGIN_HOSTS
+    )
+
+
+def should_follow_runtime_candidate_url(candidate_url: str, base_url: str) -> bool:
+    parsed_candidate = urllib.parse.urlparse(candidate_url)
+    parsed_base = urllib.parse.urlparse(base_url)
+    if not parsed_candidate.netloc:
+        return False
+    return (
+        parsed_candidate.netloc.lower() == parsed_base.netloc.lower()
+        or is_allowed_cross_origin_runtime_host(parsed_candidate.netloc)
+    )
+
+
+def looks_like_runtime_asset_reference(raw_value: str) -> bool:
+    candidate = html.unescape(str(raw_value or "")).strip().strip('"\'')
+    if not candidate or any(char.isspace() for char in candidate):
+        return False
+    if candidate.startswith(("#", "data:", "blob:", "javascript:", "mailto:", "tel:")):
+        return False
+
+    parsed = urllib.parse.urlparse(candidate)
+    path = urllib.parse.unquote(parsed.path or candidate).lower()
+    basename = path.rsplit("/", 1)[-1]
+    if (
+        not parsed.scheme
+        and not candidate.startswith(("/", "./", "../"))
+        and re.match(r"""^[a-z0-9.-]+\.[a-z]{2,}(?:/|$)""", candidate, re.IGNORECASE)
+    ):
+        return False
+    normalized_path = path.lstrip("/")
+    if re.match(r"""^[a-z0-9.-]+\.[a-z]{2,}/""", normalized_path, re.IGNORECASE):
+        return False
+    if path.endswith("/"):
+        return False
+
+    if any(path.endswith(extension) for extension in HTML_RUNTIME_ASSET_EXTENSIONS):
+        if basename.startswith("."):
+            return False
+        return True
+    if basename in {"manifest.json", "offline.js", "sw.js", "service-worker.js"}:
+        return True
+    return "." in basename and any(hint in path for hint in HTML_RUNTIME_PATH_HINTS)
+
+
+def extract_css_dependency_urls(css_text: str, base_url: str) -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    def add_candidate(raw_value: str) -> None:
+        candidate = raw_value.strip().strip('"\'')
+        if not looks_like_runtime_asset_reference(candidate):
+            return
+        parsed_candidate = urllib.parse.urlparse(candidate)
+        if parsed_candidate.scheme and parsed_candidate.scheme not in {"http", "https"}:
+            return
+        try:
+            resolved_url = normalize_url(urllib.parse.urljoin(base_url, candidate))
+        except FetchError:
+            return
+        normalized_url = remove_query_and_fragment(resolved_url)
+        if not should_follow_runtime_candidate_url(normalized_url, base_url):
+            return
+        if is_ignored_runtime_asset_url(normalized_url) or normalized_url in seen:
+            return
+        seen.add(normalized_url)
+        candidates.append(normalized_url)
+
+    for match in re.findall(r"""@import\s+(?:url\()?["']?([^"')\s]+)""", css_text, re.IGNORECASE):
+        add_candidate(match)
+    for match in re.findall(r"""url\(([^)]+)\)""", css_text, re.IGNORECASE):
+        add_candidate(match)
+    return candidates
+
+
+def extract_runtime_text_reference_urls(text: str, base_url: str) -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    def add_candidate(raw_value: str) -> None:
+        candidate = raw_value.strip().strip('"\'')
+        if not looks_like_runtime_asset_reference(candidate):
+            return
+        parsed_candidate = urllib.parse.urlparse(candidate)
+        if parsed_candidate.scheme and parsed_candidate.scheme not in {"http", "https"}:
+            return
+        try:
+            resolved_url = normalize_url(urllib.parse.urljoin(base_url, candidate))
+        except FetchError:
+            return
+        normalized_url = remove_query_and_fragment(resolved_url)
+        if not should_follow_runtime_candidate_url(normalized_url, base_url):
+            return
+        if is_ignored_runtime_asset_url(normalized_url) or normalized_url in seen:
+            return
+        seen.add(normalized_url)
+        candidates.append(normalized_url)
+
+    absolute_url_pattern = re.compile(r"""https?://[^"'`\s<>()\\]+""", re.IGNORECASE)
+    root_relative_pattern = re.compile(r"""(?<![A-Za-z0-9])/(?!/)[^"'`\s<>()\\]+""")
+    quoted_relative_pattern = re.compile(r"""(['"])((?:\./|\.\./)?[^"'`\r\n]+)\1""")
+
+    for match in absolute_url_pattern.findall(text):
+        add_candidate(match)
+    for match in root_relative_pattern.findall(text):
+        add_candidate(match)
+    for _quote, value in quoted_relative_pattern.findall(text):
+        add_candidate(value)
+    return candidates
+
+
+def classify_mirrored_text_asset(raw: bytes, content_type: str, asset_url: str) -> str:
+    lower_content_type = (content_type or "").lower()
+    lower_path = urllib.parse.urlparse(remove_query_and_fragment(asset_url)).path.lower()
+    if looks_like_html(raw):
+        return "html"
+    if "text/css" in lower_content_type or lower_path.endswith(".css"):
+        return "css"
+    if any(token in lower_content_type for token in ("javascript", "json", "xml", "text")):
+        return "text"
+    if any(lower_path.endswith(extension) for extension in HTML_RUNTIME_TEXT_EXTENSIONS):
+        return "text"
+    return ""
+
+
+def choose_primary_html_runtime_root(document_html: str, source_url: str) -> str:
+    scores: dict[str, int] = {
+        html_entry_source_root_url(source_url): 2,
+    }
+    origin_scores: dict[str, int] = {
+        origin_root_url(source_url): 2,
+    }
+    links = extract_html_external_links(document_html)
+    weighted_groups = (
+        ("scripts", 5),
+        ("stylesheets", 4),
+        ("other_links", 2),
+        ("frames", 1),
+    )
+
+    def add_candidate(raw_url: str, score: int) -> None:
+        if not looks_like_runtime_asset_reference(raw_url):
+            return
+        resolved_url = normalize_url(urllib.parse.urljoin(source_url, raw_url))
+        normalized_url = remove_query_and_fragment(resolved_url)
+        if is_ignored_runtime_asset_url(normalized_url):
+            return
+        root_url = html_entry_source_root_url(normalized_url)
+        scores[root_url] = scores.get(root_url, 0) + score
+        origin_url = origin_root_url(normalized_url)
+        origin_scores[origin_url] = origin_scores.get(origin_url, 0) + score
+
+    for group_name, weight in weighted_groups:
+        for raw_url in links[group_name]:
+            add_candidate(raw_url, weight)
+    for raw_url in iter_html_media_source_urls(document_html):
+        add_candidate(raw_url, 1)
+
+    best_exact_root, best_exact_score = max(scores.items(), key=lambda item: (item[1], item[0]))
+    best_origin_root, best_origin_score = max(
+        origin_scores.items(),
+        key=lambda item: (item[1], item[0]),
+    )
+    parsed_source = urllib.parse.urlparse(source_url)
+    parsed_origin = urllib.parse.urlparse(best_origin_root)
+    if (
+        parsed_origin.netloc.lower() == parsed_source.netloc.lower()
+        and best_origin_score >= best_exact_score + 6
+    ):
+        return best_origin_root
+    return best_exact_root
+
+
+def rewrite_css_urls_to_local(
+    css_text: str,
+    current_local_path: str,
+    rewrite_aliases: Mapping[str, str],
+) -> str:
+    def resolve_replacement(raw_value: str) -> str:
+        cleaned = raw_value.strip().strip('"\'')
+        replacement_path = rewrite_aliases.get(remove_query_and_fragment(cleaned)) or rewrite_aliases.get(cleaned)
+        if not replacement_path:
+            return ""
+        return compute_relative_local_href(current_local_path, replacement_path)
+
+    def replace_import(match: re.Match[str]) -> str:
+        prefix = match.group(1)
+        quote = match.group(2) or ""
+        raw_value = match.group(3)
+        replacement = resolve_replacement(raw_value)
+        if not replacement:
+            return match.group(0)
+        return f"{prefix}{quote}{replacement}{quote}"
+
+    def replace_url(match: re.Match[str]) -> str:
+        prefix = match.group(1)
+        quote = match.group(2) or ""
+        raw_value = match.group(3)
+        suffix = match.group(4)
+        replacement = resolve_replacement(raw_value)
+        if not replacement:
+            return match.group(0)
+        return f"{prefix}{quote}{replacement}{quote}{suffix}"
+
+    rewritten = re.sub(
+        r"""(@import\s+(?:url\()?\s*)(['"]?)([^"')\s]+)(['"]?\)?)""",
+        replace_import,
+        css_text,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(
+        r"""(url\(\s*)(['"]?)([^"')]+)(['"]?\s*\))""",
+        replace_url,
+        rewritten,
+        flags=re.IGNORECASE,
+    )
+
+
+def rewrite_text_asset_urls_to_local(
+    text: str,
+    current_local_path: str,
+    rewrite_aliases: Mapping[str, str],
+) -> str:
+    def replace_absolute(match: re.Match[str]) -> str:
+        raw_value = match.group(0)
+        normalized_value = remove_query_and_fragment(raw_value)
+        replacement_path = rewrite_aliases.get(normalized_value) or rewrite_aliases.get(raw_value)
+        if not replacement_path:
+            return raw_value
+        return compute_relative_local_href(current_local_path, replacement_path)
+
+    def replace_root_relative(match: re.Match[str]) -> str:
+        raw_value = match.group(0)
+        normalized_value = remove_query_and_fragment(raw_value)
+        replacement_path = rewrite_aliases.get(normalized_value) or rewrite_aliases.get(raw_value)
+        if not replacement_path:
+            return raw_value
+        return compute_relative_local_href(current_local_path, replacement_path)
+
+    rewritten = re.sub(
+        r"""https?://[^"'`\s<>()\\]+""",
+        replace_absolute,
+        text,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(
+        r"""(?<![A-Za-z0-9.])/(?!/)[^"'`\s<>()\\]+""",
+        replace_root_relative,
+        rewritten,
+    )
+
+
+def rewrite_html_runtime_urls_to_local(
+    document_html: str,
+    current_local_path: str,
+    rewrite_aliases: Mapping[str, str],
+) -> str:
+    file_rewrite_map = {
+        alias: compute_relative_local_href(current_local_path, target_path)
+        for alias, target_path in rewrite_aliases.items()
+    }
+    rewritten = rewrite_markup_urls_to_local(document_html, file_rewrite_map)
+    rewritten = re.sub(
+        r"(<style\b[^>]*>)([\s\S]*?)(</style>)",
+        lambda match: (
+            match.group(1)
+            + rewrite_css_urls_to_local(match.group(2), current_local_path, rewrite_aliases)
+            + match.group(3)
+        ),
+        rewritten,
+        flags=re.IGNORECASE,
+    )
+    return rewrite_text_asset_urls_to_local(rewritten, current_local_path, rewrite_aliases)
+
+
 def fetch_json_document(url: str, referer_url: str = "") -> Any:
     resolved_url, raw, _, _ = fetch_url(url, referer_url=referer_url)
     try:
@@ -4018,7 +4548,17 @@ def rewrite_markup_urls_to_local(document_html: str, rewrite_map: Mapping[str, s
     def replace_attr(match: re.Match[str]) -> str:
         prefix, quote, raw_value = match.groups()
         value = html.unescape(raw_value).strip()
-        normalized_value = remove_query_and_fragment(normalize_url(value)) if value else ""
+        normalized_value = ""
+        if value:
+            if value in rewrite_map:
+                normalized_value = value
+            elif value.startswith("/"):
+                normalized_value = remove_query_and_fragment(value)
+            elif is_remote_markup_dependency_url(value):
+                try:
+                    normalized_value = remove_query_and_fragment(normalize_url(value))
+                except FetchError:
+                    normalized_value = ""
         replacement = rewrite_map.get(normalized_value, "")
         if not replacement:
             return match.group(0)
@@ -4031,6 +4571,10 @@ def strip_nonessential_html_markup(document_html: str) -> tuple[str, dict[str, i
     cleaned = document_html
     removal_counts = {
         "canonical_links": 0,
+        "icon_links": 0,
+        "nonessential_scripts": 0,
+        "nonessential_inline_scripts": 0,
+        "nonessential_iframes": 0,
     }
 
     replacements = (
@@ -4038,6 +4582,34 @@ def strip_nonessential_html_markup(document_html: str) -> tuple[str, dict[str, i
             "canonical_links",
             re.compile(
                 r"""<link\b[^>]*\brel\s*=\s*['"][^'"]*\bcanonical\b[^'"]*['"][^>]*>\s*""",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "icon_links",
+            re.compile(
+                r"""<link\b[^>]*\brel\s*=\s*['"][^'"]*\b(?:icon|apple-touch-icon|mask-icon)\b[^'"]*['"][^>]*>\s*""",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "nonessential_scripts",
+            re.compile(
+                r"""<script\b[^>]+\bsrc\s*=\s*['"][^'"]*(?:recaptcha|cloudflareinsights|vconsole|googletagmanager|google-analytics|doubleclick|googlesyndication|pagead2\.googlesyndication|amazon-adsystem|facebook\.net|platform\.twitter)[^'"]*['"][^>]*>\s*</script>\s*""",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "nonessential_inline_scripts",
+            re.compile(
+                r"""<script\b[^>]*>(?:(?!</script>).)*(?:window\.location\.search\.toLowerCase\(\)\.includes\(["']vconsole["']\)|new\s+window\.VConsole|Loading vConsole)(?:(?!</script>).)*</script>\s*""",
+                re.IGNORECASE | re.DOTALL,
+            ),
+        ),
+        (
+            "nonessential_iframes",
+            re.compile(
+                r"""<iframe\b[^>]+\bsrc\s*=\s*['"][^'"]*(?:script\.google\.com/macros|doubleclick|googlesyndication|googleads|amazon-adsystem)[^'"]*['"][\s\S]*?</iframe>\s*""",
                 re.IGNORECASE,
             ),
         ),
@@ -4617,109 +5189,241 @@ def sanitize_construct2_local_runtime(output_dir: Path) -> dict[str, Any]:
     return result
 
 
+def mirror_html_entry_assets(
+    document_html: str,
+    source_url: str,
+    output_dir: Path,
+    prefer_construct2: bool = False,
+) -> tuple[str, dict[str, Any]]:
+    primary_root_url = choose_primary_html_runtime_root(document_html, source_url)
+    queued_urls: list[tuple[str, str]] = []
+    queued_keys: set[str] = set()
+    mirrored_assets: dict[str, dict[str, Any]] = {}
+    fetch_failures: list[str] = []
+    max_asset_count = 800
+
+    def enqueue_candidate(raw_url: str, referer_url: str) -> None:
+        if not raw_url:
+            return
+        stripped_raw_url = html.unescape(raw_url).strip()
+        if not looks_like_runtime_asset_reference(stripped_raw_url):
+            return
+        try:
+            resolved_url = normalize_url(
+                urllib.parse.urljoin(referer_url or source_url, stripped_raw_url)
+            )
+        except FetchError:
+            return
+        normalized_url = remove_query_and_fragment(resolved_url)
+        if is_ignored_runtime_asset_url(normalized_url):
+            return
+        if normalized_url in mirrored_assets or normalized_url in queued_keys:
+            return
+        queued_keys.add(normalized_url)
+        queued_urls.append((normalized_url, referer_url or source_url))
+
+    external_links = extract_html_external_links(document_html)
+    for raw_url in (
+        external_links["scripts"]
+        + external_links["stylesheets"]
+        + external_links["frames"]
+        + external_links["other_links"]
+        + iter_html_media_source_urls(document_html)
+    ):
+        enqueue_candidate(raw_url, source_url)
+    for block in extract_inline_style_blocks(document_html):
+        for dependency_url in extract_css_dependency_urls(block, source_url):
+            enqueue_candidate(dependency_url, source_url)
+    for block in extract_inline_script_blocks(document_html):
+        for dependency_url in extract_runtime_text_reference_urls(block, source_url):
+            enqueue_candidate(dependency_url, source_url)
+
+    construct2_seed_urls: list[str] = []
+    if prefer_construct2:
+        for filename in (
+            "c2runtime.js",
+            "data.js",
+            "offlineClient.js",
+            "sw.js",
+            "offline.js",
+            "appmanifest.json",
+            "appmanifest.html",
+        ):
+            seed_url = normalize_url(urllib.parse.urljoin(primary_root_url, filename))
+            construct2_seed_urls.append(seed_url)
+            enqueue_candidate(seed_url, source_url)
+
+    while queued_urls and len(mirrored_assets) < max_asset_count:
+        candidate_url, referer_url = queued_urls.pop(0)
+        try:
+            resolved_url, raw, content_type, _ = fetch_url(candidate_url, referer_url=referer_url)
+        except FetchError as exc:
+            fetch_failures.append(str(exc))
+            continue
+
+        normalized_candidate_url = remove_query_and_fragment(candidate_url)
+        normalized_resolved_url = remove_query_and_fragment(normalize_url(resolved_url))
+        local_path = compute_mirrored_asset_output_path(normalized_resolved_url, primary_root_url)
+        text_kind = classify_mirrored_text_asset(raw, content_type, normalized_resolved_url)
+        text_content = ""
+        if text_kind:
+            text_content = raw.decode("utf-8-sig", errors="replace")
+            if text_kind == "html":
+                text_content = absolutize_markup_urls(text_content, normalized_resolved_url)
+                text_content, _ = strip_known_embedded_ad_markup(text_content)
+                text_content, _ = strip_nonessential_html_markup(text_content)
+
+        mirrored_assets[normalized_candidate_url] = {
+            "url": normalized_candidate_url,
+            "resolved_url": normalized_resolved_url,
+            "local_path": local_path,
+            "raw": raw,
+            "text_kind": text_kind,
+            "text_content": text_content,
+        }
+        if normalized_resolved_url != normalized_candidate_url:
+            mirrored_assets[normalized_resolved_url] = mirrored_assets[normalized_candidate_url]
+
+        if not text_kind:
+            continue
+
+        dependency_urls: list[str] = []
+        if text_kind == "html":
+            nested_links = extract_html_external_links(text_content)
+            dependency_urls.extend(
+                nested_links["scripts"]
+                + nested_links["stylesheets"]
+                + nested_links["frames"]
+                + nested_links["other_links"]
+                + iter_html_media_source_urls(text_content)
+            )
+            for block in extract_inline_style_blocks(text_content):
+                dependency_urls.extend(extract_css_dependency_urls(block, normalized_resolved_url))
+            for block in extract_inline_script_blocks(text_content):
+                dependency_urls.extend(
+                    extract_runtime_text_reference_urls(block, normalized_resolved_url)
+                )
+        elif text_kind == "css":
+            dependency_urls.extend(extract_css_dependency_urls(text_content, normalized_resolved_url))
+        else:
+            dependency_urls.extend(
+                extract_runtime_text_reference_urls(text_content, normalized_resolved_url)
+            )
+
+        if prefer_construct2:
+            basename = basename_from_url(normalized_resolved_url).lower()
+            if basename == "offline.js":
+                try:
+                    offline_manifest = json.loads(text_content)
+                except json.JSONDecodeError:
+                    offline_manifest = {}
+                if isinstance(offline_manifest, dict):
+                    file_list = offline_manifest.get("fileList")
+                    if isinstance(file_list, list):
+                        for item in file_list:
+                            if isinstance(item, str) and item.strip():
+                                dependency_urls.append(
+                                    normalize_url(
+                                        urllib.parse.urljoin(primary_root_url, item.strip())
+                                    )
+                                )
+            elif basename in {"appmanifest.json", "appmanifest.html"}:
+                try:
+                    appmanifest_payload = json.loads(text_content)
+                except json.JSONDecodeError:
+                    appmanifest_payload = {}
+                if isinstance(appmanifest_payload, dict):
+                    icons = appmanifest_payload.get("icons")
+                    if isinstance(icons, list):
+                        for item in icons:
+                            if not isinstance(item, dict):
+                                continue
+                            raw_src = item.get("src")
+                            if isinstance(raw_src, str) and raw_src.strip():
+                                dependency_urls.append(
+                                    normalize_url(
+                                        urllib.parse.urljoin(primary_root_url, raw_src.strip())
+                                    )
+                                )
+
+        for dependency_url in dependency_urls:
+            enqueue_candidate(dependency_url, normalized_resolved_url)
+
+    rewrite_aliases: dict[str, str] = {}
+    unique_assets: dict[str, dict[str, Any]] = {}
+    for asset in mirrored_assets.values():
+        unique_assets[asset["local_path"]] = asset
+        rewrite_aliases[asset["url"]] = asset["local_path"]
+        rewrite_aliases[asset["resolved_url"]] = asset["local_path"]
+        if relative_asset_path_under_root(asset["resolved_url"], primary_root_url):
+            parsed_asset = urllib.parse.urlparse(asset["resolved_url"])
+            if parsed_asset.path:
+                rewrite_aliases[urllib.parse.unquote(parsed_asset.path)] = asset["local_path"]
+
+    mirrored_files = sorted(unique_assets.keys())
+    if mirrored_files:
+        log(f"Mirroring HTML runtime assets: {len(mirrored_files)} files")
+
+    for local_path, asset in unique_assets.items():
+        destination = output_dir / Path(local_path.replace("/", os.sep))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if asset["text_kind"] == "html":
+            rewritten_text = rewrite_html_runtime_urls_to_local(
+                asset["text_content"],
+                local_path,
+                rewrite_aliases,
+            )
+            destination.write_text(rewritten_text, encoding="utf-8")
+        elif asset["text_kind"] == "css":
+            rewritten_text = rewrite_css_urls_to_local(
+                asset["text_content"],
+                local_path,
+                rewrite_aliases,
+            )
+            rewritten_text = rewrite_text_asset_urls_to_local(
+                rewritten_text,
+                local_path,
+                rewrite_aliases,
+            )
+            destination.write_text(rewritten_text, encoding="utf-8")
+        elif asset["text_kind"] == "text":
+            rewritten_text = rewrite_text_asset_urls_to_local(
+                asset["text_content"],
+                local_path,
+                rewrite_aliases,
+            )
+            destination.write_text(rewritten_text, encoding="utf-8")
+        else:
+            destination.write_bytes(asset["raw"])
+
+    rewritten_html = rewrite_html_runtime_urls_to_local(document_html, "", rewrite_aliases)
+    summary = {
+        "mode": "construct2_local_mirror" if prefer_construct2 else "html_local_mirror",
+        "primary_root_url": primary_root_url,
+        "construct2_seed_urls": construct2_seed_urls[:25],
+        "mirrored_file_count": len(mirrored_files),
+        "mirrored_files_sample": mirrored_files[:25],
+        "fetch_failure_count": len(fetch_failures),
+        "fetch_failures_sample": fetch_failures[:10],
+    }
+    if prefer_construct2:
+        runtime_patch_summary = sanitize_construct2_local_runtime(output_dir)
+        if runtime_patch_summary["patched_files"]:
+            summary["runtime_sanitizer"] = runtime_patch_summary
+    return rewritten_html, summary
+
+
 def mirror_construct2_entry_assets(
     document_html: str,
     source_url: str,
     output_dir: Path,
 ) -> tuple[str, dict[str, Any]]:
-    source_root_url = html_entry_source_root_url(source_url)
-    candidate_urls: list[str] = []
-    seen_urls: set[str] = set()
-
-    def add_candidate(url: str) -> None:
-        normalized_url = remove_query_and_fragment(normalize_url(url))
-        if not relative_asset_path_under_root(normalized_url, source_root_url):
-            return
-        if normalized_url in seen_urls:
-            return
-        seen_urls.add(normalized_url)
-        candidate_urls.append(normalized_url)
-
-    external_links = extract_html_external_links(document_html)
-    for url in (
-        external_links["scripts"]
-        + external_links["stylesheets"]
-        + external_links["other_links"]
-    ):
-        add_candidate(url)
-
-    offline_manifest_url = normalize_url(urllib.parse.urljoin(source_root_url, "offline.js"))
-    appmanifest_url = normalize_url(urllib.parse.urljoin(source_root_url, "appmanifest.json"))
-    for url in (
-        normalize_url(urllib.parse.urljoin(source_root_url, "c2runtime.js")),
-        normalize_url(urllib.parse.urljoin(source_root_url, "data.js")),
-        normalize_url(urllib.parse.urljoin(source_root_url, "offlineClient.js")),
-        normalize_url(urllib.parse.urljoin(source_root_url, "sw.js")),
-        offline_manifest_url,
-        appmanifest_url,
-    ):
-        add_candidate(url)
-
-    offline_manifest_file_count = 0
-    try:
-        offline_manifest = fetch_json_document(offline_manifest_url, referer_url=source_url)
-    except FetchError:
-        offline_manifest = {}
-    if isinstance(offline_manifest, dict):
-        file_list = offline_manifest.get("fileList")
-        if isinstance(file_list, list):
-            for raw_path in file_list:
-                if isinstance(raw_path, str) and raw_path.strip():
-                    add_candidate(urllib.parse.urljoin(source_root_url, raw_path.strip()))
-            offline_manifest_file_count = len(
-                [item for item in file_list if isinstance(item, str) and item.strip()]
-            )
-
-    manifest_icon_count = 0
-    try:
-        appmanifest_payload = fetch_json_document(appmanifest_url, referer_url=source_url)
-    except FetchError:
-        appmanifest_payload = {}
-    if isinstance(appmanifest_payload, dict):
-        icons = appmanifest_payload.get("icons")
-        if isinstance(icons, list):
-            for item in icons:
-                if not isinstance(item, dict):
-                    continue
-                raw_src = item.get("src")
-                if isinstance(raw_src, str) and raw_src.strip():
-                    add_candidate(urllib.parse.urljoin(appmanifest_url, raw_src.strip()))
-                    manifest_icon_count += 1
-
-    rewrite_map: dict[str, str] = {}
-    mirrored_files: list[str] = []
-    total_candidates = len(candidate_urls)
-    if total_candidates:
-        log(f"Mirroring HTML runtime assets: {total_candidates} files")
-    for index, candidate_url in enumerate(candidate_urls, start=1):
-        relative_path = relative_asset_path_under_root(candidate_url, source_root_url)
-        if not relative_path:
-            continue
-        log(f"Mirroring HTML runtime assets: {index}/{total_candidates} -> {relative_path}")
-        destination = output_dir / Path(relative_path.replace("/", os.sep))
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        resolved_url, raw, _, _ = fetch_url(candidate_url, referer_url=source_url)
-        destination.write_bytes(raw)
-        local_href = "./" + relative_path.replace("\\", "/")
-        rewrite_map[remove_query_and_fragment(candidate_url)] = local_href
-        rewrite_map[remove_query_and_fragment(normalize_url(resolved_url))] = local_href
-        mirrored_files.append(relative_path.replace("\\", "/"))
-
-    runtime_patch_summary = sanitize_construct2_local_runtime(output_dir)
-    rewritten_html = rewrite_markup_urls_to_local(document_html, rewrite_map)
-    summary = {
-        "mode": "construct2_local_mirror",
-        "source_root_url": source_root_url,
-        "offline_manifest_url": offline_manifest_url,
-        "offline_manifest_file_count": offline_manifest_file_count,
-        "appmanifest_url": appmanifest_url,
-        "manifest_icon_count": manifest_icon_count,
-        "mirrored_file_count": len(mirrored_files),
-        "mirrored_files_sample": mirrored_files[:25],
-    }
-    if runtime_patch_summary["patched_files"]:
-        summary["runtime_sanitizer"] = runtime_patch_summary
-    return rewritten_html, summary
+    return mirror_html_entry_assets(
+        document_html,
+        source_url,
+        output_dir,
+        prefer_construct2=True,
+    )
 
 
 def generate_crazygames_sdk_stub() -> str:
@@ -10502,13 +11206,12 @@ def export_html_entry(
         wrapper_entry_source_html or sanitized_source_html
     )
     mirrored_html_summary: dict[str, Any] = {}
-    localized_source_html = sanitized_source_html
-    if looks_like_construct2_entry_html(sanitized_source_html):
-        localized_source_html, mirrored_html_summary = mirror_construct2_entry_assets(
-            sanitized_source_html,
-            detected_entry.index_url,
-            output_dir,
-        )
+    localized_source_html, mirrored_html_summary = mirror_html_entry_assets(
+        sanitized_source_html,
+        detected_entry.index_url,
+        output_dir,
+        prefer_construct2=looks_like_construct2_entry_html(sanitized_source_html),
+    )
     localized_source_html, nonessential_markup_removed = strip_nonessential_html_markup(
         localized_source_html
     )
@@ -10551,6 +11254,17 @@ def export_html_entry(
     external_links = extract_html_external_links(
         wrapper_entry_source_html or localized_source_html
     )
+    remaining_remote_dependencies = collect_remote_markup_dependencies(
+        embedded_entry_content
+    )
+    if remaining_remote_dependencies:
+        preview = ", ".join(remaining_remote_dependencies[:5])
+        if len(remaining_remote_dependencies) > 5:
+            preview += ", ..."
+        raise FetchError(
+            "HTML entry still depends on remote assets and cannot run locally. "
+            f"Remaining remote dependencies: {preview}"
+        )
     eagler_mobile_script: dict[str, str] | None = None
     mobile_embedded_entry_name = ""
     if eagler_mobile_option_enabled:
@@ -10662,96 +11376,10 @@ def export_remote_stream_entry(
     allowed_launch_modes: str = "both",
     recommended_launch_mode: str = "none",
 ) -> dict[str, Any]:
-    allowed_launch_modes, recommended_launch_mode = normalize_launch_preferences(
-        allowed_launch_modes,
-        recommended_launch_mode,
+    raise FetchError(
+        "Remote stream entries are disabled. This exporter now only supports builds that "
+        "download their assets and run locally."
     )
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    title = infer_display_title(
-        str(detected_entry.metadata.get("app_name") or extract_html_title(detected_entry.index_html)),
-        root_url,
-        source_page_url=detected_entry.source_page_url or input_url,
-    )
-    remote_url = str(detected_entry.metadata.get("remote_url") or detected_entry.index_url).strip()
-    if not remote_url:
-        raise FetchError("Remote stream entry did not provide a launch URL.")
-
-    support_files = copy_eagler_support_files(output_dir)
-    progress_payload = load_json_file(progress_file)
-    progress_payload.update(
-        {
-            "mode": "entry_auto",
-            "entry_kind": "remote_stream",
-            "root_url": root_url,
-            "input_url": input_url,
-            "resolved_entry_url": detected_entry.index_url,
-            "remote_url": remote_url,
-            "title": title,
-            "completed": False,
-        }
-    )
-    save_json_file(progress_file, progress_payload)
-
-    index_content = generate_html_launcher_index_html(
-        title=title,
-        remote_url=remote_url,
-        play_note="Cloud-streamed on now.gg",
-        launch_here_label="OPEN NOW.GG",
-        launch_fullscreen_label="OPEN IN NEW TAB",
-        initial_status="Remote stream detected; choose handoff mode",
-        allowed_launch_modes=allowed_launch_modes,
-        recommended_launch_mode=recommended_launch_mode,
-        launcher_cache_buster=compute_launcher_support_cache_buster(output_dir),
-    )
-    (output_dir / "index.html").write_text(index_content, encoding="utf-8")
-
-    required_functions_payload = {
-        "count": 0,
-        "functions": [],
-        "window_root_count": 0,
-        "window_roots": [],
-        "window_callable_chain_count": 0,
-        "window_callable_chains": [],
-    }
-    (output_dir / "required-functions.json").write_text(
-        json.dumps(required_functions_payload, indent=2),
-        encoding="utf-8",
-    )
-
-    summary = {
-        "output_dir": str(output_dir),
-        "index_html": str(output_dir / "index.html"),
-        "required_functions_file": str(output_dir / "required-functions.json"),
-        "mode": "entry_auto",
-        "entry_kind": "remote_stream",
-        "title": title,
-        "input_url": input_url,
-        "root_url": root_url,
-        "resolved_entry_url": detected_entry.index_url,
-        "remote_url": remote_url,
-        "remote_provider": detected_entry.metadata.get("remote_provider", ""),
-        "remote_kind": detected_entry.metadata.get("remote_kind", ""),
-        "remote_stream_reason": detected_entry.metadata.get("remote_stream_reason", ""),
-        "launcher": "ocean-launcher",
-        "asset_strategy": "not_mirrored_remote_stream",
-        "launch_options": allowed_launch_modes,
-        "recommended_launch_mode": recommended_launch_mode,
-        "support_files": support_files,
-        "metadata": detected_entry.metadata,
-        "progress_file": str(progress_file),
-    }
-    (output_dir / "standalone-build-info.json").write_text(
-        json.dumps(summary, indent=2),
-        encoding="utf-8",
-    )
-
-    progress_payload = load_json_file(progress_file)
-    progress_payload["completed"] = True
-    progress_payload["summary"] = summary
-    save_json_file(progress_file, progress_payload)
-
-    return summary
 
 
 def generate_eagler_runtime_html(
@@ -11154,7 +11782,7 @@ def main(argv: Sequence[str]) -> int:
                         index_html=detected_entry.index_html,
                         source_page_url=detected_entry.source_page_url or detected_entry.index_url,
                     )
-                    log(f"Falling back to HTML wrapper export for inline legacy Unity bootstrap page: {exc}")
+                    log(f"Falling back to localized HTML export for inline legacy Unity bootstrap page: {exc}")
                     log(f"Resolved HTML entry URL: {detected_html_entry.index_url}")
                 else:
                     build_kind = detected_build.build_kind
@@ -11172,7 +11800,7 @@ def main(argv: Sequence[str]) -> int:
                     index_html=detected_entry.index_html,
                     source_page_url=detected_entry.source_page_url or detected_entry.index_url,
                 )
-                log("Falling back to HTML wrapper export for split-part Unity bootstrap page")
+                log("Falling back to localized HTML export for split-part Unity bootstrap page")
                 log(f"Resolved HTML entry URL: {detected_html_entry.index_url}")
             else:
                 detected_build = detect_entry_build(detected_entry.index_url, detected_entry.index_html)
@@ -11198,7 +11826,7 @@ def main(argv: Sequence[str]) -> int:
                         index_html=detected_entry.index_html,
                         source_page_url=detected_entry.source_page_url or detected_entry.index_url,
                     )
-                    log(f"Falling back to HTML wrapper export for inline Eagler payload: {exc}")
+                    log(f"Falling back to localized HTML export for inline Eagler payload: {exc}")
                     log(f"Resolved HTML entry URL: {detected_html_entry.index_url}")
                 else:
                     raise

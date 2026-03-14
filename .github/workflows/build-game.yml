@@ -10,6 +10,8 @@ on:
       - "build_pages_site.py"
       - "capture_game_thumbnail.py"
       - "game_catalog.json"
+      - "ocean-launcher.css"
+      - "ocean-launcher.js"
       - "site/**"
       - "unity_standalone.py"
       - "verify_generated_game.py"

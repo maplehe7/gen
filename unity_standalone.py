@@ -11390,12 +11390,12 @@ def generate_eagler_runtime_html(
     bootstrap_script: str,
     script_filenames: Sequence[str],
     assets_filename: str,
-    locales_url: str,
+    locales_path: str,
     mobile_script_filename: str = "",
 ) -> str:
     bootstrap_script_js = json.dumps(bootstrap_script, ensure_ascii=False)
     assets_path_js = json.dumps(f"./{assets_filename}", ensure_ascii=False)
-    locales_url_js = json.dumps(locales_url, ensure_ascii=False)
+    locales_path_js = json.dumps(locales_path, ensure_ascii=False)
     modapi_bridge_script = """<script type="text/javascript">
 (function (root) {
   root = root || (typeof globalThis !== "undefined" ? globalThis : null);
@@ -11427,7 +11427,7 @@ def generate_eagler_runtime_html(
     )
 
     locales_override = (
-        f"  window.eaglercraftXOpts.localesURI = {locales_url_js};\n" if locales_url else ""
+        f"  window.eaglercraftXOpts.localesURI = {locales_path_js};\n" if locales_path else ""
     )
 
     return f"""<!DOCTYPE html>
@@ -11620,6 +11620,22 @@ def export_eagler_entry(
         output_dir / assets_name,
         referer_url=detected_entry.index_url,
     )
+    locales_name = ""
+    locales_resolved_url = ""
+    locales_runtime_path = ""
+    if detected_entry.locales_url:
+        locales_name = sanitize_filename(
+            basename_from_url(detected_entry.locales_url)
+            if not detected_entry.locales_url.startswith("data:")
+            else "locales.epk",
+            "locales.epk",
+        )
+        locales_resolved_url = download_raw_asset(
+            detected_entry.locales_url,
+            output_dir / locales_name,
+            referer_url=detected_entry.index_url,
+        )
+        locales_runtime_path = f"./{locales_name}"
     eagler_mobile_script = download_eagler_mobile_script(output_dir)
     support_files.append(eagler_mobile_script["name"])
     embedded_entry_name = "game-root.html"
@@ -11629,7 +11645,7 @@ def export_eagler_entry(
         bootstrap_script=detected_entry.bootstrap_script,
         script_filenames=[item["name"] for item in downloaded_entry_scripts],
         assets_filename=assets_name,
-        locales_url=detected_entry.locales_url,
+        locales_path=locales_runtime_path,
     )
     (output_dir / embedded_entry_name).write_text(embedded_entry_content, encoding="utf-8")
     mobile_embedded_entry_content = generate_eagler_runtime_html(
@@ -11637,7 +11653,7 @@ def export_eagler_entry(
         bootstrap_script=detected_entry.bootstrap_script,
         script_filenames=[item["name"] for item in downloaded_entry_scripts],
         assets_filename=assets_name,
-        locales_url=detected_entry.locales_url,
+        locales_path=locales_runtime_path,
         mobile_script_filename=eagler_mobile_script["name"],
     )
     (output_dir / mobile_embedded_entry_name).write_text(
@@ -11695,7 +11711,8 @@ def export_eagler_entry(
         "skipped_entry_script_urls": skipped_entry_scripts,
         "assets_file": assets_name,
         "assets_url": assets_resolved_url,
-        "locales_url": detected_entry.locales_url,
+        "locales_file": locales_name,
+        "locales_url": locales_resolved_url,
         "eagler_mobile_option_enabled": True,
         "eagler_mobile_script_file": eagler_mobile_script["name"],
         "eagler_mobile_script_url": eagler_mobile_script["resolved_url"],
@@ -12177,6 +12194,7 @@ def main(argv: Sequence[str]) -> int:
         "gd_lite_runtime_data_patched": gd_lite_runtime_data_patched,
         "build_kind": build_kind,
         "mode": "direct_urls" if direct_mode else "entry_auto",
+        "entry_kind": "unity",
         "source_page_url": source_page_url,
         "source_url_spoof_enabled": enable_source_url_spoof,
         "original_folder_url": original_folder_url,

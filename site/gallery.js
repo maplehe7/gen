@@ -29,10 +29,38 @@ function loadPendingDeletes() {
     if (!parsed || typeof parsed !== "object") {
       return {};
     }
-    return parsed;
+    const normalized = {};
+    Object.entries(parsed).forEach(([key, value]) => {
+      const record = normalizePendingDeleteRecord(value);
+      if (key && record) {
+        normalized[key] = record;
+      }
+    });
+    return normalized;
   } catch (_error) {
     return {};
   }
+}
+
+function normalizePendingDeleteRecord(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return {
+      startedAt: value,
+      state: "pending",
+      runId: "",
+      htmlUrl: "",
+    };
+  }
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const startedAt = Number(value.startedAt || value.timestamp || Date.now());
+  return {
+    startedAt: Number.isFinite(startedAt) ? startedAt : Date.now(),
+    state: String(value.state || "pending").trim() || "pending",
+    runId: String(value.runId || "").trim(),
+    htmlUrl: String(value.htmlUrl || "").trim(),
+  };
 }
 
 function savePendingDeletes(pendingDeletes) {
@@ -45,15 +73,19 @@ function prunePendingDeletes(rawGames, pendingDeletes) {
   const liveKeys = new Set(activeGames.map((entry) => entryDeleteKey(entry)).filter(Boolean));
   const now = Date.now();
 
-  Object.entries(pendingDeletes || {}).forEach(([key, timestamp]) => {
-    const ageMs = now - Number(timestamp || 0);
+  Object.entries(pendingDeletes || {}).forEach(([key, rawRecord]) => {
+    const record = normalizePendingDeleteRecord(rawRecord);
+    if (!record) {
+      return;
+    }
+    const ageMs = now - Number(record.startedAt || 0);
     if (!key || ageMs > PENDING_DELETE_TTL_MS) {
       return;
     }
     if (!liveKeys.has(key)) {
       return;
     }
-    nextDeletes[key] = Number(timestamp || now);
+    nextDeletes[key] = record;
   });
 
   return nextDeletes;
@@ -65,13 +97,23 @@ function hidePendingDeletedEntries(rawGames) {
   return (Array.isArray(rawGames) ? rawGames : []).filter((entry) => !pendingDeletes[entryDeleteKey(entry)]);
 }
 
-function rememberPendingDelete(entry) {
+function rememberPendingDelete(entry, patch = {}) {
   const key = entryDeleteKey(entry);
   if (!key) {
     return;
   }
   const pendingDeletes = loadPendingDeletes();
-  pendingDeletes[key] = Date.now();
+  const current = normalizePendingDeleteRecord(pendingDeletes[key]) || {
+    startedAt: Date.now(),
+    state: "pending",
+    runId: "",
+    htmlUrl: "",
+  };
+  pendingDeletes[key] = {
+    ...current,
+    ...patch,
+    startedAt: current.startedAt || Date.now(),
+  };
   savePendingDeletes(pendingDeletes);
 }
 
@@ -187,26 +229,39 @@ async function deleteGame(entry, button) {
     throw new Error("Worker URL is not configured.");
   }
 
+  rememberPendingDelete(entry, { state: "pending" });
+  galleryEntries = galleryEntries.filter((item) => entryDeleteKey(item) !== entryDeleteKey(entry));
+  renderGallery(galleryEntries);
+
   button.disabled = true;
   button.textContent = "Deleting...";
 
   try {
-    await fetchJson(`${workerUrl}/delete`, {
+    const payload = await fetchJson(`${workerUrl}/delete`, {
       method: "POST",
+      keepalive: true,
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         entryId: entry.id || "",
+        folder: entry.folder || "",
         requestId: `${entry.id || "delete"}-${Date.now()}`,
       }),
     });
-    rememberPendingDelete(entry);
-    galleryEntries = galleryEntries.filter((item) => entryDeleteKey(item) !== entryDeleteKey(entry));
-    renderGallery(galleryEntries);
+    rememberPendingDelete(entry, {
+      state: "accepted",
+      runId: String(payload?.runId || "").trim(),
+      htmlUrl: String(payload?.htmlUrl || "").trim(),
+    });
   } catch (error) {
-    button.disabled = false;
-    button.textContent = "Delete";
+    forgetPendingDelete(entry);
+    try {
+      const entries = await fetchPublishedGames();
+      renderGallery(entries);
+    } catch (_reloadError) {
+      renderGallery(galleryEntries);
+    }
     window.alert(error.message);
   }
 }
@@ -216,7 +271,11 @@ function renderGallery(entries) {
     return;
   }
 
-  galleryEntries = Array.isArray(entries) ? [...entries] : [];
+  galleryEntries = (Array.isArray(entries) ? [...entries] : []).sort((left, right) => {
+    const leftTime = Date.parse(String(left?.generated_at || "")) || 0;
+    const rightTime = Date.parse(String(right?.generated_at || "")) || 0;
+    return rightTime - leftTime;
+  });
   galleryContainer.innerHTML = "";
   if (!galleryEntries.length) {
     const empty = document.createElement("div");

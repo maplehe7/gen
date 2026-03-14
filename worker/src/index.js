@@ -1038,11 +1038,12 @@ async function searchDriveSite(query) {
   const queryVariants = buildQueryVariants(query);
   const siteItems = await Promise.all(
     PREFERRED_SEARCH_SITES.map(async (siteConfig) => {
-      const items = await loadDriveSiteIndex(siteConfig);
-      const ranked = [];
-      queryVariants.forEach((variant) => {
-        items.forEach((item) => {
-          const variantScore = scoreQueryMatch(variant, item.title, item.url);
+      try {
+        const items = await loadDriveSiteIndex(siteConfig);
+        const ranked = [];
+        queryVariants.forEach((variant) => {
+          items.forEach((item) => {
+            const variantScore = scoreQueryMatch(variant, item.title, item.url);
           const queryScore = scoreQueryMatch(query, item.title, item.url);
           const textScore = Math.max(queryScore, variantScore);
           if (textScore < SEARCHABLE_SITE_MATCH_FLOOR) {
@@ -1054,10 +1055,13 @@ async function searchDriveSite(query) {
             textScore,
           });
         });
-      });
-      return uniqueBy(ranked, (item) => item.url)
-        .sort((left, right) => right.textScore - left.textScore)
-        .slice(0, MAX_SITE_CANDIDATES);
+        });
+        return uniqueBy(ranked, (item) => item.url)
+          .sort((left, right) => right.textScore - left.textScore)
+          .slice(0, MAX_SITE_CANDIDATES);
+      } catch (_error) {
+        return [];
+      }
     }),
   );
   const ranked = siteItems.flat().sort((left, right) => right.textScore - left.textScore).slice(0, MAX_SITE_CANDIDATES);
@@ -1246,63 +1250,76 @@ async function searchWebFallback(query) {
   return sortCandidates(inspected);
 }
 
-async function findBestSearchResult(query) {
-  const driveCandidates = await searchDriveSite(query);
-  const webCandidates = await searchWebFallback(query);
-  const combined = sortCandidates([...driveCandidates, ...webCandidates]);
-  const bestCandidate = combined.find((candidate) => isAcceptableSearchResult(candidate)) || null;
+function resolveSearchCandidates(candidates, reasonSuffix = "") {
+  const ranked = sortCandidates(candidates);
+  const bestCandidate = ranked.find((candidate) => isAcceptableSearchResult(candidate)) || null;
 
   if (bestCandidate) {
     return {
       candidate: bestCandidate,
-      alternatives: listAlternativeNames(combined, bestCandidate.url),
+      alternatives: listAlternativeNames(ranked, bestCandidate.url),
     };
   }
 
-  const fallbackCandidate = combined.find((candidate) => isFallbackSearchResult(candidate)) || null;
+  const fallbackCandidate = ranked.find((candidate) => isFallbackSearchResult(candidate)) || null;
   if (fallbackCandidate) {
     return {
       candidate: {
         ...fallbackCandidate,
         reason: fallbackCandidate.reason
-          ? `${fallbackCandidate.reason} | best available match`
-          : "best available match",
+          ? `${fallbackCandidate.reason}${reasonSuffix || " | best available match"}`
+          : (reasonSuffix || "best available match").replace(/^\s*\|\s*/, ""),
       },
-      alternatives: listAlternativeNames(combined, fallbackCandidate.url),
+      alternatives: listAlternativeNames(ranked, fallbackCandidate.url),
     };
   }
 
-  const closestPlayableCandidate = combined.find((candidate) => isClosestPlayableSearchResult(candidate)) || null;
+  const closestPlayableCandidate = ranked.find((candidate) => isClosestPlayableSearchResult(candidate)) || null;
   if (closestPlayableCandidate) {
     return {
       candidate: {
         ...closestPlayableCandidate,
         reason: closestPlayableCandidate.reason
-          ? `${closestPlayableCandidate.reason} | closest playable match`
-          : "closest playable match",
+          ? `${closestPlayableCandidate.reason}${reasonSuffix || " | closest playable match"}`
+          : (reasonSuffix || "closest playable match").replace(/^\s*\|\s*/, ""),
       },
-      alternatives: listAlternativeNames(combined, closestPlayableCandidate.url),
+      alternatives: listAlternativeNames(ranked, closestPlayableCandidate.url),
     };
   }
 
-  const bestEffortCandidate = combined.find((candidate) => isSafeBestEffortSearchResult(candidate)) || null;
+  const bestEffortCandidate = ranked.find((candidate) => isSafeBestEffortSearchResult(candidate)) || null;
   if (bestEffortCandidate) {
     return {
       candidate: {
         ...bestEffortCandidate,
         hostedOnline: true,
         reason: bestEffortCandidate.reason
-          ? `${bestEffortCandidate.reason} | safe closest match`
-          : "safe closest match",
+          ? `${bestEffortCandidate.reason}${reasonSuffix || " | safe closest match"}`
+          : (reasonSuffix || "safe closest match").replace(/^\s*\|\s*/, ""),
       },
-      alternatives: listAlternativeNames(combined, bestEffortCandidate.url),
+      alternatives: listAlternativeNames(ranked, bestEffortCandidate.url),
     };
   }
 
   return {
     candidate: null,
-    alternatives: listAlternativeNames(combined),
+    alternatives: listAlternativeNames(ranked),
   };
+}
+
+async function findBestSearchResult(query) {
+  const driveCandidates = await searchDriveSite(query);
+  const driveResult = resolveSearchCandidates(
+    driveCandidates,
+    " | preferred Google Sites match",
+  );
+  if (driveResult.candidate) {
+    return driveResult;
+  }
+
+  const webCandidates = await searchWebFallback(query);
+  const combined = sortCandidates([...driveCandidates, ...webCandidates]);
+  return resolveSearchCandidates(combined);
 }
 
 function encodeBase64Utf8(value) {
@@ -1365,6 +1382,183 @@ async function writeGitHubTextFile(path, text, message, env, sha = "", branch = 
     },
     label,
   );
+}
+
+function sanitizePagesStatePath(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
+}
+
+async function readGitReference(branch, env) {
+  return githubJson(
+    `${githubApiBase(env)}/git/ref/heads/${encodeURIComponent(branch)}`,
+    env,
+    {},
+    "Read git ref",
+  );
+}
+
+async function readGitCommit(commitSha, env) {
+  return githubJson(
+    `${githubApiBase(env)}/git/commits/${encodeURIComponent(commitSha)}`,
+    env,
+    {},
+    "Read git commit",
+  );
+}
+
+async function readGitTree(treeSha, env, recursive = false) {
+  const suffix = recursive ? "?recursive=1" : "";
+  return githubJson(
+    `${githubApiBase(env)}/git/trees/${encodeURIComponent(treeSha)}${suffix}`,
+    env,
+    {},
+    "Read git tree",
+  );
+}
+
+async function createGitBlob(text, env) {
+  return githubJson(
+    `${githubApiBase(env)}/git/blobs`,
+    env,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        content: String(text || ""),
+        encoding: "utf-8",
+      }),
+    },
+    "Create git blob",
+  );
+}
+
+async function createGitTree(baseTreeSha, entries, env) {
+  return githubJson(
+    `${githubApiBase(env)}/git/trees`,
+    env,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        base_tree: baseTreeSha,
+        tree: entries,
+      }),
+    },
+    "Create git tree",
+  );
+}
+
+async function createGitCommit(message, treeSha, parentCommitSha, env) {
+  return githubJson(
+    `${githubApiBase(env)}/git/commits`,
+    env,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message,
+        tree: treeSha,
+        parents: [parentCommitSha],
+      }),
+    },
+    "Create git commit",
+  );
+}
+
+async function updateGitReference(branch, commitSha, env) {
+  return githubJson(
+    `${githubApiBase(env)}/git/refs/heads/${encodeURIComponent(branch)}`,
+    env,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sha: commitSha,
+        force: false,
+      }),
+    },
+    "Update git ref",
+  );
+}
+
+async function commitPagesStateDeletion(branch, catalogText, folderPrefix, message, env) {
+  const normalizedFolderPrefix = sanitizePagesStatePath(folderPrefix);
+  const ref = await readGitReference(branch, env);
+  const parentCommitSha = String(ref?.object?.sha || "").trim();
+  if (!parentCommitSha) {
+    throw new Error(`Pages state branch ${branch} has no commit SHA.`);
+  }
+
+  const parentCommit = await readGitCommit(parentCommitSha, env);
+  const baseTreeSha = String(parentCommit?.tree?.sha || "").trim();
+  if (!baseTreeSha) {
+    throw new Error(`Pages state branch ${branch} has no tree SHA.`);
+  }
+
+  const recursiveTree = await readGitTree(baseTreeSha, env, true);
+  const treeItems = Array.isArray(recursiveTree?.tree) ? recursiveTree.tree : [];
+  const deleteEntries = normalizedFolderPrefix
+    ? treeItems
+        .filter((item) => String(item?.type || "") === "blob")
+        .filter((item) => {
+          const itemPath = sanitizePagesStatePath(item?.path || "");
+          return itemPath === normalizedFolderPrefix || itemPath.startsWith(`${normalizedFolderPrefix}/`);
+        })
+        .map((item) => ({
+          path: sanitizePagesStatePath(item.path || ""),
+          mode: String(item.mode || "100644"),
+          type: String(item.type || "blob"),
+          sha: null,
+        }))
+    : [];
+
+  const catalogBlob = await createGitBlob(catalogText, env);
+  const catalogBlobSha = String(catalogBlob?.sha || "").trim();
+  if (!catalogBlobSha) {
+    throw new Error("Could not create updated catalog blob.");
+  }
+
+  const nextTree = await createGitTree(
+    baseTreeSha,
+    [
+      {
+        path: PUBLISHED_GAMES_FILE_PATH,
+        mode: "100644",
+        type: "blob",
+        sha: catalogBlobSha,
+      },
+      ...deleteEntries,
+    ],
+    env,
+  );
+  const nextTreeSha = String(nextTree?.sha || "").trim();
+  if (!nextTreeSha) {
+    throw new Error("Could not create updated Pages state tree.");
+  }
+
+  const nextCommit = await createGitCommit(message, nextTreeSha, parentCommitSha, env);
+  const nextCommitSha = String(nextCommit?.sha || "").trim();
+  if (!nextCommitSha) {
+    throw new Error("Could not create updated Pages state commit.");
+  }
+
+  await updateGitReference(branch, nextCommitSha, env);
+  return {
+    deletedFileCount: deleteEntries.length,
+    commitSha: nextCommitSha,
+  };
 }
 
 function sanitizeReportValue(value) {
@@ -1517,6 +1711,7 @@ async function handleDelete(request, env) {
   validateEnv(env);
   const body = await request.json().catch(() => null);
   const entryId = sanitizeReportValue(body?.entryId);
+  const requestedFolder = sanitizePagesStatePath(body?.folder);
   const requestId = sanitizeReportValue(body?.requestId) || `delete-${entryId}-${Date.now()}`;
   if (!entryId) {
     return json(
@@ -1553,8 +1748,9 @@ async function handleDelete(request, env) {
   }
 
   const games = Array.isArray(catalog?.games) ? catalog.games : [];
+  const targetGame = games.find((game) => String(game?.id || "").trim() === entryId) || null;
   const nextGames = games.filter((game) => String(game?.id || "").trim() !== entryId);
-  if (nextGames.length === games.length) {
+  if (!targetGame || nextGames.length === games.length) {
     return json(
       { error: `Game ${entryId} was not found.` },
       {
@@ -1564,14 +1760,25 @@ async function handleDelete(request, env) {
     );
   }
 
-  await writeGitHubTextFile(
-    PUBLISHED_GAMES_FILE_PATH,
-    `${JSON.stringify({ generated_at: new Date().toISOString(), games: nextGames }, null, 2)}\n`,
+  const folderPrefix =
+    requestedFolder ||
+    sanitizePagesStatePath(targetGame?.folder) ||
+    sanitizePagesStatePath(`games/${entryId}`);
+  const nextCatalogText = `${JSON.stringify(
+    {
+      generated_at: new Date().toISOString(),
+      games: nextGames,
+    },
+    null,
+    2,
+  )}\n`;
+
+  const deletionSummary = await commitPagesStateDeletion(
+    branch,
+    nextCatalogText,
+    folderPrefix,
     `Remove ${entryId} from published games`,
     env,
-    existing.sha,
-    branch,
-    "Write published games catalog",
   );
 
   const run = await dispatchWorkflowRun(env, "", "", requestId);
@@ -1579,6 +1786,8 @@ async function handleDelete(request, env) {
     {
       ok: true,
       entryId,
+      folder: folderPrefix,
+      deletedFileCount: Number(deletionSummary?.deletedFileCount || 0),
       runId: run.id,
       htmlUrl: run.html_url,
     },

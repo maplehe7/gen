@@ -12,6 +12,7 @@ on:
       - "game_catalog.json"
       - "site/**"
       - "unity_standalone.py"
+      - "verify_generated_game.py"
   workflow_dispatch:
     inputs:
       source_url:

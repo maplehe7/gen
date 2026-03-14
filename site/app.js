@@ -11,7 +11,6 @@ const MAX_RECORDED_RUNS = 40;
 const MAX_STORED_JOBS = 20;
 const ACTIVE_JOB_RETENTION_MS = 2 * 24 * 60 * 60 * 1000;
 const TERMINAL_JOB_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
-const FAILED_JOB_GRACE_MS = 30 * 1000;
 const MIN_HISTORY_DURATION_SECONDS = 1;
 const MAX_HISTORY_DURATION_SECONDS = 900;
 const DEFAULT_STEP_DURATIONS = {
@@ -292,7 +291,7 @@ function visibleProgressPercent(job, nowMs = Date.now()) {
 
 function visibleEtaLabel(job, nowMs = Date.now()) {
   if (job.status === "completed") {
-    return job.conclusion === "success" ? "Completed" : "Stopped";
+    return job.conclusion === "success" ? "Completed" : "Failed";
   }
 
   const etaSeconds = Number(job.etaSeconds);
@@ -465,6 +464,10 @@ function jobSortTimestamp(job) {
   );
 }
 
+function jobCreatedTimestamp(job) {
+  return timestampMs(job?.submittedAt);
+}
+
 function jobSortPriority(job) {
   const status = String(job?.status || "");
   const conclusion = String(job?.conclusion || "");
@@ -539,10 +542,7 @@ function normalizeStoredJob(rawJob) {
   if (!normalized.requestId && !normalized.runId) {
     return null;
   }
-  if (!normalized.sourceUrl) {
-    return null;
-  }
-  if (isFailedJob(normalized) && Date.now() - timestampMs(normalized.failedAt || Date.now()) > FAILED_JOB_GRACE_MS) {
+  if (!normalized.sourceUrl && !normalized.sourceInput) {
     return null;
   }
 
@@ -571,10 +571,16 @@ function normalizeStoredJobs(rawJobs) {
 
   return [...deduped.values()]
     .sort((left, right) => {
+      const createdDelta = jobCreatedTimestamp(right) - jobCreatedTimestamp(left);
+      if (createdDelta !== 0) {
+        return createdDelta;
+      }
+
       const priorityDelta = jobSortPriority(left) - jobSortPriority(right);
       if (priorityDelta !== 0) {
         return priorityDelta;
       }
+
       return jobSortTimestamp(right) - jobSortTimestamp(left);
     })
     .slice(0, MAX_STORED_JOBS);
@@ -582,10 +588,17 @@ function normalizeStoredJobs(rawJobs) {
 
 function formatStatus(status) {
   if (status === "completed") return "Complete";
-  if (status === "error") return "Error";
+  if (status === "error") return "Failed";
   if (status === "in_progress") return "Running";
   if (status === "queued") return "Queued";
   return "Waiting";
+}
+
+function formatJobStatus(job) {
+  if (String(job?.status || "") === "completed") {
+    return String(job?.conclusion || "") === "success" ? "Complete" : "Failed";
+  }
+  return formatStatus(job?.status);
 }
 
 function formatDuration(seconds) {
@@ -1233,13 +1246,17 @@ function renderJobs() {
     card.classList.toggle("is-completed", job.status === "completed" && job.conclusion === "success");
     card.classList.toggle("is-error", isFailedJob(job));
 
-    status.textContent = formatStatus(job.status);
+    status.textContent = formatJobStatus(job);
     title.textContent = job.displayName;
     percent.textContent = `${roundedProgress}%`;
     fill.style.width = `${progressPercent.toFixed(1)}%`;
     phase.textContent = job.phase || "Queued";
     eta.textContent = visibleEtaLabel(job, nowMs);
-    error.textContent = job.error || "";
+    error.textContent =
+      job.error ||
+      (String(job.status || "") === "completed" && String(job.conclusion || "") && String(job.conclusion || "") !== "success"
+        ? `Failed: ${job.conclusion}`
+        : "");
     renderActions(job, actions);
 
     jobsContainer.append(fragment);
@@ -1343,7 +1360,17 @@ async function refreshJobStatuses() {
     }),
   );
 
-  jobs = refreshed;
+  jobs = normalizeStoredJobs(
+    refreshed.map((job) => {
+      if (String(job.status || "") === "completed" && String(job.conclusion || "") && String(job.conclusion || "") !== "success") {
+        return {
+          ...job,
+          error: job.error || `Failed: ${job.conclusion}`,
+        };
+      }
+      return job;
+    }),
+  );
   saveJobs();
   renderJobs();
   renderPublished();
@@ -1414,11 +1441,37 @@ async function queueSingleSource(rawInput, index, total) {
       resolutionReason: resolved.resolutionReason,
     };
   } catch (error) {
-    if (pendingRequestId) {
-      jobs = jobs.filter((job) => String(job.requestId || "").trim() !== pendingRequestId);
-      saveJobs();
-      renderJobs();
-    }
+    upsertJob({
+      requestId: pendingRequestId || createRequestId(),
+      owner: appConfig.owner,
+      repo: appConfig.repo,
+      ref: appConfig.ref,
+      sourceInput: inputValue,
+      sourceUrl: "",
+      displayName: inputValue,
+      sourceMode: "failed",
+      matchedName: "",
+      submittedAt: nowIso(),
+      status: "completed",
+      conclusion: "failure",
+      progressPercent: 0,
+      progressUpdatedAt: Date.now(),
+      phase: "Build failed",
+      etaLabel: "Failed",
+      etaSeconds: 0,
+      etaUpdatedAt: Date.now(),
+      runId: "",
+      runUrl: "",
+      jobsUrl: "",
+      htmlUrl: "",
+      playPath: "",
+      error: error.message,
+      failedAt: Date.now(),
+      lastServerUpdateAt: Date.now(),
+      lastSyncAttemptAt: Date.now(),
+      syncFailureCount: 0,
+    });
+    renderJobs();
     return {
       ok: false,
       inputValue,

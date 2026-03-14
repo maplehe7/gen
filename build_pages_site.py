@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ SITE_SOURCE_DIR = BASE_DIR / "site"
 CATALOG_SOURCE_PATH = BASE_DIR / "game_catalog.json"
 EXPORTER_PATH = Path(os.environ.get("UNITY_EXPORTER_PATH") or (BASE_DIR / "unity_standalone.py"))
 THUMBNAIL_SCRIPT_PATH = BASE_DIR / "capture_game_thumbnail.py"
+VERIFIER_SCRIPT_PATH = BASE_DIR / "verify_generated_game.py"
 
 
 def parse_args() -> argparse.Namespace:
@@ -302,6 +304,17 @@ def capture_thumbnail_for_folder(
     )
 
 
+def verify_export_output(output_dir: Path) -> dict[str, Any]:
+    command = [
+        sys.executable,
+        str(VERIFIER_SCRIPT_PATH),
+        "--output-dir",
+        str(output_dir),
+    ]
+    subprocess.run(command, cwd=BASE_DIR, check=True)
+    return load_json(output_dir / "standalone-verification.json")
+
+
 def build_export(
     dist_dir: Path,
     source_url: str,
@@ -319,19 +332,32 @@ def build_export(
         source_url
     )
     target_dir = dist_dir / "games" / folder_name
+    staging_root = dist_dir / ".build-staging"
+    staging_root.mkdir(parents=True, exist_ok=True)
+    staging_dir = Path(tempfile.mkdtemp(prefix=f"{folder_name}-", dir=str(staging_root)))
 
     command = [
         sys.executable,
         str(EXPORTER_PATH),
         source_url,
         "--out",
-        str(target_dir),
+        str(staging_dir),
         "--overwrite",
     ]
-    subprocess.run(command, cwd=BASE_DIR, check=True)
+    try:
+        subprocess.run(command, cwd=BASE_DIR, check=True)
+        verification = verify_export_output(staging_dir)
+
+        target_dir.parent.mkdir(parents=True, exist_ok=True)
+        shutil.rmtree(target_dir, ignore_errors=True)
+        shutil.move(str(staging_dir), str(target_dir))
+    except Exception:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        raise
 
     summary_path = target_dir / "standalone-build-info.json"
     summary = load_json(summary_path)
+    verification = load_json(target_dir / "standalone-verification.json")
     thumbnail_path = capture_thumbnail_for_folder(
         dist_dir=dist_dir,
         folder_name=folder_name,
@@ -348,8 +374,10 @@ def build_export(
         "play_path": f"games/{folder_name}/",
         "thumbnail_path": thumbnail_path,
         "summary_path": f"games/{folder_name}/standalone-build-info.json",
+        "verification_path": f"games/{folder_name}/standalone-verification.json",
         "generated_at": generated_at,
         "summary": summary,
+        "verification": verification,
     }
 
 

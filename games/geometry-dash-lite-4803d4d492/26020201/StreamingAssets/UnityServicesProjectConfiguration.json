@@ -1,0 +1,10 @@
+{
+  "projectId": "standalone-local",
+  "cloudProjectId": "standalone-local",
+  "environmentId": "local",
+  "enabled": false,
+  "analyticsEnabled": false,
+  "crashReportingEnabled": false,
+  "messagingEnabled": false,
+  "services": []
+}

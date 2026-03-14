@@ -4,9 +4,10 @@ const BATCH_SELECTIONS_KEY = "standalone-forge-batch-selections";
 const PENDING_DELETES_KEY = "standalone-forge-pending-deletes";
 const JOB_STORAGE_VERSION = 3;
 const WORKFLOW_FILE = "build-game.yml";
-const TARGET_SUCCESSFUL_CANDIDATES = 3;
-const SEARCH_CANDIDATE_COUNT = 3;
-const SEARCH_POOL_COUNT = 6;
+const DEFAULT_TARGET_SUCCESSFUL_CANDIDATES = 3;
+const MIN_TARGET_SUCCESSFUL_CANDIDATES = 1;
+const MAX_TARGET_SUCCESSFUL_CANDIDATES = 5;
+const MAX_SEARCH_POOL_COUNT = 12;
 const DEFAULT_STEP_SECONDS = 55;
 const PLACEHOLDER_WORKER_URL = "PASTE_CLOUDFLARE_WORKER_URL_HERE";
 const STATUS_REFRESH_MS = 8000;
@@ -49,6 +50,7 @@ const DEFAULT_WORKFLOW_DURATION_SECONDS = DEFAULT_WORKFLOW_STEP_ORDER.reduce(
 
 const form = document.getElementById("export-form");
 const sourceInput = document.getElementById("source");
+const candidateCountInput = document.getElementById("candidate-count");
 const bulkToggleButton = document.getElementById("bulk-toggle");
 const bulkPanel = document.getElementById("bulk-panel");
 const sourceListInput = document.getElementById("source-list");
@@ -74,6 +76,11 @@ let jobHistory = {
   stepDurations: {},
   totalDurations: [],
   recordedRunIds: [],
+};
+let jobSectionState = {
+  active: true,
+  completed: false,
+  failed: false,
 };
 let activeFavoriteBatchId = "";
 let refreshInFlight = false;
@@ -349,9 +356,31 @@ function resetSourceInputs() {
   }
 }
 
+function readRequestedCandidateCount() {
+  const numeric = Math.round(Number(candidateCountInput?.value || DEFAULT_TARGET_SUCCESSFUL_CANDIDATES));
+  if (!Number.isFinite(numeric)) {
+    return DEFAULT_TARGET_SUCCESSFUL_CANDIDATES;
+  }
+  return Math.min(
+    Math.max(numeric, MIN_TARGET_SUCCESSFUL_CANDIDATES),
+    MAX_TARGET_SUCCESSFUL_CANDIDATES,
+  );
+}
+
+function searchPoolCountForDesiredCount(desiredCount) {
+  const safeDesired = Math.min(
+    Math.max(Math.round(Number(desiredCount) || DEFAULT_TARGET_SUCCESSFUL_CANDIDATES), MIN_TARGET_SUCCESSFUL_CANDIDATES),
+    MAX_TARGET_SUCCESSFUL_CANDIDATES,
+  );
+  return Math.min(Math.max(safeDesired * 3, safeDesired + 3), MAX_SEARCH_POOL_COUNT);
+}
+
 function setFormBusy(isBusy) {
   if (submitButton) {
     submitButton.disabled = isBusy;
+  }
+  if (candidateCountInput) {
+    candidateCountInput.disabled = isBusy;
   }
   if (bulkToggleButton) {
     bulkToggleButton.disabled = isBusy;
@@ -762,6 +791,30 @@ function successfulJob(job) {
   return String(job?.status || "") === "completed" && String(job?.conclusion || "") === "success";
 }
 
+function activeJob(job) {
+  return !isTerminalJob(job);
+}
+
+function jobsForSection(sectionKey) {
+  if (sectionKey === "active") {
+    return jobs.filter((job) => activeJob(job));
+  }
+  if (sectionKey === "completed") {
+    return jobs.filter((job) => successfulJob(job));
+  }
+  if (sectionKey === "failed") {
+    return jobs.filter((job) => isFailedJob(job));
+  }
+  return [];
+}
+
+function sectionOpenState(sectionKey) {
+  if (Object.prototype.hasOwnProperty.call(jobSectionState, sectionKey)) {
+    return Boolean(jobSectionState[sectionKey]);
+  }
+  return sectionKey === "active";
+}
+
 function jobsForBatch(batchId) {
   const normalizedBatchId = String(batchId || "").trim();
   return jobs
@@ -780,7 +833,7 @@ function batchSuccessfulJobs(batchJobs) {
 function desiredSuccessCountForBatch(batchId) {
   const desired = Number(batchSelectionFor(batchId)?.desiredSuccessCount);
   if (!Number.isFinite(desired) || desired <= 0) {
-    return TARGET_SUCCESSFUL_CANDIDATES;
+    return DEFAULT_TARGET_SUCCESSFUL_CANDIDATES;
   }
   return Math.round(desired);
 }
@@ -1222,7 +1275,7 @@ async function searchForGameByName(query, limit = 1) {
   return fetchJson(searchUrl.toString());
 }
 
-async function resolveSourceCandidates(inputValue, limit = SEARCH_CANDIDATE_COUNT) {
+async function resolveSourceCandidates(inputValue, limit = DEFAULT_TARGET_SUCCESSFUL_CANDIDATES) {
   const trimmed = String(inputValue || "").trim();
   if (!trimmed) {
     throw new Error("Enter a game URL or a game name.");
@@ -1859,6 +1912,101 @@ function syncFavoriteChooser() {
   setFavoriteModalVisible(true);
 }
 
+function buildJobCardFragment(job) {
+  const nowMs = Date.now();
+  const progressPercent = visibleProgressPercent(job);
+  const roundedProgress = Math.round(progressPercent);
+  const fragment = jobTemplate.content.cloneNode(true);
+  const card = fragment.querySelector(".job-card");
+  const rank = fragment.querySelector(".job-rank");
+  const status = fragment.querySelector(".job-status");
+  const title = fragment.querySelector(".job-title");
+  const subtitle = fragment.querySelector(".job-subtitle");
+  const percent = fragment.querySelector(".job-percent");
+  const fill = fragment.querySelector(".meter-fill");
+  const phase = fragment.querySelector(".job-phase");
+  const eta = fragment.querySelector(".job-eta");
+  const error = fragment.querySelector(".job-error");
+  const actions = fragment.querySelector(".job-actions");
+
+  card.classList.toggle("is-completed", job.status === "completed" && job.conclusion === "success");
+  card.classList.toggle("is-error", isFailedJob(job));
+  card.classList.toggle(
+    "is-favorite",
+    String(batchSelectionFor(job.batchId)?.favoriteRequestId || "") === String(job.requestId || ""),
+  );
+
+  status.textContent = formatJobStatus(job);
+  rank.textContent = candidateRankLabel(job);
+  title.textContent = job.displayName;
+  subtitle.textContent = candidateSubtitle(job);
+  percent.textContent = `${roundedProgress}%`;
+  fill.style.width = `${progressPercent.toFixed(1)}%`;
+  phase.textContent = job.phase || "Queued";
+  eta.textContent = visibleEtaLabel(job, nowMs);
+  error.textContent =
+    job.error ||
+    (String(job.status || "") === "completed" && String(job.conclusion || "") && String(job.conclusion || "") !== "success"
+      ? `Failed: ${job.conclusion}`
+      : "");
+  renderActions(job, actions);
+
+  return fragment;
+}
+
+function buildJobSection(sectionKey, title, copy, sectionJobs, emptyMessage) {
+  const details = document.createElement("details");
+  details.className = "job-section";
+  details.open = sectionOpenState(sectionKey);
+  details.addEventListener("toggle", () => {
+    jobSectionState[sectionKey] = details.open;
+  });
+
+  const summary = document.createElement("summary");
+  summary.className = "job-section-summary";
+
+  const labelWrap = document.createElement("div");
+  labelWrap.className = "job-section-label-wrap";
+
+  const chevron = document.createElement("span");
+  chevron.className = "job-section-chevron";
+  chevron.textContent = "▶";
+  labelWrap.append(chevron);
+
+  const heading = document.createElement("h2");
+  heading.className = "job-section-title";
+  heading.textContent = title;
+  labelWrap.append(heading);
+
+  const count = document.createElement("span");
+  count.className = "job-section-count";
+  count.textContent = String(sectionJobs.length);
+  labelWrap.append(count);
+
+  const summaryCopy = document.createElement("p");
+  summaryCopy.className = "job-section-copy";
+  summaryCopy.textContent = copy;
+
+  summary.append(labelWrap, summaryCopy);
+  details.append(summary);
+
+  const content = document.createElement("div");
+  content.className = "job-section-content";
+  if (sectionJobs.length) {
+    sectionJobs.forEach((job) => {
+      content.append(buildJobCardFragment(job));
+    });
+  } else {
+    const empty = document.createElement("p");
+    empty.className = "job-section-empty";
+    empty.textContent = emptyMessage;
+    content.append(empty);
+  }
+  details.append(content);
+
+  return details;
+}
+
 function renderJobs() {
   if (!jobsContainer || !jobTemplate) {
     return;
@@ -1874,47 +2022,33 @@ function renderJobs() {
     return;
   }
 
-  jobs.forEach((job) => {
-    const nowMs = Date.now();
-    const progressPercent = visibleProgressPercent(job);
-    const roundedProgress = Math.round(progressPercent);
-    const fragment = jobTemplate.content.cloneNode(true);
-    const card = fragment.querySelector(".job-card");
-    const rank = fragment.querySelector(".job-rank");
-    const status = fragment.querySelector(".job-status");
-    const title = fragment.querySelector(".job-title");
-    const subtitle = fragment.querySelector(".job-subtitle");
-    const percent = fragment.querySelector(".job-percent");
-    const fill = fragment.querySelector(".meter-fill");
-    const phase = fragment.querySelector(".job-phase");
-    const eta = fragment.querySelector(".job-eta");
-    const error = fragment.querySelector(".job-error");
-    const actions = fragment.querySelector(".job-actions");
-
-    card.classList.toggle("is-completed", job.status === "completed" && job.conclusion === "success");
-    card.classList.toggle("is-error", isFailedJob(job));
-    card.classList.toggle(
-      "is-favorite",
-      String(batchSelectionFor(job.batchId)?.favoriteRequestId || "") === String(job.requestId || ""),
-    );
-
-    status.textContent = formatJobStatus(job);
-    rank.textContent = candidateRankLabel(job);
-    title.textContent = job.displayName;
-    subtitle.textContent = candidateSubtitle(job);
-    percent.textContent = `${roundedProgress}%`;
-    fill.style.width = `${progressPercent.toFixed(1)}%`;
-    phase.textContent = job.phase || "Queued";
-    eta.textContent = visibleEtaLabel(job, nowMs);
-    error.textContent =
-      job.error ||
-      (String(job.status || "") === "completed" && String(job.conclusion || "") && String(job.conclusion || "") !== "success"
-        ? `Failed: ${job.conclusion}`
-        : "");
-    renderActions(job, actions);
-
-    jobsContainer.append(fragment);
-  });
+  jobsContainer.append(
+    buildJobSection(
+      "active",
+      "Running / Candidates",
+      "Currently building or waiting to build.",
+      jobsForSection("active"),
+      "No running or queued candidates right now.",
+    ),
+  );
+  jobsContainer.append(
+    buildJobSection(
+      "completed",
+      "Completed",
+      "Finished builds that published successfully.",
+      jobsForSection("completed"),
+      "No completed jobs yet.",
+    ),
+  );
+  jobsContainer.append(
+    buildJobSection(
+      "failed",
+      "Failed",
+      "Builds that stopped or did not verify.",
+      jobsForSection("failed"),
+      "No failed jobs.",
+    ),
+  );
   syncFavoriteChooser();
 }
 
@@ -2091,11 +2225,21 @@ async function dispatchCandidateJob(draftJob) {
   }
 }
 
-async function queueSourceBatch(rawInput, index, total) {
+async function queueSourceBatch(rawInput, index, total, requestedCandidateCount = DEFAULT_TARGET_SUCCESSFUL_CANDIDATES) {
   const inputValue = String(rawInput || "").trim();
   const progressLabel = total > 1 ? `${index + 1} of ${total}` : "";
   const batchId = createRequestId();
   const batchSubmittedAt = nowIso();
+  const desiredCandidateCount = Number.isFinite(Number(requestedCandidateCount))
+    ? Math.min(
+        Math.max(
+          Math.round(Number(requestedCandidateCount) || DEFAULT_TARGET_SUCCESSFUL_CANDIDATES),
+          MIN_TARGET_SUCCESSFUL_CANDIDATES,
+        ),
+        MAX_TARGET_SUCCESSFUL_CANDIDATES,
+      )
+    : DEFAULT_TARGET_SUCCESSFUL_CANDIDATES;
+  const searchPoolLimit = searchPoolCountForDesiredCount(desiredCandidateCount);
 
   formMessage.textContent = progressLabel
     ? `Searching ${progressLabel}: ${inputValue}`
@@ -2103,17 +2247,18 @@ async function queueSourceBatch(rawInput, index, total) {
 
   try {
     const resolvedCandidates = dedupeResolvedCandidates(
-      await resolveSourceCandidates(inputValue, SEARCH_POOL_COUNT),
-    ).slice(0, SEARCH_POOL_COUNT);
+      await resolveSourceCandidates(inputValue, searchPoolLimit),
+    ).slice(0, searchPoolLimit);
     if (!resolvedCandidates.length) {
       throw new Error(`No distinct candidates were found for ${inputValue}.`);
     }
+    const desiredSuccessCount = Math.min(desiredCandidateCount, resolvedCandidates.length);
 
     updateBatchSelection(batchId, {
       batchId,
       batchLabel: inputValue,
       batchSubmittedAt,
-      desiredSuccessCount: Math.min(TARGET_SUCCESSFUL_CANDIDATES, resolvedCandidates.length),
+      desiredSuccessCount,
       state: "pending",
       candidatePool: resolvedCandidates.map((candidate, poolIndex) => ({
         ...candidate,
@@ -2122,8 +2267,8 @@ async function queueSourceBatch(rawInput, index, total) {
     });
 
     const results = [];
-    for (const [candidateIndex, candidate] of resolvedCandidates.slice(0, TARGET_SUCCESSFUL_CANDIDATES).entries()) {
-      formMessage.textContent = `Queueing ${inputValue}: candidate ${candidateIndex + 1} of ${Math.min(TARGET_SUCCESSFUL_CANDIDATES, resolvedCandidates.length)}`;
+    for (const [candidateIndex, candidate] of resolvedCandidates.slice(0, desiredSuccessCount).entries()) {
+      formMessage.textContent = `Queueing ${inputValue}: candidate ${candidateIndex + 1} of ${desiredSuccessCount}`;
       const draftJob = createBatchDraftJob(batchId, inputValue, batchSubmittedAt, candidate, resolvedCandidates.length);
       results.push(await dispatchCandidateJob(draftJob));
     }
@@ -2137,7 +2282,7 @@ async function queueSourceBatch(rawInput, index, total) {
       ok: dispatchCount > 0,
       inputValue,
       batchId,
-      candidateCount: Math.min(TARGET_SUCCESSFUL_CANDIDATES, resolvedCandidates.length),
+      candidateCount: desiredSuccessCount,
       successCount: dispatchCount,
       failureCount,
       displayName: resolvedCandidates[0]?.displayName || inputValue,
@@ -2209,6 +2354,7 @@ async function handleSubmit(event) {
     }
 
     const requestedSources = collectRequestedSources();
+    const requestedCandidateCount = readRequestedCandidateCount();
     if (!requestedSources.length) {
       throw new Error("Enter at least one game URL or name.");
     }
@@ -2216,7 +2362,12 @@ async function handleSubmit(event) {
     const successes = [];
     const failures = [];
     for (const [index, inputValue] of requestedSources.entries()) {
-      const result = await queueSourceBatch(inputValue, index, requestedSources.length);
+      const result = await queueSourceBatch(
+        inputValue,
+        index,
+        requestedSources.length,
+        requestedCandidateCount,
+      );
       if (result.ok) {
         successes.push(result);
       } else {

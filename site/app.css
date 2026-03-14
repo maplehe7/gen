@@ -66,7 +66,7 @@ body {
 .export-form {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: center;
   padding-top: 18px;
@@ -74,6 +74,30 @@ body {
 
 .source-input-wrap {
   min-width: 0;
+}
+
+.candidate-count-control {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.candidate-count-control select {
+  min-width: 84px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .export-form input {
@@ -110,6 +134,11 @@ body {
 }
 
 .bulk-panel textarea:focus {
+  outline: 2px solid rgba(31, 111, 235, 0.18);
+  border-color: var(--accent);
+}
+
+.candidate-count-control select:focus {
   outline: 2px solid rgba(31, 111, 235, 0.18);
   border-color: var(--accent);
 }
@@ -202,7 +231,93 @@ body {
 
 .jobs-grid {
   display: grid;
+  gap: 12px;
+}
+
+.job-section {
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.job-section + .job-section {
+  border-top-color: rgba(10, 53, 87, 0.2);
+}
+
+.job-section-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.job-section-summary::-webkit-details-marker {
+  display: none;
+}
+
+.job-section-label-wrap {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  min-width: 0;
+}
+
+.job-section-chevron {
+  color: var(--muted);
+  font-size: 0.82rem;
+  transition: transform 180ms ease;
+}
+
+.job-section[open] .job-section-chevron {
+  transform: rotate(90deg);
+}
+
+.job-section-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.job-section-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(13, 111, 184, 0.08);
+  color: var(--accent-strong);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.job-section-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: right;
+}
+
+.job-section-content {
+  display: grid;
+  gap: 10px;
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.job-section-empty {
+  margin: 0;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.6);
 }
 
 .gallery-grid {
@@ -546,9 +661,21 @@ body {
     min-width: 0;
   }
 
+  .candidate-count-control {
+    width: 100%;
+  }
+
   .job-topline,
   .job-meta {
     flex-direction: column;
+  }
+
+  .job-section-summary {
+    align-items: flex-start;
+  }
+
+  .job-section-copy {
+    text-align: left;
   }
 
   .gallery-grid {

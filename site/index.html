@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Standalone Forge</title>
-    <link rel="stylesheet" href="./app.css?v=20260313-5" />
+    <link rel="stylesheet" href="./app.css?v=20260313-6" />
   </head>
   <body>
     <div class="page-shell">
@@ -20,6 +20,16 @@
               required
             />
           </div>
+          <label class="candidate-count-control" for="candidate-count">
+            <span>Candidates</span>
+            <select id="candidate-count" name="candidate-count">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3" selected>3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+          </label>
           <button
             id="bulk-toggle"
             class="bulk-corner-toggle"
@@ -91,7 +101,7 @@
       </article>
     </template>
 
-    <script src="./config.js?v=20260313-5"></script>
-    <script src="./app.js?v=20260313-5" defer></script>
+    <script src="./config.js?v=20260313-6"></script>
+    <script src="./app.js?v=20260313-6" defer></script>
   </body>
 </html>

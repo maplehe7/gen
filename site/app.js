@@ -133,7 +133,7 @@ function candidateSourceKey(value) {
     const parsed = new URL(normalized);
     parsed.hash = "";
     const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
-    return `${parsed.protocol}//${parsed.hostname.toLowerCase()}${pathname}${parsed.search}`;
+    return `${parsed.hostname.toLowerCase()}${pathname}${parsed.search}`;
   } catch (_error) {
     return normalized.toLowerCase();
   }
@@ -252,7 +252,20 @@ function createRequestId() {
 function loadBatchSelections() {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(BATCH_SELECTIONS_KEY) || "{}");
-    batchSelections = parsed && typeof parsed === "object" ? parsed : {};
+    batchSelections = parsed && typeof parsed === "object"
+      ? Object.fromEntries(
+          Object.entries(parsed).map(([key, value]) => {
+            const normalized = value && typeof value === "object" ? { ...value } : {};
+            if (normalized.dispatchingFallback) {
+              normalized.dispatchingFallback = false;
+              if (normalized.state === "backfilling") {
+                normalized.state = "pending";
+              }
+            }
+            return [key, normalized];
+          }),
+        )
+      : {};
   } catch (_error) {
     batchSelections = {};
   }
@@ -1622,17 +1635,18 @@ async function maybeDispatchBatchFallback(batchId) {
   const desired = desiredSuccessCountForBatch(normalizedBatchId);
   const successfulCount = batchSuccessfulJobs(batchJobs).length;
   const activeCount = batchJobs.filter((job) => !isTerminalJob(job)).length;
-  if (successfulCount >= desired || successfulCount + activeCount >= desired) {
+  const openSlots = desired - (successfulCount + activeCount);
+  if (openSlots <= 0) {
     return false;
   }
 
   const candidatePool = candidatePoolForBatch(normalizedBatchId);
   const attempted = new Set(batchJobs.map((job) => candidateSourceKey(job.sourceUrl)).filter(Boolean));
-  const nextCandidate = candidatePool.find((candidate) => {
+  const remainingCandidates = candidatePool.filter((candidate) => {
     const key = candidateSourceKey(candidate?.sourceUrl || "");
     return key && !attempted.has(key);
   });
-  if (!nextCandidate) {
+  if (!remainingCandidates.length) {
     return false;
   }
 
@@ -1641,20 +1655,33 @@ async function maybeDispatchBatchFallback(batchId) {
     state: "backfilling",
   });
   try {
-    const draftJob = createBatchDraftJob(
-      normalizedBatchId,
-      String(selection.batchLabel || batchJobs[0]?.batchLabel || batchJobs[0]?.sourceInput || "").trim(),
-      String(selection.batchSubmittedAt || batchJobs[0]?.batchSubmittedAt || nowIso()),
-      nextCandidate,
-      candidatePool.length,
-    );
-    const result = await dispatchCandidateJob(draftJob);
+    const batchLabel = String(selection.batchLabel || batchJobs[0]?.batchLabel || batchJobs[0]?.sourceInput || "").trim();
+    const batchSubmittedAt = String(selection.batchSubmittedAt || batchJobs[0]?.batchSubmittedAt || nowIso());
+    let queuedCount = 0;
+
+    for (const nextCandidate of remainingCandidates) {
+      if (queuedCount >= openSlots) {
+        break;
+      }
+      const draftJob = createBatchDraftJob(
+        normalizedBatchId,
+        batchLabel,
+        batchSubmittedAt,
+        nextCandidate,
+        candidatePool.length,
+      );
+      const result = await dispatchCandidateJob(draftJob);
+      if (result.ok) {
+        queuedCount += 1;
+      }
+    }
+
     updateBatchSelection(normalizedBatchId, {
       dispatchingFallback: false,
-      state: result.ok ? "pending" : "backfill-failed",
+      state: queuedCount > 0 ? "pending" : "backfill-failed",
       lastFallbackAt: nowIso(),
     });
-    return result.ok;
+    return queuedCount > 0;
   } catch (_error) {
     updateBatchSelection(normalizedBatchId, {
       dispatchingFallback: false,

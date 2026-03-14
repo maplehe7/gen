@@ -4193,6 +4193,7 @@ HTML_RUNTIME_IGNORED_URL_FRAGMENTS = (
 
 HTML_RUNTIME_ALLOWED_CROSS_ORIGIN_HOSTS = (
     "babylonjs.com",
+    "builds.crazygames.com",
     "cdnjs.cloudflare.com",
     "cdn.jsdelivr.net",
     "githack.com",
@@ -4202,7 +4203,21 @@ HTML_RUNTIME_ALLOWED_CROSS_ORIGIN_HOSTS = (
     "unpkg.com",
     "raw.githubusercontent.com",
     "rawcdn.githack.com",
+    "turbowarp.org",
 )
+
+HTML_RUNTIME_NONESSENTIAL_LOCAL_SCRIPT_BASENAMES = (
+    "cloak.js",
+    "otautoblock.js",
+)
+
+
+def is_local_dev_runtime_host(host: str) -> bool:
+    lowered = host.lower().strip()
+    if not lowered:
+        return False
+    lowered = lowered.split(":", 1)[0]
+    return lowered in {"localhost", "127.0.0.1", "0.0.0.0"}
 
 
 def sanitize_runtime_path_segment(segment: str) -> str:
@@ -4308,8 +4323,16 @@ def looks_like_runtime_asset_reference(raw_value: str) -> bool:
     ):
         return False
     normalized_path = path.lstrip("/")
-    if re.match(r"""^[a-z0-9.-]+\.[a-z]{2,}/""", normalized_path, re.IGNORECASE):
-        return False
+    embedded_host_match = re.match(
+        r"""^(?P<host>(?:[a-z0-9-]+\.)+[a-z]{2,}|localhost|127(?:\.\d{1,3}){3}|0(?:\.\d{1,3}){3})(?::\d+)?/""",
+        normalized_path,
+        re.IGNORECASE,
+    )
+    if embedded_host_match:
+        if is_local_dev_runtime_host(embedded_host_match.group("host")):
+            return False
+        if not candidate.startswith(("/", "./", "../")):
+            return False
     if path.endswith("/"):
         return False
 
@@ -4462,10 +4485,11 @@ def rewrite_css_urls_to_local(
     css_text: str,
     current_local_path: str,
     rewrite_aliases: Mapping[str, str],
+    source_url: str = "",
 ) -> str:
     def resolve_replacement(raw_value: str) -> str:
         cleaned = raw_value.strip().strip('"\'')
-        replacement_path = rewrite_aliases.get(remove_query_and_fragment(cleaned)) or rewrite_aliases.get(cleaned)
+        replacement_path = resolve_rewrite_alias_target(cleaned, rewrite_aliases, source_url)
         if not replacement_path:
             return ""
         return compute_relative_local_href(current_local_path, replacement_path)
@@ -4503,23 +4527,70 @@ def rewrite_css_urls_to_local(
     )
 
 
+def resolve_rewrite_alias_target(
+    raw_value: str,
+    rewrite_aliases: Mapping[str, str],
+    source_url: str = "",
+) -> str:
+    cleaned = str(raw_value or "").strip().strip('"\'')
+    if not cleaned:
+        return ""
+
+    alias_candidates = [cleaned]
+    if cleaned.startswith("//"):
+        alias_candidates.append("https:" + cleaned)
+
+    try:
+        alias_candidates.append(remove_query_and_fragment(cleaned))
+    except (FetchError, ValueError):
+        pass
+
+    if source_url:
+        try:
+            joined = normalize_url(urllib.parse.urljoin(source_url, cleaned))
+        except (FetchError, ValueError):
+            joined = ""
+        if joined:
+            alias_candidates.append(joined)
+            alias_candidates.append(remove_query_and_fragment(joined))
+
+    for alias in alias_candidates:
+        replacement_path = rewrite_aliases.get(alias)
+        if replacement_path:
+            return replacement_path
+    return ""
+
+
 def rewrite_text_asset_urls_to_local(
     text: str,
     current_local_path: str,
     rewrite_aliases: Mapping[str, str],
+    source_url: str = "",
 ) -> str:
     def replace_absolute(match: re.Match[str]) -> str:
         raw_value = match.group(0)
-        normalized_value = remove_query_and_fragment(raw_value)
-        replacement_path = rewrite_aliases.get(normalized_value) or rewrite_aliases.get(raw_value)
+        replacement_path = resolve_rewrite_alias_target(raw_value, rewrite_aliases, source_url)
+        if not replacement_path:
+            return raw_value
+        return compute_relative_local_href(current_local_path, replacement_path)
+
+    def replace_protocol_relative(match: re.Match[str]) -> str:
+        raw_value = match.group(0)
+        replacement_path = resolve_rewrite_alias_target(raw_value, rewrite_aliases, source_url)
         if not replacement_path:
             return raw_value
         return compute_relative_local_href(current_local_path, replacement_path)
 
     def replace_root_relative(match: re.Match[str]) -> str:
         raw_value = match.group(0)
-        normalized_value = remove_query_and_fragment(raw_value)
-        replacement_path = rewrite_aliases.get(normalized_value) or rewrite_aliases.get(raw_value)
+        replacement_path = resolve_rewrite_alias_target(raw_value, rewrite_aliases, source_url)
+        if not replacement_path:
+            return raw_value
+        return compute_relative_local_href(current_local_path, replacement_path)
+
+    def replace_relative_asset(match: re.Match[str]) -> str:
+        raw_value = match.group(0)
+        replacement_path = resolve_rewrite_alias_target(raw_value, rewrite_aliases, source_url)
         if not replacement_path:
             return raw_value
         return compute_relative_local_href(current_local_path, replacement_path)
@@ -4530,10 +4601,21 @@ def rewrite_text_asset_urls_to_local(
         text,
         flags=re.IGNORECASE,
     )
-    return re.sub(
+    rewritten = re.sub(
+        r"""//[^"'`\s<>()\\]+""",
+        replace_protocol_relative,
+        rewritten,
+    )
+    rewritten = re.sub(
         r"""(?<![A-Za-z0-9.])/(?!/)[^"'`\s<>()\\]+""",
         replace_root_relative,
         rewritten,
+    )
+    return re.sub(
+        r"""(?<![A-Za-z0-9])(?:\./|\.\./)?[A-Za-z0-9_./-]+\.(?:aac|atlas|babylon|bin|br|css|csv|data|eot|fnt|gif|glb|gltf|gz|ico|ini|jpeg|jpg|js|json|m4a|manifest|map|mem|mp3|mp4|ogg|otf|png|svg|ttf|txt|unityweb|wav|wasm|webm|webmanifest|webp|woff2?|worker|xml)(?:\?[^\s"'`<>()\\]+)?""",
+        replace_relative_asset,
+        rewritten,
+        flags=re.IGNORECASE,
     )
 
 
@@ -4541,6 +4623,7 @@ def rewrite_html_runtime_urls_to_local(
     document_html: str,
     current_local_path: str,
     rewrite_aliases: Mapping[str, str],
+    source_url: str = "",
 ) -> str:
     file_rewrite_map = {
         alias: compute_relative_local_href(current_local_path, target_path)
@@ -4551,13 +4634,23 @@ def rewrite_html_runtime_urls_to_local(
         r"(<style\b[^>]*>)([\s\S]*?)(</style>)",
         lambda match: (
             match.group(1)
-            + rewrite_css_urls_to_local(match.group(2), current_local_path, rewrite_aliases)
+            + rewrite_css_urls_to_local(
+                match.group(2),
+                current_local_path,
+                rewrite_aliases,
+                source_url=source_url,
+            )
             + match.group(3)
         ),
         rewritten,
         flags=re.IGNORECASE,
     )
-    return rewrite_text_asset_urls_to_local(rewritten, current_local_path, rewrite_aliases)
+    return rewrite_text_asset_urls_to_local(
+        rewritten,
+        current_local_path,
+        rewrite_aliases,
+        source_url=source_url,
+    )
 
 
 def fetch_json_document(url: str, referer_url: str = "") -> Any:
@@ -4677,7 +4770,7 @@ def strip_remote_nonruntime_markup_blocks(document_html: str) -> tuple[str, dict
         (
             "remote_scripts",
             re.compile(
-                r"""<script\b[^>]*\bsrc\s*=\s*['"][^'"]*(?:googletagmanager|google-analytics|doubleclick|googlesyndication|pagead2\.googlesyndication|amazon-adsystem|sharethis|addthis|taboola|outbrain|facebook\.net|platform\.twitter|cloudflareinsights|vconsole)[^'"]*['"][^>]*>\s*</script>\s*""",
+                r"""<script\b[^>]*\bsrc\s*=\s*['"][^'"]*(?:googletagmanager|google-analytics|doubleclick|googlesyndication|pagead2\.googlesyndication|amazon-adsystem|sharethis|addthis|taboola|outbrain|facebook\.net|platform\.twitter|cloudflareinsights|vconsole|(?:^|/)(?:cloak|otautoblock)\.js(?:[?#][^'"]*)?)[^'"]*['"][^>]*>\s*</script>\s*""",
                 re.IGNORECASE,
             ),
         ),
@@ -4774,9 +4867,94 @@ def generate_local_html_runtime_stub_script() -> str:
     return f"""<script>
 (function () {{
   const noop = function () {{}};
+  window.ga = window.ga || function () {{ return; }};
   window.dataLayer = window.dataLayer || [];
   window.gtag = window.gtag || function () {{ window.dataLayer.push(arguments); }};
   window.adsbygoogle = window.adsbygoogle || [];
+  const blockedSupportFragments = [
+    "hb.improvedigital.com",
+    "improvedigital.com",
+    "tracker.gamedock.io",
+    "tracker-v4.gamedock.io",
+    "game.api.gamedistribution.com",
+    "/null.html?https://",
+    "google-analytics.com",
+    "googletagmanager.com",
+  ];
+  const nullScriptUrl = "./js/null.js";
+  const isBlockedSupportUrl = function (value) {{
+    const normalized = String(value || "").toLowerCase();
+    return blockedSupportFragments.some(function (fragment) {{
+      return normalized.includes(fragment);
+    }});
+  }};
+  const rewriteScriptNode = function (node) {{
+    try {{
+      if (!node || String(node.tagName || "").toLowerCase() !== "script") {{
+        return node;
+      }}
+      const currentSrc = String(node.src || node.getAttribute("src") || "");
+      if (currentSrc && isBlockedSupportUrl(currentSrc)) {{
+        node.src = nullScriptUrl;
+      }}
+    }} catch (_err) {{}}
+    return node;
+  }};
+  const originalAppendChild = Node.prototype.appendChild;
+  Node.prototype.appendChild = function (node) {{
+    return originalAppendChild.call(this, rewriteScriptNode(node));
+  }};
+  const originalInsertBefore = Node.prototype.insertBefore;
+  Node.prototype.insertBefore = function (node, referenceNode) {{
+    return originalInsertBefore.call(this, rewriteScriptNode(node), referenceNode);
+  }};
+  const originalFetch = window.fetch;
+  if (typeof originalFetch === "function") {{
+    window.fetch = function (input, init) {{
+      const requestUrl = typeof input === "string" ? input : String((input && input.url) || "");
+      if (isBlockedSupportUrl(requestUrl)) {{
+        return Promise.resolve(
+          new Response("{{}}", {{
+            status: 200,
+            headers: {{ "Content-Type": "application/json" }},
+          }})
+        );
+      }}
+      return originalFetch.call(this, input, init);
+    }};
+  }}
+  if (navigator && typeof navigator.sendBeacon === "function") {{
+    const originalSendBeacon = navigator.sendBeacon.bind(navigator);
+    navigator.sendBeacon = function (url, data) {{
+      if (isBlockedSupportUrl(url)) {{
+        return true;
+      }}
+      return originalSendBeacon(url, data);
+    }};
+  }}
+  const originalXhrOpen = XMLHttpRequest.prototype.open;
+  const originalXhrSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (method, url) {{
+    this.__oceanBlockedSupportUrl = isBlockedSupportUrl(url);
+    this.__oceanBlockedSupportMethod = method;
+    this.__oceanBlockedSupportTarget = url;
+    return originalXhrOpen.apply(this, arguments);
+  }};
+  XMLHttpRequest.prototype.send = function (body) {{
+    if (!this.__oceanBlockedSupportUrl) {{
+      return originalXhrSend.call(this, body);
+    }}
+    this.readyState = 4;
+    this.status = 200;
+    this.responseText = "{{}}";
+    this.response = "{{}}";
+    if (typeof this.onreadystatechange === "function") {{
+      try {{ this.onreadystatechange(); }} catch (_err) {{}}
+    }}
+    if (typeof this.onload === "function") {{
+      try {{ this.onload(); }} catch (_err) {{}}
+    }}
+  }};
   const googletag = window.googletag = window.googletag || {{}};
   googletag.cmd = googletag.cmd || [];
   googletag.display = googletag.display || noop;
@@ -5582,8 +5760,7 @@ def sanitize_html_runtime_support_files(output_dir: Path) -> dict[str, Any]:
   }, 0);
 })();\n"""
 
-    javascript_stubs = {
-        "js/main.min.js": gamedistribution_stub,
+    required_javascript_stubs = {
         "patch/js/null.js": """(function(){window.ga=window.ga||function(){};})();\n""",
         "js/null.js": """(function(){
   const noop = function(){};
@@ -5604,13 +5781,22 @@ def sanitize_html_runtime_support_files(output_dir: Path) -> dict[str, Any]:
   window.GameDock = window.GameDock || tracker;
 })();\n""",
     }
+    optional_javascript_stubs = {
+        "js/main.min.js": gamedistribution_stub,
+    }
     json_stubs = {
         "json/config.json": {},
         "json/null.json": {},
         "json/ping.json": {},
     }
 
-    for relative_path, content in javascript_stubs.items():
+    for relative_path, content in required_javascript_stubs.items():
+        path = output_dir / Path(relative_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        patched_files.append(relative_path.replace("\\", "/"))
+
+    for relative_path, content in optional_javascript_stubs.items():
         path = output_dir / Path(relative_path)
         if not path.exists():
             continue
@@ -5620,11 +5806,59 @@ def sanitize_html_runtime_support_files(output_dir: Path) -> dict[str, Any]:
 
     for relative_path, payload in json_stubs.items():
         path = output_dir / Path(relative_path)
-        if not path.exists():
-            continue
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         patched_files.append(relative_path.replace("\\", "/"))
+
+    noop_script = """(function(){window.ga=window.ga||function(){};window.dataLayer=window.dataLayer||[];})();\n"""
+    tracker_stub = """(function(){
+  const noop = function(){};
+  const tracker = {
+    initialize: function(){ return Promise.resolve({}); },
+    init: function(){ return Promise.resolve({}); },
+    ready: function(){ return Promise.resolve({}); },
+    track: noop,
+    identify: noop,
+    page: noop,
+    event: noop,
+    setUser: noop,
+    log: noop,
+  };
+  window.gamedock = window.gamedock || tracker;
+  window.Gamedock = window.Gamedock || tracker;
+  window.GameDock = window.GameDock || tracker;
+})();\n"""
+    basename_stubs = {
+        "cloak.js": {"content": noop_script, "always": False},
+        "otautoblock.js": {"content": noop_script, "always": False},
+        "gamedock-sdk.min.js": {"content": tracker_stub, "always": True},
+    }
+    for path in output_dir.rglob("*.js"):
+        basename = path.name.lower()
+        if basename not in basename_stubs:
+            continue
+        stub_config = basename_stubs[basename]
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        if size > 0 and not stub_config["always"]:
+            continue
+        path.write_text(str(stub_config["content"]), encoding="utf-8")
+        patched_files.append(path.relative_to(output_dir).as_posix())
+
+    for path in output_dir.rglob("main.min.js"):
+        try:
+            existing_text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if not any(
+            marker in existing_text
+            for marker in ("google.ima", "tracker.gamedock", "GamedockSDK", "gdsdk", "GameDistribution")
+        ):
+            continue
+        path.write_text(gamedistribution_stub, encoding="utf-8")
+        patched_files.append(path.relative_to(output_dir).as_posix())
 
     return result
 
@@ -5703,6 +5937,9 @@ def mirror_html_entry_assets(
             resolved_url, raw, content_type, _ = fetch_url(candidate_url, referer_url=referer_url)
         except FetchError as exc:
             fetch_failures.append(str(exc))
+            continue
+        if not raw:
+            fetch_failures.append(f"{candidate_url} -> empty response")
             continue
 
         normalized_candidate_url = remove_query_and_fragment(candidate_url)
@@ -5793,6 +6030,7 @@ def mirror_html_entry_assets(
 
     rewrite_aliases: dict[str, str] = {}
     unique_assets: dict[str, dict[str, Any]] = {}
+    entry_root_url = html_entry_source_root_url(source_url)
     for asset in mirrored_assets.values():
         unique_assets[asset["local_path"]] = asset
         rewrite_aliases[asset["url"]] = asset["local_path"]
@@ -5801,6 +6039,20 @@ def mirror_html_entry_assets(
             parsed_asset = urllib.parse.urlparse(asset["resolved_url"])
             if parsed_asset.path:
                 rewrite_aliases[urllib.parse.unquote(parsed_asset.path)] = asset["local_path"]
+        entry_relative_path = relative_asset_path_under_root(asset["resolved_url"], entry_root_url)
+        if entry_relative_path:
+            rewrite_aliases[entry_relative_path] = asset["local_path"]
+            rewrite_aliases["/" + entry_relative_path.lstrip("/")] = asset["local_path"]
+
+    for tracker_url in (
+        "//www.google-analytics.com/analytics.js",
+        "https://www.google-analytics.com/analytics.js",
+        "http://www.google-analytics.com/analytics.js",
+        "//www.googletagmanager.com/gtag/js",
+        "https://www.googletagmanager.com/gtag/js",
+        "http://www.googletagmanager.com/gtag/js",
+    ):
+        rewrite_aliases[tracker_url] = "js/null.js"
 
     mirrored_files = sorted(unique_assets.keys())
     if mirrored_files:
@@ -5814,6 +6066,7 @@ def mirror_html_entry_assets(
                 asset["text_content"],
                 local_path,
                 rewrite_aliases,
+                source_url=asset["resolved_url"],
             )
             destination.write_text(rewritten_text, encoding="utf-8")
         elif asset["text_kind"] == "css":
@@ -5821,24 +6074,44 @@ def mirror_html_entry_assets(
                 asset["text_content"],
                 local_path,
                 rewrite_aliases,
+                source_url=asset["resolved_url"],
             )
             rewritten_text = rewrite_text_asset_urls_to_local(
                 rewritten_text,
                 local_path,
                 rewrite_aliases,
+                source_url=asset["resolved_url"],
             )
             destination.write_text(rewritten_text, encoding="utf-8")
         elif asset["text_kind"] == "text":
+            text_rewrite_base = (
+                ""
+                if local_path.lower().endswith((".js", ".mjs", ".cjs", ".worker"))
+                else local_path
+            )
             rewritten_text = rewrite_text_asset_urls_to_local(
                 asset["text_content"],
-                local_path,
+                text_rewrite_base,
                 rewrite_aliases,
+                source_url=asset["resolved_url"],
             )
             destination.write_text(rewritten_text, encoding="utf-8")
         else:
             destination.write_bytes(asset["raw"])
 
-    rewritten_html = rewrite_html_runtime_urls_to_local(document_html, "", rewrite_aliases)
+        entry_relative_path = relative_asset_path_under_root(asset["resolved_url"], entry_root_url)
+        if entry_relative_path and entry_relative_path != local_path:
+            entry_destination = output_dir / Path(entry_relative_path.replace("/", os.sep))
+            if not entry_destination.exists():
+                entry_destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(destination, entry_destination)
+
+    rewritten_html = rewrite_html_runtime_urls_to_local(
+        document_html,
+        "",
+        rewrite_aliases,
+        source_url=source_url,
+    )
     summary = {
         "mode": "construct2_local_mirror" if prefer_construct2 else "html_local_mirror",
         "primary_root_url": primary_root_url,
@@ -11962,6 +12235,11 @@ def export_html_entry(
         prefer_construct2=looks_like_construct2_entry_html(normalized_source_html),
         extra_seed_urls=runtime_probe_urls,
     )
+    if int(mirrored_html_summary.get("mirrored_file_count", 0) or 0) <= 0:
+        raise FetchError(
+            "HTML entry did not produce any localized runtime assets. "
+            "The detected page is likely a wrapper without a downloadable local runtime."
+        )
     localized_source_html, runtime_shell_summary = rebuild_local_html_runtime_document(
         title,
         localized_source_html,

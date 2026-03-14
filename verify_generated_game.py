@@ -470,12 +470,16 @@ async def verify_runtime(
                 page.on("response", on_response)
                 page.on("websocket", on_websocket)
 
+                async def kickstart_runtime(rounds: int = 3, pause_ms: int = 1200) -> None:
+                    for _index in range(rounds):
+                        try:
+                            await page.evaluate(start_interaction_script())
+                        except Exception:
+                            pass
+                        await page.wait_for_timeout(pause_ms)
+
                 await page.goto(launch_url, wait_until="commit", timeout=timeout_ms)
-                await page.wait_for_timeout(1500)
-                try:
-                    await page.evaluate(start_interaction_script())
-                except Exception:
-                    pass
+                await kickstart_runtime(rounds=4, pause_ms=1400)
 
                 ready = True
                 ready_error = ""
@@ -486,8 +490,7 @@ async def verify_runtime(
                     )
                 except PlaywrightTimeoutError:
                     try:
-                        await page.evaluate(start_interaction_script())
-                        await page.wait_for_timeout(2500)
+                        await kickstart_runtime(rounds=3, pause_ms=1600)
                         await page.wait_for_function(
                             ready_state_script(),
                             timeout=8000,

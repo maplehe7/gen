@@ -46,11 +46,36 @@ const FAILED_BUILDS_FILE_PATH = "reports/failed-builds.txt";
 const FAILED_BUILD_LOGS_DIR = "reports/failed-builds";
 const SEARCH_INDEX_TTL_MS = 30 * 60 * 1000;
 const MAX_SITE_CANDIDATES = 8;
-const MAX_WEB_CANDIDATES = 10;
+const MAX_WEB_CANDIDATES = 16;
+const MAX_SEARCH_RESPONSE_LIMIT = 12;
 const SEARCHABLE_SITE_MATCH_FLOOR = 28;
 const REPORT_FILE_HEADER = "# Not Working Game Reports\n";
 const FAILED_BUILD_FILE_HEADER = "# Failed Build Reports\n";
 const DOWNLOAD_EXTENSIONS = [".apk", ".dmg", ".exe", ".iso", ".msi", ".pkg", ".rar", ".zip", ".7z"];
+const ASSET_ONLY_EXTENSIONS = new Set([
+  ".avif",
+  ".bmp",
+  ".css",
+  ".gif",
+  ".ico",
+  ".jpeg",
+  ".jpg",
+  ".js",
+  ".json",
+  ".map",
+  ".mjs",
+  ".mp3",
+  ".mp4",
+  ".ogg",
+  ".pdf",
+  ".png",
+  ".svg",
+  ".txt",
+  ".wav",
+  ".webm",
+  ".webp",
+  ".xml",
+]);
 const INFRASTRUCTURE_HOSTS = [
   "accounts.google.com",
   "apis.google.com",
@@ -288,13 +313,32 @@ async function githubNoContent(url, env, init = {}, label = "GitHub request") {
 async function githubText(url, env, init = {}, label = "GitHub request") {
   const response = await fetch(url, {
     ...init,
-    redirect: "follow",
+    redirect: "manual",
     headers: {
       ...githubHeaders(env),
-      Accept: "text/plain",
       ...(init.headers || {}),
     },
   });
+  if (response.status >= 300 && response.status < 400) {
+    const redirectUrl = response.headers.get("location") || response.headers.get("Location") || "";
+    if (!redirectUrl) {
+      throw new Error(`${label} failed with status ${response.status}: missing redirect location`);
+    }
+    const redirected = await fetch(redirectUrl, {
+      method: init.method || "GET",
+      headers: {
+        Accept: "text/plain, */*;q=0.8",
+        "User-Agent": "standalone-forge-proxy",
+      },
+    });
+    const redirectedText = await redirected.text();
+    if (!redirected.ok) {
+      throw new Error(
+        `${label} failed with status ${redirected.status}: ${redirectedText || redirected.statusText}`,
+      );
+    }
+    return redirectedText;
+  }
   const text = await response.text();
   if (!response.ok) {
     throw new Error(`${label} failed with status ${response.status}: ${text || response.statusText}`);
@@ -498,6 +542,26 @@ function cleanExtractedUrl(rawUrl, baseUrl = "") {
     return parsed.toString();
   } catch (_error) {
     return "";
+  }
+}
+
+function looksLikeAssetOnlyUrl(value) {
+  try {
+    const parsed = new URL(String(value || ""));
+    const pathname = parsed.pathname.toLowerCase();
+    if (!pathname || pathname.endsWith("/")) {
+      return false;
+    }
+    if (/\/(?:data|images?|img|media|assets?)\//i.test(pathname) && /\.[a-z0-9]{2,6}$/i.test(pathname)) {
+      return true;
+    }
+    const extensionMatch = pathname.match(/(\.[a-z0-9]{2,6})(?:$|\?)/i);
+    if (!extensionMatch) {
+      return false;
+    }
+    return ASSET_ONLY_EXTENSIONS.has(extensionMatch[1].toLowerCase());
+  } catch (_error) {
+    return false;
   }
 }
 
@@ -948,7 +1012,7 @@ function canonicalCandidateKey(candidate) {
     const parsed = new URL(normalized);
     parsed.hash = "";
     const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
-    return `${parsed.protocol}//${parsed.hostname.toLowerCase()}${pathname}${parsed.search}`;
+    return `${parsed.hostname.toLowerCase()}${pathname}${parsed.search}`;
   } catch (_error) {
     return normalized.replace(/\/+$/, "").toLowerCase();
   }
@@ -1137,6 +1201,9 @@ async function inspectCandidate(candidate, depth = 0, visited = new Set()) {
   if (!normalizedCandidateUrl || visited.has(normalizedCandidateUrl)) {
     return makeRejectedCandidate(candidate, "duplicate or invalid candidate");
   }
+  if (looksLikeAssetOnlyUrl(normalizedCandidateUrl)) {
+    return makeRejectedCandidate(candidate, "asset file instead of a playable page");
+  }
   visited.add(normalizedCandidateUrl);
 
   try {
@@ -1278,6 +1345,9 @@ function selectRankedCandidates(candidates, limit = 1, reasonSuffix = "") {
   const pushCandidates = (predicate, suffix = "", forceHostedOnline = false) => {
     ranked.forEach((candidate) => {
       if (selected.length >= limit || !predicate(candidate)) {
+        return;
+      }
+      if (looksLikeAssetOnlyUrl(candidate?.sourceUrl || candidate?.url || "")) {
         return;
       }
       const key = canonicalCandidateKey(candidate);
@@ -1642,7 +1712,7 @@ async function searchWebFallback(query) {
   }
 
   const ranked = uniqueBy(rawMatches, (item) => item.url)
-    .filter((item) => item.textScore >= 30 && !isPenalizedDomain(item.url))
+    .filter((item) => item.textScore >= 30 && !isPenalizedDomain(item.url) && !looksLikeAssetOnlyUrl(item.url))
     .sort((left, right) => right.textScore - left.textScore)
     .slice(0, MAX_WEB_CANDIDATES);
 
@@ -2044,7 +2114,7 @@ async function handleSearch(request, env) {
   const url = new URL(request.url);
   const query = collapseWhitespace(url.searchParams.get("query") || "");
   const requestedLimit = Number.parseInt(String(url.searchParams.get("limit") || "1"), 10);
-  const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 1, 1), 6);
+  const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 1, 1), MAX_SEARCH_RESPONSE_LIMIT);
   if (!query) {
     return json(
       { error: "query is required." },

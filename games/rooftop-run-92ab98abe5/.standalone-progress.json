@@ -1,0 +1,108 @@
+{
+  "candidate_urls": {
+    "loader": [
+      "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.loader.js"
+    ],
+    "framework": [
+      "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.framework.js",
+      "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.framework.js.unityweb",
+      "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.framework.js.gz",
+      "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.framework.js.br"
+    ],
+    "data": [
+      "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.data",
+      "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.data.unityweb",
+      "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.data.gz",
+      "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.data.br"
+    ],
+    "wasm": [
+      "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.wasm",
+      "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.wasm.unityweb",
+      "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.wasm.gz",
+      "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.wasm.br"
+    ]
+  },
+  "assets": {
+    "loader": {
+      "filename": "RoofTop Web.loader.js",
+      "url": "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.loader.js",
+      "size": 19150
+    },
+    "framework": {
+      "filename": "RoofTop Web.framework.js.br",
+      "url": "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.framework.js.br",
+      "size": 662461
+    },
+    "data": {
+      "filename": "RoofTop Web.data.br",
+      "url": "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.data.br",
+      "size": 25621764
+    },
+    "wasm": {
+      "filename": "RoofTop Web.wasm.br",
+      "url": "https://m.igroutka.ru/lib/crazy/games/rooftop-run/Build/RoofTop%20Web.wasm.br",
+      "size": 26056173
+    }
+  },
+  "completed": true,
+  "summary": {
+    "output_dir": "/home/runner/work/gen/gen/dist/games/rooftop-run-92ab98abe5",
+    "index_html": "/home/runner/work/gen/gen/dist/games/rooftop-run-92ab98abe5/index.html",
+    "embedded_entry_html": "/home/runner/work/gen/gen/dist/games/rooftop-run-92ab98abe5/game-root.html",
+    "required_functions_file": "/home/runner/work/gen/gen/dist/games/rooftop-run-92ab98abe5/required-functions.json",
+    "loader": "RoofTop Web.loader.js",
+    "framework": "RoofTop Web.framework.js.br",
+    "data": "RoofTop Web.data.br",
+    "wasm": "RoofTop Web.wasm.br",
+    "required_function_count": 2,
+    "window_root_count": 6,
+    "window_callable_chain_count": 25,
+    "used_br_assets": true,
+    "used_compressed_assets": true,
+    "site_lock_framework_patched": false,
+    "unity_loader_inline_redirect_hack_patched": false,
+    "gmsoft_host_bridge_patched": false,
+    "gmsoft_sendmessage_defaults_patched": false,
+    "sendmessage_value_compat_patched": false,
+    "gd_lite_runtime_data_patched": false,
+    "build_kind": "modern",
+    "mode": "entry_auto",
+    "source_page_url": "https://igroutka.ru/loader/game/51357/",
+    "source_url_spoof_enabled": true,
+    "original_folder_url": "",
+    "streaming_assets_url": "",
+    "asset_cache_buster": "564315f1dba1",
+    "embed_cache_buster": "920314c98ef5",
+    "launch_options": "both",
+    "recommended_launch_mode": "none",
+    "launcher": "ocean-launcher",
+    "gmsoft_like_build": false,
+    "page_config_keys": [],
+    "auxiliary_asset_rewrites": {},
+    "launcher_support_files": [
+      "ocean-launcher.css",
+      "ocean-launcher.js"
+    ],
+    "support_files": [
+      "ocean-launcher.css",
+      "ocean-launcher.js",
+      "support/CEe4ZBFi-legacy.js",
+      "support/CfZc59gr-legacy.js",
+      "support/Ckz0Gwxh.js",
+      "support/context.js"
+    ],
+    "support_script_files": [
+      "support/CEe4ZBFi-legacy.js",
+      "support/CfZc59gr-legacy.js",
+      "support/Ckz0Gwxh.js",
+      "support/context.js"
+    ],
+    "support_script_urls": [
+      "https://igroutka.ru/_nuxt/CEe4ZBFi-legacy.js",
+      "https://igroutka.ru/_nuxt/CfZc59gr-legacy.js",
+      "https://igroutka.ru/_nuxt/Ckz0Gwxh.js",
+      "https://yandex.ru/ads/system/context.js"
+    ],
+    "progress_file": "/home/runner/work/gen/gen/dist/games/rooftop-run-92ab98abe5/.standalone-progress.json"
+  }
+}

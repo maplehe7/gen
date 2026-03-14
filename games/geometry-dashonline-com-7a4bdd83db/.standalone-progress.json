@@ -1,0 +1,120 @@
+{
+  "candidate_urls": {
+    "loader": [
+      "https://play2.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.loader.js"
+    ],
+    "framework": [
+      "https://play2.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.framework.js",
+      "https://play.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.framework.js.unityweb",
+      "https://play2.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.framework.js.unityweb",
+      "https://play2.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.framework.js.gz",
+      "https://play2.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.framework.js.br"
+    ],
+    "data": [
+      "https://play2.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.data",
+      "https://play.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.data.unityweb",
+      "https://play2.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.data.unityweb",
+      "https://play2.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.data.gz",
+      "https://play2.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.data.br"
+    ],
+    "wasm": [
+      "https://play2.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.wasm",
+      "https://play.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.wasm.unityweb",
+      "https://play2.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.wasm.unityweb",
+      "https://play2.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.wasm.gz",
+      "https://play2.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.wasm.br"
+    ]
+  },
+  "assets": {
+    "loader": {
+      "filename": "geometry-lite-v26013001.loader.js",
+      "url": "https://play2.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.loader.js",
+      "size": 42615
+    },
+    "framework": {
+      "filename": "geometry-lite-v26013001.framework.js.unityweb",
+      "url": "https://play.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.framework.js.unityweb",
+      "size": 964589
+    },
+    "data": {
+      "filename": "geometry-lite-v26013001.data.unityweb",
+      "url": "https://play.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.data.unityweb",
+      "size": 33312460
+    },
+    "wasm": {
+      "filename": "geometry-lite-v26013001.wasm.unityweb",
+      "url": "https://play.1games.io/game/geometry-lite/26013001/Build/geometry-lite-v26013001.wasm.unityweb",
+      "size": 38810313
+    }
+  },
+  "completed": true,
+  "summary": {
+    "output_dir": "/home/runner/work/gen/gen/dist/games/geometry-dashonline-com-7a4bdd83db",
+    "index_html": "/home/runner/work/gen/gen/dist/games/geometry-dashonline-com-7a4bdd83db/index.html",
+    "embedded_entry_html": "/home/runner/work/gen/gen/dist/games/geometry-dashonline-com-7a4bdd83db/game-root.html",
+    "required_functions_file": "/home/runner/work/gen/gen/dist/games/geometry-dashonline-com-7a4bdd83db/required-functions.json",
+    "loader": "geometry-lite-v26013001.loader.js",
+    "framework": "geometry-lite-v26013001.framework.js.unityweb",
+    "data": "geometry-lite-v26013001.data.unityweb",
+    "wasm": "geometry-lite-v26013001.wasm.unityweb",
+    "required_function_count": 0,
+    "window_root_count": 3,
+    "window_callable_chain_count": 0,
+    "used_br_assets": true,
+    "used_compressed_assets": true,
+    "site_lock_framework_patched": false,
+    "unity_loader_inline_redirect_hack_patched": false,
+    "gmsoft_host_bridge_patched": true,
+    "gmsoft_sendmessage_defaults_patched": true,
+    "sendmessage_value_compat_patched": true,
+    "gd_lite_runtime_data_patched": false,
+    "build_kind": "modern",
+    "mode": "entry_auto",
+    "source_page_url": "https://1games.io/game/geometry-lite/",
+    "source_url_spoof_enabled": true,
+    "original_folder_url": "",
+    "streaming_assets_url": "26013001/StreamingAssets",
+    "asset_cache_buster": "5d4fca9988f2",
+    "embed_cache_buster": "38e3f33214ae",
+    "launch_options": "both",
+    "recommended_launch_mode": "none",
+    "launcher": "ocean-launcher",
+    "gmsoft_like_build": true,
+    "page_config_keys": [
+      "companyName",
+      "eventLog",
+      "gameId",
+      "productName",
+      "productVersion"
+    ],
+    "auxiliary_asset_rewrites": {},
+    "launcher_support_files": [
+      "ocean-launcher.css",
+      "ocean-launcher.js"
+    ],
+    "support_files": [
+      "ocean-launcher.css",
+      "ocean-launcher.js",
+      "support/gmsdkv1.js",
+      "support/firebase-auth-compat.js",
+      "support/firebase-analytics-compat.js",
+      "support/firebase-app-compat.js",
+      "support/firebase-firestore-compat.js"
+    ],
+    "support_script_files": [
+      "support/gmsdkv1.js",
+      "support/firebase-auth-compat.js",
+      "support/firebase-analytics-compat.js",
+      "support/firebase-app-compat.js",
+      "support/firebase-firestore-compat.js"
+    ],
+    "support_script_urls": [
+      "https://games.1games.io/lib/gmsdkv1.js",
+      "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js",
+      "https://www.gstatic.com/firebasejs/10.9.0/firebase-analytics-compat.js",
+      "https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js",
+      "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"
+    ],
+    "progress_file": "/home/runner/work/gen/gen/dist/games/geometry-dashonline-com-7a4bdd83db/.standalone-progress.json"
+  }
+}

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Generated Games</title>
+    <link rel="stylesheet" href="./app.css?v=20260313-4" />
+  </head>
+  <body class="gallery-page">
+    <div class="page-shell gallery-shell">
+      <main class="stack">
+        <div class="mini-nav">
+          <a class="job-link secondary" href="./index.html">Back</a>
+        </div>
+
+        <div id="gallery" class="gallery-grid"></div>
+      </main>
+    </div>
+
+    <button id="admin-toggle" class="admin-toggle" type="button" aria-label="Admin"></button>
+    <form id="admin-panel" class="admin-panel" hidden>
+      <input id="admin-code" type="password" autocomplete="off" placeholder="Admin code" />
+      <button class="job-link" type="submit">Save</button>
+    </form>
+
+    <template id="gallery-template">
+      <article class="gallery-card">
+        <a class="gallery-link" target="_blank" rel="noreferrer">
+          <img class="gallery-thumb" alt="" loading="lazy" />
+          <h3 class="gallery-title"></h3>
+        </a>
+        <button class="report-button" type="button">Report Not Working</button>
+        <button class="delete-button" type="button" hidden>Delete</button>
+      </article>
+    </template>
+
+    <script src="./config.js?v=20260313-4"></script>
+    <script src="./gallery.js?v=20260313-4" defer></script>
+  </body>
+</html>

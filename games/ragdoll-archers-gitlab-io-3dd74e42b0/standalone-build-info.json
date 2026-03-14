@@ -1,0 +1,56 @@
+{
+  "output_dir": "/home/runner/work/gen/gen/dist/games/ragdoll-archers-gitlab-io-3dd74e42b0",
+  "index_html": "/home/runner/work/gen/gen/dist/games/ragdoll-archers-gitlab-io-3dd74e42b0/index.html",
+  "embedded_entry_html": "/home/runner/work/gen/gen/dist/games/ragdoll-archers-gitlab-io-3dd74e42b0/game-root.html",
+  "required_functions_file": "/home/runner/work/gen/gen/dist/games/ragdoll-archers-gitlab-io-3dd74e42b0/required-functions.json",
+  "loader": "v111.loader.js",
+  "framework": "0be3c3ee7115b26e1ae28e643afdf1f2.js.unityweb",
+  "data": "6697b6deba8b617c67b69c55dcd07cb1.data.unityweb",
+  "wasm": "b3397c29f6878557c1c614cbf9e196ea.wasm.unityweb",
+  "required_function_count": 2,
+  "window_root_count": 6,
+  "window_callable_chain_count": 21,
+  "used_br_assets": true,
+  "used_compressed_assets": true,
+  "site_lock_framework_patched": false,
+  "unity_loader_inline_redirect_hack_patched": false,
+  "gmsoft_host_bridge_patched": false,
+  "gmsoft_sendmessage_defaults_patched": false,
+  "sendmessage_value_compat_patched": false,
+  "gd_lite_runtime_data_patched": false,
+  "build_kind": "modern",
+  "mode": "entry_auto",
+  "source_page_url": "https://bitlifeonline.github.io/ragdoll-archers/",
+  "source_url_spoof_enabled": true,
+  "original_folder_url": "",
+  "streaming_assets_url": "https://bitlifeonline.github.io/ragdoll-archers/StreamingAssets",
+  "asset_cache_buster": "a4357941fb97",
+  "embed_cache_buster": "f73f59b75788",
+  "launch_options": "both",
+  "recommended_launch_mode": "none",
+  "launcher": "ocean-launcher",
+  "gmsoft_like_build": false,
+  "page_config_keys": [
+    "companyName",
+    "productName",
+    "productVersion",
+    "streamingAssetsUrl"
+  ],
+  "auxiliary_asset_rewrites": {},
+  "launcher_support_files": [
+    "ocean-launcher.css",
+    "ocean-launcher.js"
+  ],
+  "support_files": [
+    "ocean-launcher.css",
+    "ocean-launcher.js",
+    "support/gameloader-helper.js"
+  ],
+  "support_script_files": [
+    "support/gameloader-helper.js"
+  ],
+  "support_script_urls": [
+    "https://bitlifeonline.github.io/vs/gameloader-helper.js"
+  ],
+  "progress_file": "/home/runner/work/gen/gen/dist/games/ragdoll-archers-gitlab-io-3dd74e42b0/.standalone-progress.json"
+}

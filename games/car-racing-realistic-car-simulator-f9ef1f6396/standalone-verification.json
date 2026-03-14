@@ -1,0 +1,46 @@
+{
+  "ok": true,
+  "verified_at": "2026-03-14T04:44:02+00:00",
+  "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/car-racing-realistic-car-simulator-f9ef1f6396-vmi97sri",
+  "summary_path": "/home/runner/work/gen/gen/dist/.build-staging/car-racing-realistic-car-simulator-f9ef1f6396-vmi97sri/standalone-build-info.json",
+  "entry_kind": "unity",
+  "required_files": [
+    "index.html",
+    "game-root.html",
+    "ocean-launcher.css",
+    "ocean-launcher.js",
+    "Build",
+    "Build/7a2dbded24d57e056180125b1583e7c4.loader.js",
+    "Build/51a0b5018169ceb7e0691c13ae3fd923.framework.js.br",
+    "Build/abbb66520e857a22ca8e59ee39a27b0f.data.br",
+    "Build/a0a6f10e5915730c78ba9794c7fd9b21.wasm.br"
+  ],
+  "required_runtime_paths": [
+    "/Build/51a0b5018169ceb7e0691c13ae3fd923.framework.js.br",
+    "/Build/7a2dbded24d57e056180125b1583e7c4.loader.js",
+    "/Build/a0a6f10e5915730c78ba9794c7fd9b21.wasm.br",
+    "/Build/abbb66520e857a22ca8e59ee39a27b0f.data.br",
+    "/game-root.html"
+  ],
+  "static_issues": [],
+  "local_origin": "http://127.0.0.1:40697",
+  "launch_url": "http://127.0.0.1:40697/?autostart=1&launchMode=frame",
+  "ready": true,
+  "ready_error": "",
+  "requested_local_paths": [
+    "/",
+    "/Build/51a0b5018169ceb7e0691c13ae3fd923.framework.js.br",
+    "/Build/7a2dbded24d57e056180125b1583e7c4.loader.js",
+    "/Build/a0a6f10e5915730c78ba9794c7fd9b21.wasm.br",
+    "/Build/abbb66520e857a22ca8e59ee39a27b0f.data.br",
+    "/game-root.html",
+    "/ocean-launcher.css",
+    "/ocean-launcher.js"
+  ],
+  "missing_runtime_requests": [],
+  "external_requests": [],
+  "request_failures": [],
+  "bad_local_responses": [],
+  "console_errors": [],
+  "page_errors": []
+}

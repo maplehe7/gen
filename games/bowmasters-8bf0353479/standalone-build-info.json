@@ -1,0 +1,91 @@
+{
+  "output_dir": "/home/runner/work/gen/gen/dist/games/bowmasters-8bf0353479",
+  "index_html": "/home/runner/work/gen/gen/dist/games/bowmasters-8bf0353479/index.html",
+  "embedded_entry_html": "/home/runner/work/gen/gen/dist/games/bowmasters-8bf0353479/game-root.html",
+  "mobile_embedded_entry_html": "",
+  "required_functions_file": "/home/runner/work/gen/gen/dist/games/bowmasters-8bf0353479/required-functions.json",
+  "mode": "entry_auto",
+  "entry_kind": "html",
+  "title": "BOWMASTERS free online game on Miniplay.com",
+  "input_url": "https://www.miniplay.com/game/bowmasters",
+  "root_url": "https://www.miniplay.com/game/bowmasters/",
+  "source_page_url": "https://www.miniplay.com/embed/bowmasters",
+  "resolved_entry_url": "https://www.miniplay.com/embed/bowmasters",
+  "html_source_mode": "absolutized_embed_root",
+  "launcher": "ocean-launcher",
+  "embed_cache_buster": "db7f1688be79",
+  "support_files": [
+    "ocean-launcher.css",
+    "ocean-launcher.js"
+  ],
+  "embedded_ad_blocks_removed": {
+    "style_blocks": 0,
+    "script_blocks": 0,
+    "iframe_blocks": 0,
+    "mask_blocks": 0,
+    "container_blocks": 0,
+    "comment_blocks": 0
+  },
+  "nonessential_markup_removed": {
+    "canonical_links": 1
+  },
+  "html_runtime_mirror": {},
+  "eagler_wrapper_patches": {
+    "countdown_guarded": 0,
+    "countdown_autostart_injected": 0,
+    "mobile_autolaunch_injected": 0,
+    "device_pixel_ratio_guarded": 0,
+    "modapi_bridge_injected": 0
+  },
+  "eagler_mobile_option_enabled": false,
+  "eagler_mobile_script_file": "",
+  "eagler_mobile_script_url": "",
+  "launch_options": "both",
+  "recommended_launch_mode": "none",
+  "source_external_script_urls": [
+    "https://s1.minijuegosgratis.com/js/App/Embed/EmbedGameApi_1772347909.js?v=_1772347909",
+    "https://ssl.minijuegosgratis.com/lechuck/js/easyxdm/json2.js",
+    "https://ssl.minijuegosgratis.com/lechuck/js/easyxdm/easyXDM.min.js"
+  ],
+  "source_external_stylesheet_urls": [
+    "https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap",
+    "https://s2.minijuegosgratis.com/styles/css/mini-styles_1772347909.css?v=_1772347909",
+    "https://s2.minijuegosgratis.com/styles/css/styles-ie8_1772347909.css"
+  ],
+  "source_external_frame_urls": [
+    "https://www.googletagmanager.com/ns.html?id=GTM-P9ZPRHM"
+  ],
+  "source_external_other_urls": [
+    "https://www5.minijuegosgratis.com/v3/games/thumbnails/223228_1.jpg",
+    "https://www.miniplay.com/game/bowmasters",
+    "https://chrome.google.com/webstore/detail/ipiejeandmfgndimddbdoalejbbebenn",
+    "https://www.miniplay.com/feed.xml",
+    "https://www.miniplay.com/manifest.json/bowmasters",
+    "https://fonts.gstatic.com",
+    "https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap",
+    "https://s3.minijuegosgratis.com/media/favicon_512.png"
+  ],
+  "external_script_urls": [
+    "https://s1.minijuegosgratis.com/js/App/Embed/EmbedGameApi_1772347909.js?v=_1772347909",
+    "https://ssl.minijuegosgratis.com/lechuck/js/easyxdm/json2.js",
+    "https://ssl.minijuegosgratis.com/lechuck/js/easyxdm/easyXDM.min.js"
+  ],
+  "external_stylesheet_urls": [
+    "https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap",
+    "https://s2.minijuegosgratis.com/styles/css/mini-styles_1772347909.css?v=_1772347909",
+    "https://s2.minijuegosgratis.com/styles/css/styles-ie8_1772347909.css"
+  ],
+  "external_frame_urls": [
+    "https://www.googletagmanager.com/ns.html?id=GTM-P9ZPRHM"
+  ],
+  "external_other_urls": [
+    "https://www5.minijuegosgratis.com/v3/games/thumbnails/223228_1.jpg",
+    "https://chrome.google.com/webstore/detail/ipiejeandmfgndimddbdoalejbbebenn",
+    "https://www.miniplay.com/feed.xml",
+    "https://www.miniplay.com/manifest.json/bowmasters",
+    "https://fonts.gstatic.com",
+    "https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap",
+    "https://s3.minijuegosgratis.com/media/favicon_512.png"
+  ],
+  "progress_file": "/home/runner/work/gen/gen/dist/games/bowmasters-8bf0353479/.standalone-progress.json"
+}

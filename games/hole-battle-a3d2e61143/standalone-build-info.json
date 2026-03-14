@@ -1,0 +1,59 @@
+{
+  "output_dir": "/home/runner/work/gen/gen/dist/games/hole-battle-a3d2e61143",
+  "index_html": "/home/runner/work/gen/gen/dist/games/hole-battle-a3d2e61143/index.html",
+  "embedded_entry_html": "/home/runner/work/gen/gen/dist/games/hole-battle-a3d2e61143/game-root.html",
+  "required_functions_file": "/home/runner/work/gen/gen/dist/games/hole-battle-a3d2e61143/required-functions.json",
+  "loader": "9853637125e801e9aae48e78dbbdcfca.loader.js",
+  "framework": "3b82de6cb2078dc77d4349866ac525d0.framework.js.unityweb",
+  "data": "6e5743185ed781c2e78f168a9ccd8437.data.unityweb",
+  "wasm": "fac526674b2536fd68c6c0ff71354234.wasm.unityweb",
+  "required_function_count": 36,
+  "window_root_count": 2,
+  "window_callable_chain_count": 1,
+  "used_br_assets": true,
+  "used_compressed_assets": true,
+  "site_lock_framework_patched": false,
+  "unity_loader_inline_redirect_hack_patched": false,
+  "gmsoft_host_bridge_patched": false,
+  "gmsoft_sendmessage_defaults_patched": false,
+  "sendmessage_value_compat_patched": false,
+  "gd_lite_runtime_data_patched": false,
+  "build_kind": "modern",
+  "mode": "entry_auto",
+  "source_page_url": "https://cdn.jsdelivr.net/gh/familiapablo/hayna@main/1.xml",
+  "source_url_spoof_enabled": true,
+  "original_folder_url": "",
+  "streaming_assets_url": "https://cdn.jsdelivr.net/gh/familiapablo/hayna@main/StreamingAssets",
+  "asset_cache_buster": "1a72905dc29f",
+  "embed_cache_buster": "6ba3832578ef",
+  "launch_options": "both",
+  "recommended_launch_mode": "none",
+  "launcher": "ocean-launcher",
+  "gmsoft_like_build": false,
+  "page_config_keys": [
+    "companyName",
+    "devicePixelRatio",
+    "powerPreference",
+    "preserveDrawingBuffer",
+    "productName",
+    "productVersion",
+    "streamingAssetsUrl"
+  ],
+  "auxiliary_asset_rewrites": {},
+  "launcher_support_files": [
+    "ocean-launcher.css",
+    "ocean-launcher.js"
+  ],
+  "support_files": [
+    "ocean-launcher.css",
+    "ocean-launcher.js",
+    "support/rhmApi.js"
+  ],
+  "support_script_files": [
+    "support/rhmApi.js"
+  ],
+  "support_script_urls": [
+    "https://cdn.jsdelivr.net/gh/familiapablo/hayna@main/js/rhmApi.js"
+  ],
+  "progress_file": "/home/runner/work/gen/gen/dist/games/hole-battle-a3d2e61143/.standalone-progress.json"
+}

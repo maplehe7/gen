@@ -1,0 +1,15 @@
+{
+  "count": 1,
+  "functions": [
+    "getUserMedia"
+  ],
+  "window_root_count": 2,
+  "window_roots": [
+    "getUserMedia",
+    "warnedAboutManualFilesystemSyncGettingDeprecated"
+  ],
+  "window_callable_chain_count": 1,
+  "window_callable_chains": [
+    "getUserMedia"
+  ]
+}

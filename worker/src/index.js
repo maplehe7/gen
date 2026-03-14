@@ -88,6 +88,7 @@ const MEDIA_ONLY_HOSTS = [
   "youtu.be",
   "vimeo.com",
 ];
+const DIRECT_HOST_SUFFIXES = [".io", ".game", "game.io"];
 const GENERIC_SITE_TITLES = new Set(["classroom g+", "home", "search this site", "unblocked games"]);
 
 let driveSiteIndexCache = Object.fromEntries(
@@ -628,6 +629,55 @@ function extractUrlsFromHtml(html, baseUrl) {
   return uniqueBy(candidates, (value) => value);
 }
 
+function decodeJsEscapedText(value) {
+  return String(value || "")
+    .replace(/\\x([0-9a-f]{2})/gi, (_match, hex) => String.fromCharCode(Number.parseInt(hex, 16)))
+    .replace(/\\u([0-9a-f]{4})/gi, (_match, hex) => String.fromCharCode(Number.parseInt(hex, 16)))
+    .replace(/\\\//g, "/")
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\r")
+    .replace(/\\t/g, "\t")
+    .replace(/\\"/g, '"')
+    .replace(/\\'/g, "'")
+    .replace(/\\\\/g, "\\");
+}
+
+function extractEmbeddedHtmlSnippets(html) {
+  const snippets = [];
+  const seen = new Set();
+  const sourceVariants = [String(html || ""), decodeHtmlEntities(String(html || ""))];
+  const patterns = [
+    /"userHtml"\s*:\s*"([\s\S]*?)"\s*,\s*"ncc"/gi,
+    /\\x22userHtml\\x22:\s*\\x22([\s\S]*?)\\x22,\s*\\x22ncc\\x22/gi,
+  ];
+
+  sourceVariants.forEach((source) => {
+    patterns.forEach((pattern) => {
+      let match = null;
+      pattern.lastIndex = 0;
+      while ((match = pattern.exec(source))) {
+        const decoded = decodeJsEscapedText(match[1]).trim();
+        if (!decoded || seen.has(decoded)) {
+          continue;
+        }
+        seen.add(decoded);
+        snippets.push(decoded);
+      }
+    });
+  });
+
+  return snippets;
+}
+
+function extractPlayableCandidateUrls(html, baseUrl) {
+  const embeddedSnippets = extractEmbeddedHtmlSnippets(html);
+  const urls = uniqueBy(
+    [html, ...embeddedSnippets].flatMap((snippet) => extractUrlsFromHtml(snippet, baseUrl)),
+    (value) => value,
+  );
+  return urls.filter((value) => !isIgnoredInfrastructureUrl(value));
+}
+
 function scoreQueryMatch(query, title, url = "") {
   const normalizedQuery = normalizeSearchText(query);
   const normalizedTitle = normalizeSearchText(title);
@@ -707,6 +757,8 @@ function buildReason(candidate) {
   const reasons = [];
   if (candidate.provider === "drive-site") {
     reasons.push(`matched ${candidate.searchSiteLabel || "drive-u-7-home-10"} first`);
+  } else if (candidate.provider === "direct-host") {
+    reasons.push("matched direct host fallback");
   } else if (candidate.provider === "web-search") {
     reasons.push("matched web fallback");
   }
@@ -725,7 +777,12 @@ function summarizeCandidate(candidate) {
     sourceUrl: candidate.sourceUrl,
     displayName: candidate.displayName,
     matchedName: candidate.displayName,
-    sourceMode: candidate.provider === "drive-site" ? "drive-site-search" : "web-search",
+    sourceMode:
+      candidate.provider === "drive-site"
+        ? "drive-site-search"
+        : candidate.provider === "direct-host"
+          ? "direct-host-search"
+          : "web-search",
     provider: candidate.provider,
     confidence: candidate.confidence,
     hostedOnline: candidate.hostedOnline,
@@ -894,10 +951,47 @@ function makeRejectedCandidate(candidate, reason) {
   };
 }
 
-async function inspectCandidate(candidate) {
+async function inspectCandidate(candidate, depth = 0, visited = new Set()) {
+  const normalizedCandidateUrl = cleanExtractedUrl(candidate?.url || "");
+  if (!normalizedCandidateUrl || visited.has(normalizedCandidateUrl)) {
+    return makeRejectedCandidate(candidate, "duplicate or invalid candidate");
+  }
+  visited.add(normalizedCandidateUrl);
+
   try {
     const html = await fetchText(candidate.url, {}, `Inspect ${candidate.title}`);
-    return analyzeCandidateHtml(candidate, html);
+    const analyzed = analyzeCandidateHtml(candidate, html);
+    if (depth >= 2) {
+      return analyzed;
+    }
+
+    const shouldInspectChildren =
+      candidate.provider === "drive-site" ||
+      isWrapperDomain(candidate.url) ||
+      analyzed.softwarePortal ||
+      analyzed.blockedPage ||
+      analyzed.mediaOnlyEmbeds ||
+      analyzed.playableSignalScore < 20;
+    if (!shouldInspectChildren) {
+      return analyzed;
+    }
+
+    const childCandidates = extractPlayableCandidateUrls(html, candidate.url)
+      .filter((value) => value !== normalizedCandidateUrl)
+      .slice(0, 6)
+      .map((url) => ({
+        ...candidate,
+        url,
+      }));
+
+    if (!childCandidates.length) {
+      return analyzed;
+    }
+
+    const childResults = await Promise.all(
+      childCandidates.map((child) => inspectCandidate(child, depth + 1, visited)),
+    );
+    return sortCandidates([analyzed, ...childResults])[0] || analyzed;
   } catch (_error) {
     return makeRejectedCandidate(candidate, "could not inspect candidate");
   }
@@ -1190,6 +1284,41 @@ function extractBraveMatches(html, query) {
   return matches;
 }
 
+function buildDirectHostCandidates(query) {
+  const compactQuery = compactSearchText(query);
+  if (!compactQuery || compactQuery.length < 5) {
+    return [];
+  }
+
+  return uniqueBy(
+    DIRECT_HOST_SUFFIXES.map((suffix) => `https://${compactQuery}${suffix.startsWith(".") ? suffix : `.${suffix}`}/`),
+    (value) => value,
+  );
+}
+
+async function searchDirectHostHeuristic(query) {
+  const directHosts = buildDirectHostCandidates(query);
+  if (!directHosts.length) {
+    return [];
+  }
+
+  const inspected = await Promise.all(
+    directHosts.map((url) =>
+      inspectCandidate({
+        provider: "direct-host",
+        query,
+        title: query,
+        url,
+        textScore: scoreQueryMatch(query, query, url),
+      }),
+    ),
+  );
+
+  return sortCandidates(
+    inspected.filter((candidate) => candidate && !candidate.softwarePortal && !candidate.blockedPage),
+  );
+}
+
 async function searchWebFallback(query) {
   const rawMatches = [];
   const searchTerms = buildWebSearchTerms(query);
@@ -1317,8 +1446,17 @@ async function findBestSearchResult(query) {
     return driveResult;
   }
 
+  const directHostCandidates = await searchDirectHostHeuristic(query);
+  const directHostResult = resolveSearchCandidates(
+    sortCandidates([...driveCandidates, ...directHostCandidates]),
+    " | direct host fallback",
+  );
+  if (directHostResult.candidate) {
+    return directHostResult;
+  }
+
   const webCandidates = await searchWebFallback(query);
-  const combined = sortCandidates([...driveCandidates, ...webCandidates]);
+  const combined = sortCandidates([...driveCandidates, ...directHostCandidates, ...webCandidates]);
   return resolveSearchCandidates(combined);
 }
 
@@ -1945,3 +2083,5 @@ export default {
     }
   },
 };
+
+export { findBestSearchResult };

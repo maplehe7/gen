@@ -60,6 +60,60 @@ async def capture_thumbnail(
     from playwright.async_api import TimeoutError as PlaywrightTimeoutError
     from playwright.async_api import async_playwright
 
+    interaction_script = """() => {
+      const seenWindows = new Set();
+      let clickCount = 0;
+      const selectors = ["#play", ".play", "[data-action='play']", "[data-action='start']", "button", "a", "[role='button']"];
+      const collectWindows = (win, callback) => {
+        if (!win || seenWindows.has(win)) return;
+        seenWindows.add(win);
+        callback(win);
+        for (let index = 0; index < win.frames.length; index += 1) {
+          try {
+            collectWindows(win.frames[index], callback);
+          } catch (error) {
+          }
+        }
+      };
+      const isVisible = (element) => {
+        if (!element) return false;
+        const style = element.ownerDocument.defaultView.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== "none" && style.visibility !== "hidden" && rect.width >= 16 && rect.height >= 16;
+      };
+      const maybeClick = (element) => {
+        if (!element || !isVisible(element)) return false;
+        const text = (element.textContent || "").trim().toLowerCase();
+        const id = String(element.id || "").toLowerCase();
+        const className = String(element.className || "").toLowerCase();
+        if (
+          !id.includes("play") &&
+          !id.includes("start") &&
+          !className.includes("play") &&
+          !className.includes("start") &&
+          !/^(play|start|tap to play|click to play)$/i.test(text)
+        ) {
+          return false;
+        }
+        try {
+          element.click();
+          return true;
+        } catch (error) {
+          return false;
+        }
+      };
+      collectWindows(window, (win) => {
+        const doc = win.document;
+        for (const selector of selectors) {
+          const nodes = doc.querySelectorAll(selector);
+          for (const node of nodes) {
+            if (maybeClick(node)) clickCount += 1;
+          }
+        }
+      });
+      return clickCount;
+    }"""
+
     cleaned_game_path = "/" + game_path.strip().lstrip("/")
     if not cleaned_game_path.endswith("/"):
         cleaned_game_path += "/"
@@ -71,7 +125,12 @@ async def capture_thumbnail(
             browser = await playwright.chromium.launch(headless=True, args=["--no-sandbox"])
             page = await browser.new_page(viewport={"width": 1280, "height": 720}, device_scale_factor=1)
             try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+                await page.goto(url, wait_until="commit", timeout=timeout_ms)
+                await page.wait_for_timeout(1200)
+                try:
+                    await page.evaluate(interaction_script)
+                except Exception:
+                    pass
                 try:
                     await page.wait_for_selector("#unity-canvas, #game_frame iframe, canvas", timeout=15000)
                 except PlaywrightTimeoutError:

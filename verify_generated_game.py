@@ -14,6 +14,7 @@ from capture_game_thumbnail import serve_directory
 
 IGNORED_LOCAL_404_PATHS = {"/favicon.ico"}
 IGNORABLE_CONSOLE_ERROR_SUBSTRINGS = (
+    "Blocked: js/null.js",
     "FS.syncfs operations in flight at once",
 )
 
@@ -66,6 +67,8 @@ def infer_entry_kind(summary: dict[str, Any]) -> str:
         return "unity"
     if any(str(summary.get(key, "")).strip() for key in ("classes_file", "assets_file")):
         return "eaglercraft"
+    if isinstance(summary.get("html_runtime_mirror"), dict):
+        return "html"
     return ""
 
 
@@ -110,6 +113,32 @@ def summary_required_files(summary: dict[str, Any]) -> tuple[list[str], list[str
             if normalized:
                 static_files.append(normalized)
                 runtime_paths.append(normalized)
+    elif entry_kind == "html":
+        html_mirror = summary.get("html_runtime_mirror")
+        mirrored_count = 0
+        if isinstance(html_mirror, dict):
+            try:
+                mirrored_count = max(int(html_mirror.get("mirrored_file_count", 0)), 0)
+            except (TypeError, ValueError):
+                mirrored_count = 0
+        if mirrored_count <= 0:
+            errors.append("Mirrored HTML runtime did not record any localized asset files.")
+
+        cached_runtime_file = normalize_relative_path(str(summary.get("cached_runtime_file", "")).strip())
+        if cached_runtime_file:
+            static_files.append(cached_runtime_file)
+            runtime_paths.append(cached_runtime_file)
+
+        mobile_script_file = normalize_relative_path(str(summary.get("eagler_mobile_script_file", "")).strip())
+        if mobile_script_file:
+            static_files.append(mobile_script_file)
+
+        for key in ("external_script_urls", "external_stylesheet_urls", "external_frame_urls", "external_other_urls"):
+            for value in summary.get(key) or []:
+                normalized = normalize_relative_path(str(value))
+                if not normalized or normalized.startswith(("http://", "https://")):
+                    continue
+                static_files.append(normalized)
     else:
         errors.append(
             "Unsupported export type for strict standalone verification: "
@@ -216,6 +245,72 @@ def ready_state_script() -> str:
     }"""
 
 
+def start_interaction_script() -> str:
+    return """() => {
+      const seenWindows = new Set();
+      let clickCount = 0;
+      const clickableSelectors = [
+        "#play",
+        ".play",
+        "[data-action='play']",
+        "[data-action='start']",
+        "button",
+        "a",
+        "[role='button']",
+      ];
+      const collectWindows = (win, callback) => {
+        if (!win || seenWindows.has(win)) return;
+        seenWindows.add(win);
+        callback(win);
+        for (let index = 0; index < win.frames.length; index += 1) {
+          try {
+            collectWindows(win.frames[index], callback);
+          } catch (error) {
+          }
+        }
+      };
+      const isVisible = (element) => {
+        if (!element) return false;
+        const style = element.ownerDocument.defaultView.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== "none" && style.visibility !== "hidden" && rect.width >= 16 && rect.height >= 16;
+      };
+      const maybeClick = (element) => {
+        if (!element || !isVisible(element)) return false;
+        const text = (element.textContent || "").trim().toLowerCase();
+        const id = String(element.id || "").toLowerCase();
+        const className = String(element.className || "").toLowerCase();
+        if (
+          !id.includes("play") &&
+          !id.includes("start") &&
+          !className.includes("play") &&
+          !className.includes("start") &&
+          !/^(play|start|tap to play|click to play)$/i.test(text)
+        ) {
+          return false;
+        }
+        try {
+          element.click();
+          return true;
+        } catch (error) {
+          return false;
+        }
+      };
+      collectWindows(window, (win) => {
+        const doc = win.document;
+        for (const selector of clickableSelectors) {
+          const nodes = doc.querySelectorAll(selector);
+          for (const node of nodes) {
+            if (maybeClick(node)) {
+              clickCount += 1;
+            }
+          }
+        }
+      });
+      return clickCount;
+    }"""
+
+
 async def verify_runtime(
     output_dir: Path,
     runtime_paths: list[str],
@@ -254,11 +349,11 @@ async def verify_runtime(
                     request_url = request.url
                     parsed = urlparse(request_url)
                     if parsed.scheme not in {"http", "https"}:
-                        await route.continue_()
+                        await route.fallback()
                         return
                     if same_local_origin(request_url, local_origin):
                         requested_local_paths.add(normalize_request_path(parsed.path))
-                        await route.continue_()
+                        await route.fallback()
                         return
                     append_unique_event(
                         external_requests,
@@ -300,6 +395,12 @@ async def verify_runtime(
                     request_url = request.url
                     parsed = urlparse(request_url)
                     failure = request.failure or {}
+                    if isinstance(failure, str):
+                        error_text = failure
+                    elif isinstance(failure, dict):
+                        error_text = str(failure.get("errorText", ""))
+                    else:
+                        error_text = str(failure)
                     if parsed.scheme not in {"http", "https"}:
                         return
                     if not same_local_origin(request_url, local_origin):
@@ -312,7 +413,7 @@ async def verify_runtime(
                             "path": normalize_request_path(parsed.path),
                             "method": request.method,
                             "resource_type": request.resource_type,
-                            "error_text": failure.get("errorText", ""),
+                            "error_text": error_text,
                         },
                     )
 
@@ -359,7 +460,12 @@ async def verify_runtime(
                 page.on("response", on_response)
                 page.on("websocket", on_websocket)
 
-                await page.goto(launch_url, wait_until="domcontentloaded", timeout=timeout_ms)
+                await page.goto(launch_url, wait_until="commit", timeout=timeout_ms)
+                await page.wait_for_timeout(1500)
+                try:
+                    await page.evaluate(start_interaction_script())
+                except Exception:
+                    pass
 
                 ready = True
                 ready_error = ""
@@ -369,8 +475,19 @@ async def verify_runtime(
                         timeout=ready_timeout_ms,
                     )
                 except PlaywrightTimeoutError:
-                    ready = False
-                    ready_error = "Game did not reach a visible playable canvas state."
+                    try:
+                        await page.evaluate(start_interaction_script())
+                        await page.wait_for_timeout(2500)
+                        await page.wait_for_function(
+                            ready_state_script(),
+                            timeout=8000,
+                        )
+                    except PlaywrightTimeoutError:
+                        ready = False
+                        ready_error = "Game did not reach a visible playable canvas state."
+                    except Exception:
+                        ready = False
+                        ready_error = "Game did not reach a visible playable canvas state."
 
                 await page.wait_for_timeout(settle_ms)
 

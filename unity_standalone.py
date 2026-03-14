@@ -11,6 +11,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import base64
 import gzip
 import hashlib
@@ -1845,6 +1846,11 @@ def find_supported_entry(input_url: str, root_url: str) -> DetectedEntry:
     def inspect_html(index_url: str, index_html: str, depth: int, source: str) -> DetectedEntry | None:
         snippets = extract_embedded_html_snippets(index_html)
         inline_html_snippets: list[str] = []
+        parsed_index_url = urllib.parse.urlparse(index_url)
+        wrapper_like_host = parsed_index_url.netloc.lower() in {
+            "sites.google.com",
+            "script.google.com",
+        } or parsed_index_url.netloc.lower().endswith(".googleusercontent.com")
 
         for snippet in snippets:
             detected_kind = detect_supported_entry_kind(snippet)
@@ -1889,11 +1895,6 @@ def find_supported_entry(input_url: str, root_url: str) -> DetectedEntry:
                 source_page_url=index_url,
             )
 
-        if detected_kind != "html":
-            external_unity_entry = detect_unity_entry_from_external_scripts(index_html, index_url)
-            if external_unity_entry is not None:
-                return external_unity_entry
-
         if depth >= 6:
             if detected_kind == "html":
                 return DetectedEntry(
@@ -1918,6 +1919,11 @@ def find_supported_entry(input_url: str, root_url: str) -> DetectedEntry:
             result = inspect_html(index_url, snippet, depth + 1, f"{source} -> embedded HTML")
             if result:
                 return result
+
+        if detected_kind != "html" and not wrapper_like_host:
+            external_unity_entry = detect_unity_entry_from_external_scripts(index_html, index_url)
+            if external_unity_entry is not None:
+                return external_unity_entry
 
         if snippets:
             errors.append(f"{source} -> embedded HTML found but no supported build reference found")
@@ -3983,14 +3989,14 @@ def strip_known_embedded_ad_markup(document_html: str) -> tuple[str, dict[str, i
         (
             "style_blocks",
             re.compile(
-                r"""<style\b[^>]*>(?:(?!</style>).)*(?:#ad-container|#ad-iframe|#close-ad|#ad-right-mask|reklam)(?:(?!</style>).)*</style>""",
+                r"""<style\b[^>]*>(?:(?!</style>).)*(?:#ad-container|#ad-iframe|#close-ad|#ad-right-mask|reklam|MobileAdInGame)(?:(?!</style>).)*</style>""",
                 re.IGNORECASE | re.DOTALL,
             ),
         ),
         (
             "script_blocks",
             re.compile(
-                r"""<script\b[^>]*>(?:(?!</script>).)*(?:document\.getElementById\(['"]ad-container['"]\)|document\.getElementById\(['"]close-ad['"]\)|script\.google\.com/macros|countdownStart)(?:(?!</script>).)*</script>""",
+                r"""<script\b[^>]*>(?:(?!</script>).)*(?:document\.getElementById\(['"]ad-container['"]\)|document\.getElementById\(['"]close-ad['"]\)|script\.google\.com/macros|countdownStart|googletag|adsbygoogle|MobileAdInGame)(?:(?!</script>).)*</script>""",
                 re.IGNORECASE | re.DOTALL,
             ),
         ),
@@ -4018,7 +4024,7 @@ def strip_known_embedded_ad_markup(document_html: str) -> tuple[str, dict[str, i
         (
             "comment_blocks",
             re.compile(
-                r"""<!--[\s\S]*?(?:reklam|advert|ad-container|ad-iframe)[\s\S]*?-->""",
+                r"""<!--[\s\S]*?(?:reklam|advert|ad-container|ad-iframe|MobileAdInGame)[\s\S]*?-->""",
                 re.IGNORECASE,
             ),
         ),
@@ -4027,6 +4033,20 @@ def strip_known_embedded_ad_markup(document_html: str) -> tuple[str, dict[str, i
     for key, pattern in replacements:
         cleaned, count = pattern.subn("", cleaned)
         removal_counts[key] += count
+
+    mobile_ad_patterns = (
+        re.compile(
+            r"""<div\b[^>]*\bid\s*=\s*['"]MobileAdInGame(?:Preroll|Preroll2|Preroll3|End|End2|End3)['"][^>]*>[\s\S]*?</div>\s*</div>\s*</div>""",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"""<div\b[^>]*\bid\s*=\s*['"]MobileAdInGame(?:Header|Header2|Header3|Footer|Footer2|Footer3)['"][^>]*>\s*</div>""",
+            re.IGNORECASE,
+        ),
+    )
+    for pattern in mobile_ad_patterns:
+        cleaned, count = pattern.subn("", cleaned)
+        removal_counts["container_blocks"] += count
 
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned, removal_counts
@@ -4090,6 +4110,7 @@ HTML_RUNTIME_TEXT_EXTENSIONS = (
 
 HTML_RUNTIME_ASSET_EXTENSIONS = HTML_RUNTIME_TEXT_EXTENSIONS + (
     ".aac",
+    ".babylon",
     ".bin",
     ".br",
     ".data",
@@ -4171,11 +4192,14 @@ HTML_RUNTIME_IGNORED_URL_FRAGMENTS = (
 )
 
 HTML_RUNTIME_ALLOWED_CROSS_ORIGIN_HOSTS = (
+    "babylonjs.com",
+    "cdnjs.cloudflare.com",
     "cdn.jsdelivr.net",
     "githack.com",
     "github.io",
     "githubusercontent.com",
     "neocities.org",
+    "unpkg.com",
     "raw.githubusercontent.com",
     "rawcdn.githack.com",
 )
@@ -4353,14 +4377,22 @@ def extract_runtime_text_reference_urls(text: str, base_url: str) -> list[str]:
 
     absolute_url_pattern = re.compile(r"""https?://[^"'`\s<>()\\]+""", re.IGNORECASE)
     root_relative_pattern = re.compile(r"""(?<![A-Za-z0-9])/(?!/)[^"'`\s<>()\\]+""")
-    quoted_relative_pattern = re.compile(r"""(['"])((?:\./|\.\./)?[^"'`\r\n]+)\1""")
+    quoted_string_pattern = re.compile(r"""(['"])([^"'\\]*(?:\\.[^"'\\]*)*)\1""")
+    relative_asset_pattern = re.compile(
+        r"""(?<![A-Za-z0-9])(?:\./|\.\./)?[A-Za-z0-9_./-]+\.(?:aac|atlas|babylon|bin|br|css|csv|data|eot|fnt|gif|glb|gltf|gz|ico|ini|jpeg|jpg|js|json|m4a|manifest|map|mem|mp3|mp4|ogg|otf|png|svg|ttf|txt|unityweb|wav|wasm|webm|webmanifest|webp|woff2?|worker|xml)(?:\?[^\s"'`<>()\\]+)?""",
+        re.IGNORECASE,
+    )
 
     for match in absolute_url_pattern.findall(text):
         add_candidate(match)
     for match in root_relative_pattern.findall(text):
         add_candidate(match)
-    for _quote, value in quoted_relative_pattern.findall(text):
-        add_candidate(value)
+    for _quote, value in quoted_string_pattern.findall(text):
+        decoded_value = decode_js_string_literal(value).strip()
+        if decoded_value:
+            add_candidate(decoded_value)
+    for match in relative_asset_pattern.findall(text):
+        add_candidate(match)
     return candidates
 
 
@@ -4572,6 +4604,7 @@ def strip_nonessential_html_markup(document_html: str) -> tuple[str, dict[str, i
     removal_counts = {
         "canonical_links": 0,
         "icon_links": 0,
+        "nonessential_stylesheets": 0,
         "nonessential_scripts": 0,
         "nonessential_inline_scripts": 0,
         "nonessential_iframes": 0,
@@ -4593,9 +4626,16 @@ def strip_nonessential_html_markup(document_html: str) -> tuple[str, dict[str, i
             ),
         ),
         (
+            "nonessential_stylesheets",
+            re.compile(
+                r"""<link\b[^>]*\bhref\s*=\s*['"][^'"]*(?:fonts\.googleapis\.com|fonts\.gstatic\.com|sharethis\.com|addthis\.com)[^'"]*['"][^>]*>\s*""",
+                re.IGNORECASE,
+            ),
+        ),
+        (
             "nonessential_scripts",
             re.compile(
-                r"""<script\b[^>]+\bsrc\s*=\s*['"][^'"]*(?:recaptcha|cloudflareinsights|vconsole|googletagmanager|google-analytics|doubleclick|googlesyndication|pagead2\.googlesyndication|amazon-adsystem|facebook\.net|platform\.twitter)[^'"]*['"][^>]*>\s*</script>\s*""",
+                r"""<script\b[^>]+\bsrc\s*=\s*['"][^'"]*(?:recaptcha|cloudflareinsights|vconsole|googletagmanager|google-analytics|doubleclick|googlesyndication|pagead2\.googlesyndication|amazon-adsystem|facebook\.net|platform\.twitter|sharethis\.com|addthis\.com|taboola|outbrain)[^'"]*['"][^>]*>\s*</script>\s*""",
                 re.IGNORECASE,
             ),
         ),
@@ -4621,6 +4661,216 @@ def strip_nonessential_html_markup(document_html: str) -> tuple[str, dict[str, i
 
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned, removal_counts
+
+
+def strip_remote_nonruntime_markup_blocks(document_html: str) -> tuple[str, dict[str, int]]:
+    cleaned = document_html
+    removal_counts = {
+        "remote_scripts": 0,
+        "remote_links": 0,
+        "remote_iframes": 0,
+        "inline_analytics_scripts": 0,
+        "social_meta_tags": 0,
+    }
+
+    replacements = (
+        (
+            "remote_scripts",
+            re.compile(
+                r"""<script\b[^>]*\bsrc\s*=\s*['"][^'"]*(?:googletagmanager|google-analytics|doubleclick|googlesyndication|pagead2\.googlesyndication|amazon-adsystem|sharethis|addthis|taboola|outbrain|facebook\.net|platform\.twitter|cloudflareinsights|vconsole)[^'"]*['"][^>]*>\s*</script>\s*""",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "remote_links",
+            re.compile(
+                r"""<link\b[^>]*\b(?:rel\s*=\s*['"][^'"]*\b(?:canonical|icon|apple-touch-icon|mask-icon|preconnect|dns-prefetch|alternate)\b[^'"]*['"][^>]*|href\s*=\s*['"][^'"]*(?:fonts\.googleapis\.com|fonts\.gstatic\.com|sharethis\.com|addthis\.com)[^'"]*['"][^>]*)>\s*""",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "remote_iframes",
+            re.compile(
+                r"""<iframe\b[^>]+\bsrc\s*=\s*['"][^'"]*(?:googleads|googlesyndication|doubleclick|amazon-adsystem|sharethis|addthis|taboola|outbrain)[^'"]*['"][\s\S]*?</iframe>\s*""",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "inline_analytics_scripts",
+            re.compile(
+                r"""<script\b[^>]*>(?:(?!</script>).)*(?:googletagmanager|google-analytics|gtag\(|dataLayer|adsbygoogle|sharethis|taboola|outbrain)(?:(?!</script>).)*</script>\s*""",
+                re.IGNORECASE | re.DOTALL,
+            ),
+        ),
+        (
+            "social_meta_tags",
+            re.compile(
+                r"""<meta\b[^>]*(?:property|name)\s*=\s*['"](?:og:[^'"]*|twitter:[^'"]*|description|keywords|robots)['"][^>]*>\s*""",
+                re.IGNORECASE,
+            ),
+        ),
+    )
+
+    for key, pattern in replacements:
+        cleaned, count = pattern.subn("", cleaned)
+        removal_counts[key] += count
+
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned, removal_counts
+
+
+def strip_html_runtime_ad_sections(document_html: str) -> tuple[str, dict[str, int]]:
+    cleaned = document_html
+    removal_counts = {
+        "generated_sections": 0,
+        "mobile_ad_placeholders": 0,
+        "ad_iframes": 0,
+    }
+
+    cleaned, count = re.subn(
+        r"""<!--\s*SECTION GENERATED BY CODE\s*-->[\s\S]*?<!--\s*END OF SECTION GENERATED BY CODE\s*-->""",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    removal_counts["generated_sections"] += count
+
+    for pattern in (
+        re.compile(
+            r"""<div\b[^>]*\bid\s*=\s*['"]MobileAdInGame(?:Header|Header2|Header3|Footer|Footer2|Footer3)['"][^>]*>\s*</div>\s*""",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"""<iframe\b[^>]*(?:\bid\s*=\s*['"]ad-iframe['"]|src\s*=\s*['"][^"']*script\.google\.com/macros/)[\s\S]*?</iframe>\s*""",
+            re.IGNORECASE,
+        ),
+    ):
+        cleaned, count = pattern.subn("", cleaned)
+        if "iframe" in pattern.pattern:
+            removal_counts["ad_iframes"] += count
+        else:
+            removal_counts["mobile_ad_placeholders"] += count
+
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned, removal_counts
+
+
+def generate_local_html_runtime_stub_script() -> str:
+    mobile_ad_names = (
+        "MobileAdInGamePreroll",
+        "MobileAdInGamePreroll2",
+        "MobileAdInGamePreroll3",
+        "MobileAdInGameHeader",
+        "MobileAdInGameHeader2",
+        "MobileAdInGameHeader3",
+        "MobileAdInGameFooter",
+        "MobileAdInGameFooter2",
+        "MobileAdInGameFooter3",
+        "MobileAdInGameEnd",
+        "MobileAdInGameEnd2",
+        "MobileAdInGameEnd3",
+    )
+    mobile_ad_names_js = json.dumps(mobile_ad_names, ensure_ascii=False)
+    return f"""<script>
+(function () {{
+  const noop = function () {{}};
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = window.gtag || function () {{ window.dataLayer.push(arguments); }};
+  window.adsbygoogle = window.adsbygoogle || [];
+  const googletag = window.googletag = window.googletag || {{}};
+  googletag.cmd = googletag.cmd || [];
+  googletag.display = googletag.display || noop;
+  googletag.enableServices = googletag.enableServices || noop;
+  googletag.pubads = googletag.pubads || function () {{
+    return {{
+      enableSingleRequest: noop,
+      collapseEmptyDivs: noop,
+      refresh: noop,
+      addService: noop,
+    }};
+  }};
+  window.GD_OPTIONS = window.GD_OPTIONS || {{}};
+  window.GameDistribution = window.GameDistribution || {{
+    init: function () {{ return Promise.resolve(); }},
+    preloadAd: function () {{ return Promise.resolve(); }},
+    showAd: function () {{ return Promise.resolve(); }},
+    canShowAd: function () {{ return Promise.resolve(false); }},
+  }};
+  window.CrazyGames = window.CrazyGames || {{
+    SDK: {{
+      init: function () {{ return Promise.resolve(); }},
+      ad: {{
+        requestAd: function () {{ return Promise.resolve(); }},
+        requestBanner: function () {{ return Promise.resolve(); }},
+      }},
+      game: {{
+        gameplayStart: noop,
+        gameplayStop: noop,
+      }},
+    }},
+  }};
+  const adStubNames = {mobile_ad_names_js};
+  function createStub() {{
+    return {{
+      Enabled: false,
+      Visible: false,
+      Initialize: noop,
+      Show: noop,
+      Hide: noop,
+      Close: noop,
+      Load: noop,
+      Preload: noop,
+      Destroy: noop,
+      Refresh: noop,
+    }};
+  }}
+  for (const name of adStubNames) {{
+    if (!window[name]) {{
+      window[name] = createStub();
+    }}
+  }}
+}})();
+</script>"""
+
+
+def rebuild_local_html_runtime_document(
+    title: str,
+    document_html: str,
+) -> tuple[str, dict[str, Any]]:
+    source_document = document_html.lstrip("\ufeff").strip()
+    if not source_document:
+        raise FetchError("Detected HTML runtime was empty after localization.")
+
+    head_match = re.search(r"""<head\b[^>]*>([\s\S]*?)</head>""", source_document, re.IGNORECASE)
+    body_match = re.search(r"""<body\b([^>]*)>([\s\S]*?)</body>""", source_document, re.IGNORECASE)
+
+    head_inner = head_match.group(1) if head_match else ""
+    body_attrs = body_match.group(1) if body_match else ""
+    body_inner = body_match.group(2) if body_match else source_document
+
+    cleaned_head, head_remote_removals = strip_remote_nonruntime_markup_blocks(head_inner)
+    cleaned_body, body_ad_removals = strip_html_runtime_ad_sections(body_inner)
+    cleaned_body, body_remote_removals = strip_remote_nonruntime_markup_blocks(cleaned_body)
+
+    rebuilt = (
+        "<!DOCTYPE html>\n"
+        "<html lang=\"en\">\n"
+        "<head>\n"
+        f"{cleaned_head.strip()}\n"
+        f"{generate_local_html_runtime_stub_script()}\n"
+        "</head>\n"
+        f"<body{body_attrs}>\n"
+        f"{cleaned_body.strip()}\n"
+        "</body>\n"
+        "</html>\n"
+    )
+    rebuilt = re.sub(r"\n{3,}", "\n\n", rebuilt)
+    return generate_html_entry_index_html(title, rebuilt), {
+        "mode": "clean_local_runtime_shell",
+        "head_remote_removals": head_remote_removals,
+        "body_ad_removals": body_ad_removals,
+        "body_remote_removals": body_remote_removals,
+    }
 
 
 def patch_inline_eagler_wrapper_html(document_html: str) -> tuple[str, dict[str, int]]:
@@ -5189,11 +5439,65 @@ def sanitize_construct2_local_runtime(output_dir: Path) -> dict[str, Any]:
     return result
 
 
+def sanitize_html_runtime_support_files(output_dir: Path) -> dict[str, Any]:
+    patched_files: list[str] = []
+    result: dict[str, Any] = {
+        "mode": "clean_local_runtime_support",
+        "patched_files": patched_files,
+    }
+
+    javascript_stubs = {
+        "patch/js/null.js": """(function(){window.ga=window.ga||function(){};})();\n""",
+        "js/null.js": """(function(){
+  const noop = function(){};
+  const tracker = {
+    initialize: function(){ return Promise.resolve({}); },
+    init: function(){ return Promise.resolve({}); },
+    ready: function(){ return Promise.resolve({}); },
+    track: noop,
+    identify: noop,
+    page: noop,
+    event: noop,
+    setUser: noop,
+    log: noop,
+  };
+  window.ga = window.ga || noop;
+  window.gamedock = window.gamedock || tracker;
+  window.Gamedock = window.Gamedock || tracker;
+  window.GameDock = window.GameDock || tracker;
+})();\n""",
+    }
+    json_stubs = {
+        "json/config.json": {},
+        "json/null.json": {},
+        "json/ping.json": {},
+    }
+
+    for relative_path, content in javascript_stubs.items():
+        path = output_dir / Path(relative_path)
+        if not path.exists():
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        patched_files.append(relative_path.replace("\\", "/"))
+
+    for relative_path, payload in json_stubs.items():
+        path = output_dir / Path(relative_path)
+        if not path.exists():
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        patched_files.append(relative_path.replace("\\", "/"))
+
+    return result
+
+
 def mirror_html_entry_assets(
     document_html: str,
     source_url: str,
     output_dir: Path,
     prefer_construct2: bool = False,
+    extra_seed_urls: Sequence[str] = (),
 ) -> tuple[str, dict[str, Any]]:
     primary_root_url = choose_primary_html_runtime_root(document_html, source_url)
     queued_urls: list[tuple[str, str]] = []
@@ -5252,6 +5556,9 @@ def mirror_html_entry_assets(
             seed_url = normalize_url(urllib.parse.urljoin(primary_root_url, filename))
             construct2_seed_urls.append(seed_url)
             enqueue_candidate(seed_url, source_url)
+    for seed_url in extra_seed_urls:
+        if isinstance(seed_url, str) and seed_url.strip():
+            enqueue_candidate(seed_url.strip(), source_url)
 
     while queued_urls and len(mirrored_assets) < max_asset_count:
         candidate_url, referer_url = queued_urls.pop(0)
@@ -5270,8 +5577,6 @@ def mirror_html_entry_assets(
             text_content = raw.decode("utf-8-sig", errors="replace")
             if text_kind == "html":
                 text_content = absolutize_markup_urls(text_content, normalized_resolved_url)
-                text_content, _ = strip_known_embedded_ad_markup(text_content)
-                text_content, _ = strip_nonessential_html_markup(text_content)
 
         mirrored_assets[normalized_candidate_url] = {
             "url": normalized_candidate_url,
@@ -5401,6 +5706,8 @@ def mirror_html_entry_assets(
         "mode": "construct2_local_mirror" if prefer_construct2 else "html_local_mirror",
         "primary_root_url": primary_root_url,
         "construct2_seed_urls": construct2_seed_urls[:25],
+        "extra_seed_url_count": len([item for item in extra_seed_urls if str(item).strip()]),
+        "extra_seed_urls_sample": [str(item).strip() for item in extra_seed_urls[:25] if str(item).strip()],
         "mirrored_file_count": len(mirrored_files),
         "mirrored_files_sample": mirrored_files[:25],
         "fetch_failure_count": len(fetch_failures),
@@ -5410,6 +5717,9 @@ def mirror_html_entry_assets(
         runtime_patch_summary = sanitize_construct2_local_runtime(output_dir)
         if runtime_patch_summary["patched_files"]:
             summary["runtime_sanitizer"] = runtime_patch_summary
+    runtime_support_summary = sanitize_html_runtime_support_files(output_dir)
+    if runtime_support_summary["patched_files"]:
+        summary["runtime_support_sanitizer"] = runtime_support_summary
     return rewritten_html, summary
 
 
@@ -5424,6 +5734,118 @@ def mirror_construct2_entry_assets(
         output_dir,
         prefer_construct2=True,
     )
+
+
+def runtime_probe_interaction_script() -> str:
+    return """() => {
+      const seenWindows = new Set();
+      const selectors = ["#play", ".play", "[data-action='play']", "[data-action='start']", "button", "a", "[role='button']"];
+      const collectWindows = (win, callback) => {
+        if (!win || seenWindows.has(win)) return;
+        seenWindows.add(win);
+        callback(win);
+        for (let index = 0; index < win.frames.length; index += 1) {
+          try {
+            collectWindows(win.frames[index], callback);
+          } catch (error) {
+          }
+        }
+      };
+      const isVisible = (element) => {
+        if (!element) return false;
+        const style = element.ownerDocument.defaultView.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== "none" && style.visibility !== "hidden" && rect.width >= 16 && rect.height >= 16;
+      };
+      const maybeClick = (element) => {
+        if (!element || !isVisible(element)) return false;
+        const text = (element.textContent || "").trim().toLowerCase();
+        const id = String(element.id || "").toLowerCase();
+        const className = String(element.className || "").toLowerCase();
+        if (
+          !id.includes("play") &&
+          !id.includes("start") &&
+          !className.includes("play") &&
+          !className.includes("start") &&
+          !/^(play|start|tap to play|click to play)$/i.test(text)
+        ) {
+          return false;
+        }
+        try {
+          element.click();
+          return true;
+        } catch (error) {
+          return false;
+        }
+      };
+      collectWindows(window, (win) => {
+        const doc = win.document;
+        for (const selector of selectors) {
+          const nodes = doc.querySelectorAll(selector);
+          for (const node of nodes) {
+            maybeClick(node);
+          }
+        }
+      });
+    }"""
+
+
+async def discover_runtime_requested_asset_urls_async(
+    source_url: str,
+    wait_ms: int = 12000,
+) -> list[str]:
+    from playwright.async_api import async_playwright
+
+    successful_urls: set[str] = set()
+    normalized_source_url = normalize_url(source_url)
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=True, args=["--no-sandbox"])
+        page = await browser.new_page(viewport={"width": 1280, "height": 720}, device_scale_factor=1)
+        try:
+            def on_response(response) -> None:
+                if response.status >= 400:
+                    return
+                response_url = response.url
+                try:
+                    normalized_url = remove_query_and_fragment(normalize_url(response_url))
+                except FetchError:
+                    return
+                if normalized_url == normalized_source_url:
+                    return
+                if is_ignored_runtime_asset_url(normalized_url):
+                    return
+                if not should_follow_runtime_candidate_url(normalized_url, normalized_source_url):
+                    return
+                if not looks_like_runtime_asset_reference(response_url):
+                    return
+                successful_urls.add(normalized_url)
+
+            page.on("response", on_response)
+            await page.goto(normalized_source_url, wait_until="commit", timeout=45000)
+            await page.wait_for_timeout(1200)
+            try:
+                await page.evaluate(runtime_probe_interaction_script())
+            except Exception:
+                pass
+            await page.wait_for_timeout(wait_ms)
+            try:
+                await page.evaluate(runtime_probe_interaction_script())
+            except Exception:
+                pass
+            await page.wait_for_timeout(2500)
+        finally:
+            await browser.close()
+
+    return sorted(successful_urls)
+
+
+def discover_runtime_requested_asset_urls(source_url: str) -> list[str]:
+    try:
+        return asyncio.run(discover_runtime_requested_asset_urls_async(source_url))
+    except Exception as exc:
+        log(f"Runtime asset probe skipped: {exc}")
+        return []
 
 
 def generate_crazygames_sdk_stub() -> str:
@@ -11166,9 +11588,6 @@ def export_html_entry(
             allowed_launch_modes=allowed_launch_modes,
             recommended_launch_mode=recommended_launch_mode,
         )
-    raise FetchError(
-        "Web fallback export is disabled. HTML/web runtimes are not exportable as standalone builds."
-    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     title = infer_display_title(
@@ -11192,31 +11611,25 @@ def export_html_entry(
     save_json_file(progress_file, progress_payload)
 
     source_page_url = detected_entry.source_page_url or input_url
-    wrapper_source_html = ""
-    if source_page_url and normalize_url(source_page_url) != normalize_url(detected_entry.index_url):
-        wrapper_source_html = fetch_cached_iframe_wrapper_html(source_page_url)
-
     normalized_source_html = absolutize_markup_urls(
         detected_entry.index_html,
         detected_entry.index_url,
     )
-    sanitized_source_html, ad_removal_counts = strip_known_embedded_ad_markup(normalized_source_html)
-    wrapper_entry_source_html = wrapper_source_html
-    if wrapper_entry_source_html:
-        wrapper_entry_source_html = absolutize_markup_urls(wrapper_entry_source_html, source_page_url)
-        wrapper_entry_source_html, _ = strip_known_embedded_ad_markup(wrapper_entry_source_html)
     original_external_links = extract_html_external_links(
-        wrapper_entry_source_html or sanitized_source_html
+        normalized_source_html
     )
+    runtime_probe_urls = discover_runtime_requested_asset_urls(detected_entry.index_url)
     mirrored_html_summary: dict[str, Any] = {}
     localized_source_html, mirrored_html_summary = mirror_html_entry_assets(
-        sanitized_source_html,
+        normalized_source_html,
         detected_entry.index_url,
         output_dir,
-        prefer_construct2=looks_like_construct2_entry_html(sanitized_source_html),
+        prefer_construct2=looks_like_construct2_entry_html(normalized_source_html),
+        extra_seed_urls=runtime_probe_urls,
     )
-    localized_source_html, nonessential_markup_removed = strip_nonessential_html_markup(
-        localized_source_html
+    localized_source_html, runtime_shell_summary = rebuild_local_html_runtime_document(
+        title,
+        localized_source_html,
     )
     localized_source_html, eagler_wrapper_patches = patch_inline_eagler_wrapper_html(
         localized_source_html
@@ -11224,38 +11637,10 @@ def export_html_entry(
     eagler_mobile_option_enabled = looks_like_eagler_entry_html(localized_source_html)
     embedded_entry_name = "game-root.html"
     embedded_runtime_name = ""
-    wrapper_runtime_summary: dict[str, Any] = {}
-    if wrapper_entry_source_html and looks_like_cached_iframe_wrapper_html(wrapper_entry_source_html):
-        embedded_runtime_name = "game-runtime.html"
-        embedded_runtime_content = generate_html_entry_index_html(
-            title=title,
-            source_html=localized_source_html,
-        )
-        (output_dir / embedded_runtime_name).write_text(embedded_runtime_content, encoding="utf-8")
-        runtime_cache_buster = compute_output_file_cache_buster(output_dir, [embedded_runtime_name])
-        wrapper_entry_source_html = build_cached_iframe_wrapper_html(
-            wrapper_entry_source_html,
-            f"./{embedded_runtime_name}?v={runtime_cache_buster}",
-        )
-        embedded_entry_content = generate_html_entry_index_html(
-            title=title,
-            source_html=wrapper_entry_source_html,
-        )
-        wrapper_runtime_summary = {
-            "wrapper_mode": "cached_iframe_runtime",
-            "cached_wrapper_source_url": source_page_url,
-            "cached_runtime_source_url": detected_entry.index_url,
-            "cached_runtime_file": embedded_runtime_name,
-            "cached_runtime_cache_buster": runtime_cache_buster,
-        }
-    else:
-        embedded_entry_content = generate_html_entry_index_html(
-            title=title,
-            source_html=localized_source_html,
-        )
+    embedded_entry_content = localized_source_html
     (output_dir / embedded_entry_name).write_text(embedded_entry_content, encoding="utf-8")
     external_links = extract_html_external_links(
-        wrapper_entry_source_html or localized_source_html
+        localized_source_html
     )
     remaining_remote_dependencies = collect_remote_markup_dependencies(
         embedded_entry_content
@@ -11331,13 +11716,12 @@ def export_html_entry(
         "root_url": root_url,
         "source_page_url": source_page_url,
         "resolved_entry_url": detected_entry.index_url,
-        "html_source_mode": "absolutized_embed_root",
+        "html_source_mode": "clean_local_runtime_shell",
         "launcher": "ocean-launcher",
         "embed_cache_buster": embed_cache_buster,
         "support_files": support_files,
-        "embedded_ad_blocks_removed": ad_removal_counts,
-        "nonessential_markup_removed": nonessential_markup_removed,
         "html_runtime_mirror": mirrored_html_summary,
+        "runtime_shell_summary": runtime_shell_summary,
         "eagler_wrapper_patches": eagler_wrapper_patches,
         "eagler_mobile_option_enabled": eagler_mobile_option_enabled,
         "eagler_mobile_script_file": eagler_mobile_script["name"] if eagler_mobile_script else "",
@@ -11356,7 +11740,6 @@ def export_html_entry(
         "external_other_urls": external_links["other_links"],
         "progress_file": str(progress_file),
     }
-    summary.update(wrapper_runtime_summary)
     (output_dir / "standalone-build-info.json").write_text(
         json.dumps(summary, indent=2),
         encoding="utf-8",
@@ -11851,11 +12234,6 @@ def main(argv: Sequence[str]) -> int:
             raise FetchError(
                 "Web fallback is disabled. Remote streamed pages are not exportable as direct standalone builds."
             )
-        else:
-            raise FetchError(
-                "Web fallback is disabled. "
-                "This page only exposes an HTML/web runtime and not a direct standalone build."
-            )
 
     if direct_mode:
         output_name = args.out_dir.strip() or infer_output_name_from_url(root_url, loader_url)
@@ -11871,6 +12249,13 @@ def main(argv: Sequence[str]) -> int:
             extract_html_title(detected_entry.index_html),
             root_url,
             fallback_name="unity-game",
+            source_page_url=detected_entry.source_page_url or input_url,
+        )
+    elif entry_kind == "html" and detected_entry is not None:
+        output_name = args.out_dir.strip() or infer_output_name_from_entry(
+            extract_html_title(detected_entry.index_html),
+            root_url,
+            fallback_name="html-game",
             source_page_url=detected_entry.source_page_url or input_url,
         )
     elif entry_kind == "remote_stream" and detected_remote_entry is not None:
@@ -11925,6 +12310,20 @@ def main(argv: Sequence[str]) -> int:
             input_url=input_url,
             root_url=root_url,
             custom_bootstrap=custom_split_bootstrap,
+            allowed_launch_modes=allowed_launch_modes,
+            recommended_launch_mode=recommended_launch_mode,
+        )
+        log("Done.")
+        log(json.dumps(summary, indent=2))
+        return 0
+
+    if entry_kind == "html" and detected_entry is not None:
+        summary = export_html_entry(
+            output_dir=output_dir,
+            progress_file=progress_file,
+            detected_entry=detected_entry,
+            input_url=input_url,
+            root_url=root_url,
             allowed_launch_modes=allowed_launch_modes,
             recommended_launch_mode=recommended_launch_mode,
         )

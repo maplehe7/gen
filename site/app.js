@@ -8,6 +8,7 @@ const DEFAULT_TARGET_SUCCESSFUL_CANDIDATES = 3;
 const MIN_TARGET_SUCCESSFUL_CANDIDATES = 1;
 const MAX_TARGET_SUCCESSFUL_CANDIDATES = 5;
 const MAX_SEARCH_POOL_COUNT = 12;
+const MAX_ACTIVE_CANDIDATES_PER_BATCH = 1;
 const DEFAULT_STEP_SECONDS = 55;
 const PLACEHOLDER_WORKER_URL = "PASTE_CLOUDFLARE_WORKER_URL_HERE";
 const STATUS_REFRESH_MS = 8000;
@@ -883,6 +884,15 @@ function batchSuccessfulJobs(batchJobs) {
   return batchJobs.filter((job) => successfulJob(job));
 }
 
+function batchActiveTargetCount(batchId, successfulCount = 0) {
+  const desired = desiredSuccessCountForBatch(batchId);
+  const remainingDesired = Math.max(desired - Math.max(Number(successfulCount) || 0, 0), 0);
+  if (remainingDesired <= 0) {
+    return 0;
+  }
+  return Math.min(MAX_ACTIVE_CANDIDATES_PER_BATCH, remainingDesired);
+}
+
 function desiredSuccessCountForBatch(batchId) {
   const desired = Number(batchSelectionFor(batchId)?.desiredSuccessCount);
   if (!Number.isFinite(desired) || desired <= 0) {
@@ -1216,9 +1226,12 @@ function progressFromRun(runPayload, jobsPayload) {
   const steps = actionableStepsFromJobs(jobsPayload);
   const activeStep = steps.find((step) => step.status === "in_progress");
   const lastCompletedStep = [...steps].reverse().find((step) => step.status === "completed");
+  const estimatedRemainingSeconds = estimateRemainingSeconds(runPayload, jobsPayload);
 
   let progressPercent = 8;
   let phase = "Queued in GitHub Actions";
+  let etaSeconds = estimatedRemainingSeconds;
+  let etaLabel = formatDuration(estimatedRemainingSeconds);
 
   if (status === "in_progress") {
     progressPercent = estimateProgressPercent(runPayload, jobsPayload);
@@ -1226,9 +1239,13 @@ function progressFromRun(runPayload, jobsPayload) {
   } else if (status === "completed") {
     progressPercent = conclusion === "success" ? 100 : Math.max(20, progressPercent);
     phase = conclusion === "success" ? "Published to GitHub Pages" : "Build failed";
+    etaSeconds = 0;
+    etaLabel = "Completed";
   } else if (status === "queued") {
     progressPercent = estimateProgressPercent(runPayload, jobsPayload);
     phase = "Waiting for an available runner";
+    etaSeconds = 0;
+    etaLabel = "Queue delay unknown";
   }
 
   return {
@@ -1236,8 +1253,8 @@ function progressFromRun(runPayload, jobsPayload) {
     conclusion,
     progressPercent,
     phase,
-    etaSeconds: estimateRemainingSeconds(runPayload, jobsPayload),
-    etaLabel: status === "completed" ? "Completed" : formatDuration(estimateRemainingSeconds(runPayload, jobsPayload)),
+    etaSeconds,
+    etaLabel,
   };
 }
 
@@ -1622,6 +1639,76 @@ async function cancelWorkflowJob(job) {
   });
 }
 
+async function trimQueuedBatchOverflow() {
+  const batchIds = uniqueBy(
+    jobs.map((job) => String(job?.batchId || "").trim()).filter(Boolean),
+    (value) => value,
+  );
+
+  for (const batchId of batchIds) {
+    const batchJobs = jobsForBatch(batchId);
+    const successfulCount = batchSuccessfulJobs(batchJobs).length;
+    const allowedActiveCount = batchActiveTargetCount(batchId, successfulCount);
+    const activeJobs = batchJobs.filter((job) => !isTerminalJob(job));
+    if (allowedActiveCount < 0 || activeJobs.length <= allowedActiveCount) {
+      continue;
+    }
+
+    const prioritizedActiveJobs = [...activeJobs].sort((left, right) => {
+      const leftStatus = String(left?.status || "");
+      const rightStatus = String(right?.status || "");
+      const leftPriority = leftStatus === "in_progress" ? 0 : leftStatus === "queued" ? 1 : 2;
+      const rightPriority = rightStatus === "in_progress" ? 0 : rightStatus === "queued" ? 1 : 2;
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority;
+      }
+
+      const rankDelta = candidateRankValue(left) - candidateRankValue(right);
+      if (rankDelta !== 0) {
+        return rankDelta;
+      }
+
+      return jobSortTimestamp(left) - jobSortTimestamp(right);
+    });
+
+    const overflowJobs = prioritizedActiveJobs.slice(allowedActiveCount);
+    for (const job of overflowJobs) {
+      try {
+        const result = await cancelWorkflowJob(job);
+        if (result?.alreadyCompleted && String(result?.conclusion || "").trim() !== "cancelled") {
+          continue;
+        }
+        upsertJob({
+          ...job,
+          runId: String(result?.runId || job?.runId || "").trim(),
+          status: "completed",
+          conclusion: "cancelled",
+          progressPercent: clampPercent(job.progressPercent || 0),
+          progressUpdatedAt: Date.now(),
+          phase: "Cancelled to free runner slot",
+          etaLabel: "Cancelled",
+          etaSeconds: 0,
+          etaUpdatedAt: Date.now(),
+          error: "Cancelled to free runner slot.",
+          failedAt: 0,
+          lastServerUpdateAt: Date.now(),
+          lastSyncAttemptAt: Date.now(),
+          syncFailureCount: 0,
+        });
+      } catch (error) {
+        upsertJob({
+          ...job,
+          error: error.message || "Could not cancel overflow job.",
+          lastSyncAttemptAt: Date.now(),
+          syncFailureCount: Math.max(Number(job.syncFailureCount) || 0, 0) + 1,
+        });
+      }
+    }
+  }
+
+  jobs = normalizeStoredJobs(jobs);
+}
+
 function createBatchDraftJob(batchId, batchLabel, batchSubmittedAt, candidate, poolSize) {
   const candidateRank = Math.max(Number(candidate?.rank) || 1, 1);
   return {
@@ -1719,7 +1806,11 @@ async function maybeDispatchBatchFallback(batchId) {
   const desired = desiredSuccessCountForBatch(normalizedBatchId);
   const successfulCount = batchSuccessfulJobs(batchJobs).length;
   const activeCount = batchJobs.filter((job) => !isTerminalJob(job)).length;
-  const openSlots = desired - (successfulCount + activeCount);
+  const targetActiveCount = batchActiveTargetCount(normalizedBatchId, successfulCount);
+  const openSlots = Math.min(
+    Math.max(desired - (successfulCount + activeCount), 0),
+    Math.max(targetActiveCount - activeCount, 0),
+  );
   if (openSlots <= 0) {
     return false;
   }
@@ -2358,6 +2449,7 @@ async function refreshJobStatuses() {
       return job;
     }),
   );
+  await trimQueuedBatchOverflow();
   saveJobs();
   await syncBatchRecoveryAndFailureLogs();
   renderJobs();
@@ -2458,8 +2550,12 @@ async function queueSourceBatch(rawInput, index, total, requestedCandidateCount 
       })),
     });
 
-    const initialCandidates = resolvedCandidates.slice(0, desiredSuccessCount);
-    formMessage.textContent = `Queueing ${desiredSuccessCount} candidate${desiredSuccessCount === 1 ? "" : "s"} for ${inputValue}`;
+    const initialDispatchCount = Math.min(
+      desiredSuccessCount,
+      batchActiveTargetCount(batchId, 0),
+    );
+    const initialCandidates = resolvedCandidates.slice(0, initialDispatchCount);
+    formMessage.textContent = `Queueing ${initialDispatchCount} of ${desiredSuccessCount} candidate${desiredSuccessCount === 1 ? "" : "s"} for ${inputValue}`;
     const draftJobs = initialCandidates.map((candidate) =>
       createBatchDraftJob(batchId, inputValue, batchSubmittedAt, candidate, resolvedCandidates.length),
     );

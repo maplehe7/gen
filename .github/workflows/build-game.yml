@@ -12,7 +12,13 @@ on:
       - "game_catalog.json"
       - "ocean-launcher.css"
       - "ocean-launcher.js"
+      - "package.json"
+      - "package-lock.json"
+      - "reports/failed-build-dispositions.json"
+      - "reports/failed-builds.txt"
       - "site/**"
+      - "tests/**"
+      - "tools/**"
       - "unity_standalone.py"
       - "verify_generated_game.py"
   workflow_dispatch:
@@ -40,7 +46,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run deterministic tests
+        run: npm test
+
   build:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:

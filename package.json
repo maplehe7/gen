@@ -1,0 +1,12 @@
+{
+  "name": "gen",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:failure-corpus": "python tools/failure_corpus.py --write-index",
+    "test": "npm run build:failure-corpus && npm run test:js && npm run test:py",
+    "test:js": "node --test tests/*.test.js",
+    "test:py": "python -m unittest discover -s tests -p \"test_*.py\"",
+    "test:live-regression": "python tools/run_failed_build_regression.py"
+  }
+}

@@ -1,3 +1,5 @@
+import { buildCandidateBadges, buildJobErrorSummary, hostFromUrl } from "./ui_helpers.js";
+
 const JOBS_KEY = "standalone-forge-pages-jobs";
 const JOB_HISTORY_KEY = "standalone-forge-pages-job-history";
 const BATCH_SELECTIONS_KEY = "standalone-forge-batch-selections";
@@ -61,10 +63,11 @@ const repoTarget = document.getElementById("repo-target");
 const configWarning = document.getElementById("config-warning");
 const submitButton = document.getElementById("submit-button");
 const formMessage = document.getElementById("form-message");
+const candidatePreview = document.getElementById("candidate-preview");
+const candidatePreviewStatus = document.getElementById("candidate-preview-status");
+const candidatePreviewList = document.getElementById("candidate-preview-list");
 const jobsContainer = document.getElementById("jobs");
-const publishedContainer = document.getElementById("published-games");
 const jobTemplate = document.getElementById("job-template");
-const publishedTemplate = document.getElementById("published-template");
 const favoriteModal = document.getElementById("favorite-modal");
 const favoriteTitle = document.getElementById("favorite-title");
 const favoriteCopy = document.getElementById("favorite-copy");
@@ -294,6 +297,7 @@ function updateBatchSelection(batchId, patch) {
     updatedAt: nowIso(),
   };
   saveBatchSelections();
+  renderCandidatePreview();
 }
 
 function rememberPendingGalleryDelete(job) {
@@ -676,7 +680,11 @@ function serializeJobForStorage(job) {
     sourceUrl: stringValue(job.sourceUrl),
     displayName: stringValue(job.displayName, "game"),
     sourceMode: stringValue(job.sourceMode),
+    provider: stringValue(job.provider),
     matchedName: stringValue(job.matchedName),
+    buildDisposition: stringValue(job.buildDisposition, "unknown"),
+    historyStatus: stringValue(job.historyStatus, "unknown"),
+    historySummary: stringValue(job.historySummary),
     submittedAt: stringValue(job.submittedAt, nowIso()),
     status: stringValue(job.status, "queued"),
     conclusion: stringValue(job.conclusion),
@@ -837,6 +845,10 @@ function candidateSubtitle(job) {
   }
   if (matchedName && normalizeSearchVariantKey(matchedName) !== normalizeSearchVariantKey(job?.displayName || "")) {
     parts.push(`Matched ${matchedName}`);
+  }
+  const sourceHost = hostFromUrl(job?.sourceUrl || "");
+  if (sourceHost) {
+    parts.push(sourceHost);
   }
   return parts.join(" • ");
 }
@@ -1322,6 +1334,9 @@ function normalizeResolvedCandidate(candidate, fallbackName = "") {
     confidence: Number(candidate?.confidence) || 0,
     hostedOnline: Boolean(candidate?.hostedOnline),
     resolutionReason: String(candidate?.reason || "").trim(),
+    buildDisposition: String(candidate?.buildDisposition || "unknown").trim() || "unknown",
+    historyStatus: String(candidate?.historyStatus || "unknown").trim() || "unknown",
+    historySummary: String(candidate?.historySummary || "").trim(),
   };
 }
 
@@ -1727,7 +1742,11 @@ function createBatchDraftJob(batchId, batchLabel, batchSubmittedAt, candidate, p
     sourceUrl: String(candidate?.sourceUrl || "").trim(),
     displayName: String(candidate?.displayName || batchLabel || "game").trim(),
     sourceMode: String(candidate?.sourceMode || "search").trim() || "search",
+    provider: String(candidate?.provider || "search").trim() || "search",
     matchedName: String(candidate?.matchedName || candidate?.displayName || batchLabel || "game").trim(),
+    buildDisposition: String(candidate?.buildDisposition || "unknown").trim() || "unknown",
+    historyStatus: String(candidate?.historyStatus || "unknown").trim() || "unknown",
+    historySummary: String(candidate?.historySummary || "").trim(),
     submittedAt: nowIso(),
     status: "queued",
     conclusion: "",
@@ -2154,6 +2173,110 @@ function syncFavoriteChooser() {
   setFavoriteModalVisible(true);
 }
 
+function previewSelections() {
+  return Object.values(batchSelections || {})
+    .filter((selection) => Array.isArray(selection?.candidatePool) && selection.candidatePool.length)
+    .sort((left, right) => timestampMs(right?.updatedAt) - timestampMs(left?.updatedAt))
+    .slice(0, 6);
+}
+
+function appendBadgeRow(root, candidate) {
+  const badges = buildCandidateBadges(candidate);
+  if (!badges.length) {
+    return;
+  }
+  const badgeRow = document.createElement("div");
+  badgeRow.className = "badge-row";
+  badges.forEach((badge) => {
+    const chip = document.createElement("span");
+    chip.className = `badge-chip tone-${badge.tone}`;
+    chip.textContent = badge.label;
+    badgeRow.append(chip);
+  });
+  root.append(badgeRow);
+}
+
+function renderCandidatePreview() {
+  if (!candidatePreview || !candidatePreviewList || !candidatePreviewStatus) {
+    return;
+  }
+
+  const selections = previewSelections();
+  candidatePreview.hidden = selections.length === 0;
+  candidatePreviewList.innerHTML = "";
+  if (!selections.length) {
+    candidatePreviewStatus.textContent = "";
+    return;
+  }
+
+  const candidateCount = selections.reduce(
+    (sum, selection) => sum + (Array.isArray(selection?.candidatePool) ? selection.candidatePool.length : 0),
+    0,
+  );
+  candidatePreviewStatus.textContent = `${candidateCount} candidate${candidateCount === 1 ? "" : "s"} indexed`;
+
+  selections.forEach((selection) => {
+    const batchCard = document.createElement("article");
+    batchCard.className = "preview-batch";
+
+    const header = document.createElement("div");
+    header.className = "preview-batch-header";
+
+    const heading = document.createElement("div");
+    const title = document.createElement("h3");
+    title.className = "preview-batch-title";
+    title.textContent = String(selection?.batchLabel || "Request").trim() || "Request";
+    const copy = document.createElement("p");
+    copy.className = "preview-batch-copy";
+    copy.textContent = `Keeping ${Math.max(Number(selection?.desiredSuccessCount) || 1, 1)} successful candidate${Math.max(Number(selection?.desiredSuccessCount) || 1, 1) === 1 ? "" : "s"}.`;
+    heading.append(title, copy);
+
+    const state = document.createElement("p");
+    state.className = "preview-batch-state";
+    state.textContent = String(selection?.state || "pending").replace(/-/g, " ");
+    header.append(heading, state);
+    batchCard.append(header);
+
+    const list = document.createElement("div");
+    list.className = "preview-candidate-list";
+
+    (selection.candidatePool || []).forEach((candidate, index) => {
+      const item = document.createElement("div");
+      item.className = "preview-candidate";
+
+      const topline = document.createElement("div");
+      topline.className = "preview-candidate-topline";
+      const name = document.createElement("strong");
+      name.className = "preview-candidate-title";
+      name.textContent = `${Math.max(Number(candidate?.rank) || index + 1, index + 1)}. ${candidate?.displayName || selection?.batchLabel || "Candidate"}`;
+      const confidence = document.createElement("span");
+      confidence.className = "preview-candidate-confidence";
+      confidence.textContent = `${Math.max(Number(candidate?.confidence) || 0, 0)}%`;
+      topline.append(name, confidence);
+      item.append(topline);
+
+      const source = document.createElement("p");
+      source.className = "preview-candidate-source";
+      source.textContent = hostFromUrl(candidate?.sourceUrl || "") || String(candidate?.sourceUrl || "").trim();
+      item.append(source);
+
+      appendBadgeRow(item, candidate);
+
+      const reason = document.createElement("p");
+      reason.className = "preview-candidate-reason";
+      reason.textContent =
+        String(candidate?.historySummary || "").trim() ||
+        String(candidate?.resolutionReason || "").trim() ||
+        "No historical failures recorded.";
+      item.append(reason);
+      list.append(item);
+    });
+
+    batchCard.append(list);
+    candidatePreviewList.append(batchCard);
+  });
+}
+
 function buildJobCardFragment(job) {
   const nowMs = Date.now();
   const progressPercent = visibleProgressPercent(job);
@@ -2182,15 +2305,12 @@ function buildJobCardFragment(job) {
   rank.textContent = candidateRankLabel(job);
   title.textContent = job.displayName;
   subtitle.textContent = candidateSubtitle(job);
+  appendBadgeRow(fragment.querySelector(".job-heading"), job);
   percent.textContent = `${roundedProgress}%`;
   fill.style.width = `${progressPercent.toFixed(1)}%`;
   phase.textContent = job.phase || "Queued";
   eta.textContent = visibleEtaLabel(job, nowMs);
-  error.textContent =
-    job.error ||
-    (String(job.status || "") === "completed" && String(job.conclusion || "") && String(job.conclusion || "") !== "success"
-      ? `Failed: ${job.conclusion}`
-      : "");
+  error.textContent = buildJobErrorSummary(job);
   renderActions(job, actions);
 
   return fragment;
@@ -2212,7 +2332,7 @@ function buildJobSection(sectionKey, title, copy, sectionJobs, emptyMessage) {
 
   const chevron = document.createElement("span");
   chevron.className = "job-section-chevron";
-  chevron.textContent = "▶";
+  chevron.textContent = ">";
   labelWrap.append(chevron);
 
   const heading = document.createElement("h2");
@@ -2251,6 +2371,7 @@ function buildJobSection(sectionKey, title, copy, sectionJobs, emptyMessage) {
 
 function renderJobs() {
   if (!jobsContainer || !jobTemplate) {
+    renderCandidatePreview();
     return;
   }
   jobsContainer.innerHTML = "";
@@ -2261,6 +2382,7 @@ function renderJobs() {
     empty.className = "empty-state";
     empty.textContent = "No workflow requests yet.";
     jobsContainer.append(empty);
+    renderCandidatePreview();
     return;
   }
 
@@ -2292,41 +2414,7 @@ function renderJobs() {
     ),
   );
   syncFavoriteChooser();
-}
-
-function renderPublished() {
-  if (!publishedContainer || !publishedTemplate) {
-    return;
-  }
-  publishedContainer.innerHTML = "";
-
-  if (!publishedCatalog.length) {
-    const empty = document.createElement("div");
-    empty.className = "empty-state";
-    empty.textContent = "No published games yet.";
-    publishedContainer.append(empty);
-    return;
-  }
-
-  publishedCatalog.forEach((entry) => {
-    const fragment = publishedTemplate.content.cloneNode(true);
-    fragment.querySelector(".job-title").textContent = entry.title || entry.id || "Untitled";
-    fragment.querySelector(".job-source").textContent = entry.source_url || "";
-    fragment.querySelector(".job-folder").textContent = entry.folder || "";
-    fragment.querySelector(".job-built").textContent = formatDate(entry.generated_at);
-
-    const actions = fragment.querySelector(".job-actions");
-
-    const playLink = document.createElement("a");
-    playLink.className = "job-link";
-    playLink.href = playUrlForPath(entry.play_path || entry.folder || "");
-    playLink.target = "_blank";
-    playLink.rel = "noreferrer";
-    playLink.textContent = "Open game";
-    actions.append(playLink);
-
-    publishedContainer.append(fragment);
-  });
+  renderCandidatePreview();
 }
 
 async function refreshJobStatuses() {
@@ -2453,7 +2541,6 @@ async function refreshJobStatuses() {
   saveJobs();
   await syncBatchRecoveryAndFailureLogs();
   renderJobs();
-  renderPublished();
   } finally {
     refreshInFlight = false;
   }
@@ -2707,7 +2794,6 @@ async function init() {
   await loadWorkerConfig();
   setBulkMode(false);
   renderJobs();
-  renderPublished();
   await refreshJobStatuses();
   window.setInterval(refreshJobStatuses, STATUS_REFRESH_MS);
   document.addEventListener("visibilitychange", () => {

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Standalone Forge</title>
-    <link rel="stylesheet" href="./app.css?v=20260313-6" />
+    <link rel="stylesheet" href="./app.css?v=20260314-1" />
   </head>
   <body>
     <div class="page-shell">
@@ -59,6 +59,17 @@
           </div>
         </div>
 
+        <section id="candidate-preview" class="panel preview-panel" hidden>
+          <div class="preview-header">
+            <div>
+              <p class="panel-kicker">Candidate Preview</p>
+              <h2 class="panel-title">Resolved before dispatch</h2>
+            </div>
+            <p id="candidate-preview-status" class="preview-status"></p>
+          </div>
+          <div id="candidate-preview-list" class="preview-list"></div>
+        </section>
+
         <div id="jobs" class="jobs-grid"></div>
       </main>
     </div>
@@ -101,7 +112,7 @@
       </article>
     </template>
 
-    <script src="./config.js?v=20260313-6"></script>
-    <script src="./app.js?v=20260313-6" defer></script>
+    <script src="./config.js?v=20260314-1"></script>
+    <script type="module" src="./app.js?v=20260314-1"></script>
   </body>
 </html>

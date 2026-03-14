@@ -1,0 +1,775 @@
+{
+  "generated_at": "2026-03-14T19:19:11Z",
+  "source": "reports\\failed-builds.txt",
+  "entry_count": 31,
+  "event_count": 48,
+  "totals": {
+    "known_cancelled": 35,
+    "known_failed": 13
+  },
+  "entries": [
+    {
+      "source_url": "http://geodashlite.org/",
+      "display_names": [
+        "Geometry Dash Lite Online \u2013 Play Free Game Now"
+      ],
+      "queries": [
+        "geometry dash"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 2,
+        "unknown": 0
+      },
+      "source_modes": [
+        "verified-search"
+      ],
+      "candidate_reasons": [
+        "matched verified override hosted online data file, iframe, hosted asset verified fallback"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/31df2047-d6ee-474a-94e3-cf712cd40e9e.txt",
+        "reports/failed-builds/ef225b91-00dd-4ab9-81c9-5c28e892d980.txt"
+      ],
+      "last_seen_at": "2026-03-14T16:34:23.102Z"
+    },
+    {
+      "source_url": "https://1games.io/game/geometry-dash-lite",
+      "display_names": [
+        "Geometry Dash Lite"
+      ],
+      "queries": [
+        "geometry dash"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 1,
+        "unknown": 0
+      },
+      "source_modes": [
+        "verified-search"
+      ],
+      "candidate_reasons": [
+        "matched verified override hosted online Unity loader, loader.js, framework.js verified fallback"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/703ad3f8-44cf-472c-8844-34644f70f2cc.txt"
+      ],
+      "last_seen_at": "2026-03-14T16:33:26.047Z"
+    },
+    {
+      "source_url": "https://aking.io/basketball-stars-2019",
+      "display_names": [
+        "Basketball Stars 2019"
+      ],
+      "queries": [
+        "starblast"
+      ],
+      "history_counts": {
+        "known_failed": 1,
+        "known_cancelled": 0,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online data file, iframe, hosted asset"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/e1768da5-65ce-4022-a591-4bb2f46bd251.txt"
+      ],
+      "last_seen_at": "2026-03-14T15:19:21.430Z"
+    },
+    {
+      "source_url": "https://azgames.io/geometry-dash",
+      "display_names": [
+        "Geometry Dash"
+      ],
+      "queries": [
+        "geometry dash"
+      ],
+      "history_counts": {
+        "known_failed": 1,
+        "known_cancelled": 1,
+        "unknown": 0
+      },
+      "source_modes": [
+        "verified-search"
+      ],
+      "candidate_reasons": [
+        "matched verified override hosted online data file, iframe, hosted asset verified fallback"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/9dc7b25d-83f2-4798-87ef-ff8b911996fe.txt",
+        "reports/failed-builds/ad0f07c5-bffb-451d-96c0-6f9ff3aee5e0.txt"
+      ],
+      "last_seen_at": "2026-03-14T16:58:45.166Z"
+    },
+    {
+      "source_url": "https://bubblebox.com/hipster-kickball",
+      "display_names": [
+        "Hipster Kickball \ud83d\udd79\ufe0f Play Online"
+      ],
+      "queries": [
+        "hi"
+      ],
+      "history_counts": {
+        "known_failed": 1,
+        "known_cancelled": 0,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online data file, iframe, hosted asset"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/dba93703-a57c-4f43-8ce8-998b494e570b.txt"
+      ],
+      "last_seen_at": "2026-03-14T05:17:34.461Z"
+    },
+    {
+      "source_url": "https://coolmathplay.com/geometry-dash",
+      "display_names": [
+        "Geometry Dash"
+      ],
+      "queries": [
+        "geometry dash"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 3,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online data file, iframe, hosted asset"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/44c6a935-7868-4e02-9887-9e3a56f34bbf.txt",
+        "reports/failed-builds/582a0bf7-505a-4ef8-bb4f-5dbb70c64543.txt",
+        "reports/failed-builds/cf2b6c77-8e21-419f-8eaa-ee17fe3b3cb7.txt"
+      ],
+      "last_seen_at": "2026-03-14T05:55:48.485Z"
+    },
+    {
+      "source_url": "https://driftboss.io/",
+      "display_names": [
+        "Drift Boss"
+      ],
+      "queries": [
+        "drift boss"
+      ],
+      "history_counts": {
+        "known_failed": 1,
+        "known_cancelled": 0,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "-"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/81f87784-1c32-48fc-8f01-5e8fa498aa70.txt"
+      ],
+      "last_seen_at": "2026-03-14T04:59:32.913Z"
+    },
+    {
+      "source_url": "https://geodashgame.io/",
+      "display_names": [
+        "Geometry Dash Game"
+      ],
+      "queries": [
+        "geometry dash"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 3,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online data file, hosted asset closest playable match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/185c998e-56c5-43a1-9bce-180a0c8db960.txt",
+        "reports/failed-builds/42950dec-92be-45ba-8a80-e252da173fa4.txt",
+        "reports/failed-builds/4ad0949d-a523-4f79-99da-7e816860fdff.txt"
+      ],
+      "last_seen_at": "2026-03-14T05:56:18.522Z"
+    },
+    {
+      "source_url": "https://geometry-dashgame.github.io/",
+      "display_names": [
+        "Geometry Dash"
+      ],
+      "queries": [
+        "geometry dash"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 2,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online data file, iframe, hosted asset"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/0327a626-3f83-4f64-a90a-37aaf14badbc.txt",
+        "reports/failed-builds/82c8d21e-5bd2-49a3-a4ef-148b797849a7.txt"
+      ],
+      "last_seen_at": "2026-03-14T05:55:41.065Z"
+    },
+    {
+      "source_url": "https://geometry-dashonline.com/",
+      "display_names": [
+        "Geometry Dash"
+      ],
+      "queries": [
+        "geometry dash"
+      ],
+      "history_counts": {
+        "known_failed": 1,
+        "known_cancelled": 0,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback data file, iframe, hosted asset safe closest match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/21c36f6d-4fc8-4dcf-a679-7de1616a34e3.txt"
+      ],
+      "last_seen_at": "2026-03-14T05:58:17.931Z"
+    },
+    {
+      "source_url": "https://geometry-games.io/data/image/game/homepage/geometry-game.png",
+      "display_names": [
+        "Geometry Dash"
+      ],
+      "queries": [
+        "geometry dash"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 1,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online data file, hosted asset closest playable match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/f535b85b-e63a-433a-9df3-0ae96788cda7.txt"
+      ],
+      "last_seen_at": "2026-03-14T05:00:29.015Z"
+    },
+    {
+      "source_url": "https://geometry.games/",
+      "display_names": [
+        "Play Geometry Dash Games Online for Free"
+      ],
+      "queries": [
+        "geometry dash"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 2,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online data file, iframe, hosted asset best available match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/3b74c4a4-8eae-4670-881d-f8b7740ae9a1.txt",
+        "reports/failed-builds/f0e74276-79dd-4f9c-bc13-9dc6e684e0ab.txt"
+      ],
+      "last_seen_at": "2026-03-14T05:56:16.460Z"
+    },
+    {
+      "source_url": "https://geometrydash-game.io/",
+      "display_names": [
+        "Geometry Dash"
+      ],
+      "queries": [
+        "geometry dash"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 1,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback data file, iframe, hosted asset safe closest match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/33dcabae-51be-48b7-a9b0-f349c4205ea7.txt"
+      ],
+      "last_seen_at": "2026-03-14T05:56:35.384Z"
+    },
+    {
+      "source_url": "https://geometrydash-lite.io/",
+      "display_names": [
+        "Geometry Dash Lite: Play Free Online"
+      ],
+      "queries": [
+        "geometry dash"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 6,
+        "unknown": 0
+      },
+      "source_modes": [
+        "verified-search",
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched verified override hosted online data file, hosted asset verified fallback",
+        "matched web fallback hosted online data file, hosted asset"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/0ff8d940-dd49-4b2b-be79-7705ed2bef1f.txt",
+        "reports/failed-builds/619f9615-0dad-4238-a580-b2bf823a5a87.txt",
+        "reports/failed-builds/90dd02bb-2639-4305-9249-f35dc6fe845c.txt",
+        "reports/failed-builds/aad2cfea-c75d-403a-b9b3-ffb402c3b00f.txt",
+        "reports/failed-builds/cbb4ecb5-0ebc-45a1-8b0e-b675d42f524b.txt",
+        "reports/failed-builds/fcc15bb5-1d00-42c5-aa86-cbca731278d3.txt"
+      ],
+      "last_seen_at": "2026-03-14T16:34:18.948Z"
+    },
+    {
+      "source_url": "https://geometrydash.game/",
+      "display_names": [
+        "Geometry Dash"
+      ],
+      "queries": [
+        "geometry dash"
+      ],
+      "history_counts": {
+        "known_failed": 2,
+        "known_cancelled": 0,
+        "unknown": 0
+      },
+      "source_modes": [
+        "direct-host-search"
+      ],
+      "candidate_reasons": [
+        "matched direct host fallback hosted online data file, iframe, hosted asset direct host fallback"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/28c4560f-b8d1-4012-8cf3-f5f2c895fbaf.txt",
+        "reports/failed-builds/5191be58-1acb-45ed-9b5a-7999e370d572.txt"
+      ],
+      "last_seen_at": "2026-03-14T05:56:33.376Z"
+    },
+    {
+      "source_url": "https://geometrydashfullversion.io/",
+      "display_names": [
+        "Geometry Dash Full Version"
+      ],
+      "queries": [
+        "geometry dash"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 1,
+        "unknown": 0
+      },
+      "source_modes": [
+        "verified-search"
+      ],
+      "candidate_reasons": [
+        "matched verified override hosted online data file, hosted asset verified fallback"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/1726e354-af84-4012-982e-0d07289dcb30.txt"
+      ],
+      "last_seen_at": "2026-03-14T16:34:16.965Z"
+    },
+    {
+      "source_url": "https://geometrydashfullversion.io/search?q=%7Bsearch_term_string%7D",
+      "display_names": [
+        "Geometry Dash geometrydashfullversion.io Geometry Dash Full Version"
+      ],
+      "queries": [
+        "geometry dash"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 2,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online data file, hosted asset"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/606465b2-40d0-44e3-b221-519a264ce0d3.txt",
+        "reports/failed-builds/dd51d918-64b9-4372-af13-ed6c11b17cff.txt"
+      ],
+      "last_seen_at": "2026-03-14T16:07:02.113Z"
+    },
+    {
+      "source_url": "https://strablast.io/",
+      "display_names": [
+        "strablast.io"
+      ],
+      "queries": [
+        "strablast io"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 1,
+        "unknown": 0
+      },
+      "source_modes": [
+        "url"
+      ],
+      "candidate_reasons": [
+        "-"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/e4ee6de3-77b5-4583-8eaf-5b9d30060a86.txt"
+      ],
+      "last_seen_at": "2026-03-14T15:19:43.465Z"
+    },
+    {
+      "source_url": "https://taptapshots.net/h5-games/basketball-stars",
+      "display_names": [
+        "Basketball Stars 2019"
+      ],
+      "queries": [
+        "starblast"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 1,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online data file, hosted asset closest playable match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/e2c8aa59-0396-42d3-bdd7-4ee81af0a169.txt"
+      ],
+      "last_seen_at": "2026-03-14T15:19:23.504Z"
+    },
+    {
+      "source_url": "https://www.a10.com/game/basketball-stars-2019",
+      "display_names": [
+        "Basketball Stars 2019 Online"
+      ],
+      "queries": [
+        "starblast"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 2,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online iframe, hosted asset closest playable match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/6749a939-bd9e-4c10-891d-3d69cb6ec10e.txt",
+        "reports/failed-builds/e6aba63a-5c6c-4d48-a03d-d63bd6987ac7.txt"
+      ],
+      "last_seen_at": "2026-03-14T15:18:53.487Z"
+    },
+    {
+      "source_url": "https://www.agame.com/game/basketball-stars-2019",
+      "display_names": [
+        "Play Basketball Stars 2019 online for Free on Agame"
+      ],
+      "queries": [
+        "starblast"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 1,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online iframe, hosted asset closest playable match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/8a3bc674-8708-4e39-83cc-556c6639dc36.txt"
+      ],
+      "last_seen_at": "2026-03-14T15:19:01.466Z"
+    },
+    {
+      "source_url": "https://www.games.co.uk/game/basketball-stars-2019",
+      "display_names": [
+        "Play Basketball Stars 2019 online for free at Games.co.uk"
+      ],
+      "queries": [
+        "starblast"
+      ],
+      "history_counts": {
+        "known_failed": 1,
+        "known_cancelled": 0,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online data file, iframe, hosted asset closest playable match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/48bd8299-a437-4ee6-b87f-51d6962b08dd.txt"
+      ],
+      "last_seen_at": "2026-03-14T15:19:52.251Z"
+    },
+    {
+      "source_url": "https://www.gogy.com/games/basketball-stars-2019",
+      "display_names": [
+        "Basketball Stars 2019"
+      ],
+      "queries": [
+        "starblast"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 1,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online data file, iframe, hosted asset"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/8f96a0be-d00c-4e5c-b946-6644b104593c.txt"
+      ],
+      "last_seen_at": "2026-03-14T15:18:37.492Z"
+    },
+    {
+      "source_url": "https://www.google-analytics.com/",
+      "display_names": [
+        "Basketball-Reference basketball-reference.com \u203a bbr home page \u203a all-star games 2019 NBA All-Star Game Box Score"
+      ],
+      "queries": [
+        "starblast"
+      ],
+      "history_counts": {
+        "known_failed": 1,
+        "known_cancelled": 0,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback data file, iframe, hosted asset safe closest match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/e8eb8d77-49df-463e-842e-f6e4b978838e.txt"
+      ],
+      "last_seen_at": "2026-03-14T15:20:32.443Z"
+    },
+    {
+      "source_url": "https://www.madkidgames.com/game/carquest-open-world-racing",
+      "display_names": [
+        "CarQuest: Open World Racing"
+      ],
+      "queries": [
+        "realistic car simulator"
+      ],
+      "history_counts": {
+        "known_failed": 1,
+        "known_cancelled": 0,
+        "unknown": 0
+      },
+      "source_modes": [
+        "verified-search"
+      ],
+      "candidate_reasons": [
+        "matched verified override hosted online data file, iframe, hosted asset verified preferred match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/8ffd605f-3a36-4024-9ab2-3dea6dec5f66.txt"
+      ],
+      "last_seen_at": "2026-03-14T04:59:19.883Z"
+    },
+    {
+      "source_url": "https://www.madkidgames.com/game/ultimate-car-driving-simulator",
+      "display_names": [
+        "Ultimate Car Driving Simulator"
+      ],
+      "queries": [
+        "realistic car simulator"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 1,
+        "unknown": 0
+      },
+      "source_modes": [
+        "verified-search"
+      ],
+      "candidate_reasons": [
+        "matched verified override hosted online data file, iframe, hosted asset verified preferred match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/0acd1318-2db6-46bd-9ee9-d12253ac603b.txt"
+      ],
+      "last_seen_at": "2026-03-14T04:59:17.467Z"
+    },
+    {
+      "source_url": "https://www.miniplay.com/game/geometry-dash",
+      "display_names": [
+        "Geometry Dash"
+      ],
+      "queries": [
+        "geometry dash"
+      ],
+      "history_counts": {
+        "known_failed": 1,
+        "known_cancelled": 1,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online data file, iframe, hosted asset closest playable match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/344f30a8-ec8d-4f63-93c1-1cc289729111.txt",
+        "reports/failed-builds/5d05259b-1c6b-4390-be07-743a4f289c53.txt"
+      ],
+      "last_seen_at": "2026-03-14T05:56:20.658Z"
+    },
+    {
+      "source_url": "https://www.roblox.com/games/5829141886/JDM-UPDATE-Realistic-Car-Driving",
+      "display_names": [
+        "Realistic Car Driving\u2122"
+      ],
+      "queries": [
+        "realistic car simulator"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 1,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online iframe, hosted asset closest playable match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/50c5df18-7a1a-4b76-8c14-6a7448a30dda.txt"
+      ],
+      "last_seen_at": "2026-03-14T04:59:28.049Z"
+    },
+    {
+      "source_url": "https://www.roblox.com/games/5829141886/UPDATE-Realistic-Car-Driving",
+      "display_names": [
+        "Realistic Car Driving\u2122"
+      ],
+      "queries": [
+        "realistic car simulator"
+      ],
+      "history_counts": {
+        "known_failed": 1,
+        "known_cancelled": 0,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online iframe, hosted asset closest playable match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/eca180ea-4a88-4a39-9a41-335229aa04fe.txt"
+      ],
+      "last_seen_at": "2026-03-14T04:59:30.283Z"
+    },
+    {
+      "source_url": "https://www.spatial.io/categories/car-simulator",
+      "display_names": [
+        "Car Simulator Games \ud83c\udfce\ud83c\udfae\ud83d\udea6\ud83c\udfc1"
+      ],
+      "queries": [
+        "realistic car simulator"
+      ],
+      "history_counts": {
+        "known_failed": 1,
+        "known_cancelled": 0,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online data file, hosted asset closest playable match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/7250e733-8a09-4b39-833b-bcd6e13e59db.txt"
+      ],
+      "last_seen_at": "2026-03-14T04:59:22.330Z"
+    },
+    {
+      "source_url": "https://yoast.com/product/yoast-seo-wordpress",
+      "display_names": [
+        "Basketball Stars 2019 ~ Play Free On HapaGames"
+      ],
+      "queries": [
+        "starblast"
+      ],
+      "history_counts": {
+        "known_failed": 0,
+        "known_cancelled": 1,
+        "unknown": 0
+      },
+      "source_modes": [
+        "web-search"
+      ],
+      "candidate_reasons": [
+        "matched web fallback hosted online iframe, hosted asset closest playable match"
+      ],
+      "detail_paths": [
+        "reports/failed-builds/d33b3764-a68d-41ee-8b5f-d2c4a893ce3a.txt"
+      ],
+      "last_seen_at": "2026-03-14T15:19:45.660Z"
+    }
+  ]
+}

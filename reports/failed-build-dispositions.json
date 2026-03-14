@@ -1,0 +1,264 @@
+{
+  "generated_at": "2026-03-14T18:50:00Z",
+  "entries": [
+    {
+      "source_url": "https://geometrydash-lite.io/",
+      "title": "Geometry Dash Lite: Play Free Online",
+      "match_type": "host",
+      "action": "allow_build",
+      "queries": ["geometry dash", "geometry dash lite"],
+      "preferred_search": true,
+      "search_score": 320,
+      "note": "Localized runtime assets and standalone verification pass for the main Geometry Dash Lite host."
+    },
+    {
+      "source_url": "https://geometrydashfullversion.io/",
+      "title": "Geometry Dash Full Version",
+      "match_type": "host",
+      "action": "allow_build",
+      "queries": ["geometry dash", "geometry dash full version", "geometry dash lite"],
+      "preferred_search": true,
+      "search_score": 315,
+      "note": "Full Version host builds successfully after localized asset rewriting."
+    },
+    {
+      "source_url": "https://geometrydashfullversion.io/search?q=%7Bsearch_term_string%7D",
+      "match_type": "exact",
+      "action": "reject_search",
+      "queries": ["geometry dash", "geometry dash full version", "geometry dash lite"],
+      "replacement_source_url": "https://geometrydashfullversion.io/",
+      "note": "Template search-result pages are wrappers, not direct playable pages."
+    },
+    {
+      "source_url": "https://1games.io/game/geometry-dash-lite",
+      "title": "Geometry Dash Lite",
+      "match_type": "exact",
+      "action": "allow_build",
+      "queries": ["geometry dash", "geometry dash lite", "geometry lite pc"],
+      "preferred_search": true,
+      "search_score": 310,
+      "note": "1games Geometry Dash Lite exports a standalone Build folder and passes verification."
+    },
+    {
+      "source_url": "http://geodashlite.org/",
+      "match_type": "host",
+      "action": "allow_build",
+      "queries": ["geometry dash", "geometry dash lite"],
+      "note": "Legacy Geometry Dash Lite mirror now exports and verifies, but should rank below the verified primary hosts."
+    },
+    {
+      "source_url": "https://azgames.io/geometry-dash",
+      "match_type": "exact",
+      "action": "reject_search",
+      "queries": ["geometry dash"],
+      "replacement_source_url": "https://geometrydash-lite.io/",
+      "note": "Known failed/cancelled wrapper candidate for Geometry Dash."
+    },
+    {
+      "source_url": "https://coolmathplay.com/geometry-dash",
+      "match_type": "exact",
+      "action": "reject_search",
+      "queries": ["geometry dash"],
+      "replacement_source_url": "https://geometrydash-lite.io/",
+      "note": "Cancelled multiple times and does not localize into a clean standalone build."
+    },
+    {
+      "source_url": "https://geodashgame.io/",
+      "match_type": "host",
+      "action": "reject_search",
+      "queries": ["geometry dash"],
+      "replacement_source_url": "https://geometrydash-lite.io/",
+      "note": "Host repeatedly surfaces wrapper pages and cancelled builds."
+    },
+    {
+      "source_url": "https://geometry-dashgame.github.io/",
+      "match_type": "host",
+      "action": "reject_search",
+      "queries": ["geometry dash"],
+      "replacement_source_url": "https://geometrydash-lite.io/",
+      "note": "Wrapper GitHub Pages mirror with repeated cancelled results."
+    },
+    {
+      "source_url": "https://geometry-dashonline.com/",
+      "match_type": "host",
+      "action": "reject_search",
+      "queries": ["geometry dash"],
+      "replacement_source_url": "https://geometrydash-lite.io/",
+      "note": "Known failed result for Geometry Dash."
+    },
+    {
+      "source_url": "https://geometry-games.io/data/image/game/homepage/geometry-game.png",
+      "match_type": "exact",
+      "action": "reject_search",
+      "queries": ["geometry dash"],
+      "replacement_source_url": "https://geometrydash-lite.io/",
+      "note": "Asset image was incorrectly selected instead of a playable page."
+    },
+    {
+      "source_url": "https://geometry.games/",
+      "match_type": "host",
+      "action": "reject_search",
+      "queries": ["geometry dash"],
+      "replacement_source_url": "https://geometrydash-lite.io/",
+      "note": "Collection/search host, not a verified single playable source."
+    },
+    {
+      "source_url": "https://geometrydash-game.io/",
+      "match_type": "host",
+      "action": "reject_search",
+      "queries": ["geometry dash"],
+      "replacement_source_url": "https://geometrydash-lite.io/",
+      "note": "Cancelled mirror host with no verified standalone export."
+    },
+    {
+      "source_url": "https://geometrydash.game/",
+      "match_type": "host",
+      "action": "reject_search",
+      "queries": ["geometry dash"],
+      "replacement_source_url": "https://geometrydash-lite.io/",
+      "note": "Failed host previously ranked too highly for Geometry Dash."
+    },
+    {
+      "source_url": "https://www.miniplay.com/game/geometry-dash",
+      "match_type": "exact",
+      "action": "reject_search",
+      "queries": ["geometry dash"],
+      "replacement_source_url": "https://geometrydash-lite.io/",
+      "note": "Miniplay wrapper does not produce a clean standalone build."
+    },
+    {
+      "source_url": "https://www.madkidgames.com/game/car-racing-realistic-car-simulator",
+      "title": "Car Racing - Realistic Car Simulator",
+      "match_type": "exact",
+      "action": "allow_build",
+      "queries": ["realistic car simulator"],
+      "preferred_search": true,
+      "search_score": 220,
+      "note": "Canonical realistic car simulator result with verified standalone output."
+    },
+    {
+      "source_url": "https://www.madkidgames.com/game/ultimate-car-driving-simulator",
+      "title": "Ultimate Car Driving Simulator",
+      "match_type": "exact",
+      "action": "allow_build",
+      "queries": ["realistic car simulator"],
+      "preferred_search": true,
+      "search_score": 205,
+      "note": "Madkid Ultimate Car Driving Simulator now builds cleanly as a fallback candidate."
+    },
+    {
+      "source_url": "https://www.madkidgames.com/game/carquest-open-world-racing",
+      "title": "CarQuest: Open World Racing",
+      "match_type": "exact",
+      "action": "allow_build",
+      "queries": ["realistic car simulator"],
+      "preferred_search": true,
+      "search_score": 196,
+      "note": "CarQuest build passes standalone verification after exporter fixes."
+    },
+    {
+      "source_url": "https://www.spatial.io/",
+      "match_type": "host",
+      "action": "reject_search",
+      "queries": ["realistic car simulator"],
+      "replacement_source_url": "https://www.madkidgames.com/game/car-racing-realistic-car-simulator",
+      "note": "Category listing, not a direct playable build target."
+    },
+    {
+      "source_url": "https://www.roblox.com/",
+      "match_type": "host",
+      "action": "reject_search",
+      "queries": ["realistic car simulator"],
+      "replacement_source_url": "https://www.madkidgames.com/game/car-racing-realistic-car-simulator",
+      "note": "Roblox pages are unsupported wrappers for this standalone exporter."
+    },
+    {
+      "source_url": "https://driftboss.game/drift-boss/",
+      "title": "Drift Boss",
+      "match_type": "exact",
+      "action": "allow_build",
+      "queries": ["drift boss"],
+      "preferred_search": true,
+      "search_score": 230,
+      "note": "Verified Drift Boss alternative that exports cleanly."
+    },
+    {
+      "source_url": "https://driftboss.io/",
+      "match_type": "host",
+      "action": "reject_search",
+      "queries": ["drift boss"],
+      "replacement_source_url": "https://driftboss.game/drift-boss/",
+      "note": "Mirror now resolves to an HTML runtime, but it still does not produce the required standalone Build folder."
+    },
+    {
+      "source_url": "https://aking.io/basketball-stars-2019",
+      "match_type": "exact",
+      "action": "reject_search",
+      "queries": ["starblast"],
+      "note": "Wrong-game result returned for the starblast query."
+    },
+    {
+      "source_url": "https://www.games.co.uk/game/basketball-stars-2019",
+      "match_type": "exact",
+      "action": "reject_search",
+      "queries": ["starblast"],
+      "note": "Wrong-game result returned for the starblast query."
+    },
+    {
+      "source_url": "https://www.google-analytics.com/",
+      "match_type": "host",
+      "action": "reject_search",
+      "queries": ["starblast"],
+      "note": "Analytics endpoint surfaced as a false positive and must never be ranked."
+    },
+    {
+      "source_url": "https://www.a10.com/game/basketball-stars-2019",
+      "match_type": "exact",
+      "action": "reject_search",
+      "queries": ["starblast"],
+      "note": "Wrong-game result returned for the starblast query."
+    },
+    {
+      "source_url": "https://www.agame.com/game/basketball-stars-2019",
+      "match_type": "exact",
+      "action": "reject_search",
+      "queries": ["starblast"],
+      "note": "Wrong-game result returned for the starblast query."
+    },
+    {
+      "source_url": "https://www.gogy.com/games/basketball-stars-2019",
+      "match_type": "exact",
+      "action": "reject_search",
+      "queries": ["starblast"],
+      "note": "Wrong-game result returned for the starblast query."
+    },
+    {
+      "source_url": "https://taptapshots.net/h5-games/basketball-stars",
+      "match_type": "exact",
+      "action": "reject_search",
+      "queries": ["starblast"],
+      "note": "Wrong-game result returned for the starblast query."
+    },
+    {
+      "source_url": "https://yoast.com/product/yoast-seo-wordpress",
+      "match_type": "exact",
+      "action": "reject_search",
+      "queries": ["starblast"],
+      "note": "SEO product page false positive returned for the starblast query."
+    },
+    {
+      "source_url": "https://bubblebox.com/hipster-kickball",
+      "match_type": "exact",
+      "action": "reject_search",
+      "queries": ["hi"],
+      "note": "Short query false positive with no relation to the requested game."
+    },
+    {
+      "source_url": "https://strablast.io/",
+      "match_type": "host",
+      "action": "reject_search",
+      "queries": ["strablast io"],
+      "note": "Known cancelled typo-domain result with no verified standalone export."
+    }
+  ]
+}

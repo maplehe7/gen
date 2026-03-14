@@ -322,6 +322,24 @@ def verify_export_output(output_dir: Path) -> dict[str, Any]:
     return load_json(output_dir / "standalone-verification.json")
 
 
+def probe_export_target(source_url: str) -> dict[str, Any]:
+    command = [
+        sys.executable,
+        str(EXPORTER_PATH),
+        source_url,
+        "--probe-only",
+    ]
+    completed = subprocess.run(
+        command,
+        cwd=BASE_DIR,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(completed.stdout or "{}")
+    return payload if isinstance(payload, dict) else {}
+
+
 def build_export(
     dist_dir: Path,
     source_url: str,
@@ -335,6 +353,12 @@ def build_export(
         raise ValueError(f"Invalid source URL: {source_url}")
 
     resolved_name = display_name.strip() or derive_name_from_url(source_url)
+    probe = probe_export_target(source_url)
+    if not probe:
+        raise RuntimeError("Exporter probe did not return JSON output.")
+    if not probe.get("ok") or not probe.get("buildable"):
+        raise RuntimeError(str(probe.get("reason") or "Exporter probe rejected this source."))
+
     folder_name = resolve_existing_folder_name(dist_dir, source_url) or stable_folder_name_for_source(
         source_url
     )

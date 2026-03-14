@@ -1,3 +1,10 @@
+import {
+  describeFailureRecord,
+  penaltyForCandidate,
+  rejectionReasonForCandidate,
+  searchOverridesForQuery,
+} from "./failure_corpus.js";
+
 const JSON_HEADERS = {
   "content-type": "application/json; charset=UTF-8",
   "cache-control": "no-store, max-age=0",
@@ -18,118 +25,6 @@ const PREFERRED_SEARCH_SITES = [
     prefix: "/view/classroom6x/",
   },
 ];
-const VERIFIED_QUERY_OVERRIDES = {
-  "geometry dash": [
-    {
-      title: "Geometry Dash Lite: Play Free Online",
-      url: "https://geometrydash-lite.io/",
-      textScore: 320,
-    },
-    {
-      title: "Geometry Dash Full Version",
-      url: "https://geometrydashfullversion.io/",
-      textScore: 315,
-    },
-    {
-      title: "Geometry Dash Lite",
-      url: "https://1games.io/game/geometry-dash-lite/",
-      textScore: 310,
-    },
-    {
-      title: "Geometry Dash Lite Online",
-      url: "http://geodashlite.org/",
-      textScore: 300,
-    },
-    {
-      title: "Geometry Dash",
-      url: "https://azgames.io/geometry-dash",
-      textScore: 290,
-    },
-  ],
-  "geometry dash lite": [
-    {
-      title: "Geometry Dash Lite: Play Free Online",
-      url: "https://geometrydash-lite.io/",
-      textScore: 320,
-    },
-    {
-      title: "Geometry Dash Full Version",
-      url: "https://geometrydashfullversion.io/",
-      textScore: 315,
-    },
-    {
-      title: "Geometry Dash Lite",
-      url: "https://1games.io/game/geometry-dash-lite/",
-      textScore: 310,
-    },
-    {
-      title: "Geometry Dash Lite Online",
-      url: "http://geodashlite.org/",
-      textScore: 300,
-    },
-    {
-      title: "Geometry Dash",
-      url: "https://azgames.io/geometry-dash",
-      textScore: 290,
-    },
-  ],
-  "geometry dash full version": [
-    {
-      title: "Geometry Dash Full Version",
-      url: "https://geometrydashfullversion.io/",
-      textScore: 325,
-    },
-    {
-      title: "Geometry Dash Lite",
-      url: "https://1games.io/game/geometry-dash-lite/",
-      textScore: 315,
-    },
-  ],
-  "geometry lite pc": [
-    {
-      title: "Geometry Dash Lite",
-      url: "https://1games.io/game/geometry-dash-lite/",
-      textScore: 325,
-    },
-    {
-      title: "Geometry Dash Full Version",
-      url: "https://geometrydashfullversion.io/",
-      textScore: 315,
-    },
-  ],
-  "realistic car simulator": [
-    {
-      title: "Car Racing - Realistic Car Simulator",
-      url: "https://www.madkidgames.com/game/car-racing-realistic-car-simulator",
-      textScore: 220,
-    },
-    {
-      title: "Ultimate Car Driving Simulator",
-      url: "https://www.madkidgames.com/game/ultimate-car-driving-simulator",
-      textScore: 205,
-    },
-    {
-      title: "Carquest Open World Racing",
-      url: "https://www.madkidgames.com/game/carquest-open-world-racing",
-      textScore: 196,
-    },
-  ],
-};
-const QUERY_SPECIFIC_REJECTED_HOSTS = {
-  "geometry dash": [
-    "coolmathplay.com",
-    "en.gameslol.net",
-    "gdbrowser.com",
-    "geodashgame.io",
-    "geometry-dashgame.github.io",
-    "geometry-dashonline.com",
-    "geometry.games",
-    "geometrydash-game.io",
-    "geometrydash.game",
-    "geometrydashlitefree.com",
-    "miniplay.com",
-  ],
-};
 const DUCKDUCKGO_HTML_URL = "https://html.duckduckgo.com/html/";
 const BING_SEARCH_URL = "https://www.bing.com/search";
 const BRAVE_SEARCH_URL = "https://search.brave.com/search";
@@ -773,17 +668,8 @@ function isWrapperDomain(value) {
   return matchesHost(domainFromUrl(value), WRAPPER_HOSTS);
 }
 
-function querySpecificRejectedHosts(query) {
-  const normalized = normalizeSearchText(query);
-  if (normalized.startsWith("geometry dash")) {
-    return QUERY_SPECIFIC_REJECTED_HOSTS["geometry dash"] || [];
-  }
-  return QUERY_SPECIFIC_REJECTED_HOSTS[normalized] || [];
-}
-
 function isQuerySpecificRejectedHost(query, value) {
-  const rejectedHosts = querySpecificRejectedHosts(query);
-  return rejectedHosts.length > 0 && matchesHost(domainFromUrl(value), rejectedHosts);
+  return Boolean(rejectionReasonForCandidate(query, value));
 }
 
 function brandedHostScore(query, value) {
@@ -1086,6 +972,22 @@ function buildReason(candidate) {
   return reasons.join(" | ");
 }
 
+function applyFailureHistoryMetadata(candidate) {
+  const historyInfo = describeFailureRecord(candidate?.query || "", candidate?.sourceUrl || candidate?.url || "");
+  const penalty = penaltyForCandidate(candidate?.query || "", candidate?.sourceUrl || candidate?.url || "");
+  return {
+    ...candidate,
+    buildDisposition: historyInfo.buildDisposition,
+    historyStatus: historyInfo.historyStatus,
+    historySummary: historyInfo.historySummary,
+    failureHistory: historyInfo.history,
+    failureDisposition: historyInfo.disposition,
+    historyPenalty: penalty,
+    totalScore: Number(candidate?.totalScore || 0) - penalty,
+    confidence: Math.max(0, Math.min(100, Math.round((Number(candidate?.totalScore || 0) - penalty) / 3))),
+  };
+}
+
 function summarizeCandidate(candidate) {
   return {
     query: candidate.query,
@@ -1105,6 +1007,9 @@ function summarizeCandidate(candidate) {
     hostedOnline: candidate.hostedOnline,
     reason: candidate.reason,
     imageUrl: candidate.imageUrl,
+    buildDisposition: candidate.buildDisposition || "unknown",
+    historyStatus: candidate.historyStatus || "unknown",
+    historySummary: candidate.historySummary || "No failed-build history recorded.",
   };
 }
 
@@ -1278,11 +1183,11 @@ function analyzeCandidateHtml(candidate, html) {
     confidence,
   };
   enriched.reason = buildReason(enriched);
-  return enriched;
+  return applyFailureHistoryMetadata(enriched);
 }
 
 function makeRejectedCandidate(candidate, reason) {
-  return {
+  return applyFailureHistoryMetadata({
     ...candidate,
     sourceUrl: candidate.url,
     displayName: candidate.title,
@@ -1299,7 +1204,7 @@ function makeRejectedCandidate(candidate, reason) {
     totalScore: candidate.textScore,
     confidence: Math.max(0, Math.min(100, Math.round(candidate.textScore / 3))),
     reason,
-  };
+  });
 }
 
 async function inspectCandidate(candidate, depth = 0, visited = new Set()) {
@@ -1307,11 +1212,11 @@ async function inspectCandidate(candidate, depth = 0, visited = new Set()) {
   if (!normalizedCandidateUrl || visited.has(normalizedCandidateUrl)) {
     return makeRejectedCandidate(candidate, "duplicate or invalid candidate");
   }
-  if (
-    candidate?.provider !== "override" &&
-    isQuerySpecificRejectedHost(candidate?.query || "", normalizedCandidateUrl)
-  ) {
-    return makeRejectedCandidate(candidate, "known bad host for this search");
+  if (isQuerySpecificRejectedHost(candidate?.query || "", normalizedCandidateUrl)) {
+    return makeRejectedCandidate(
+      candidate,
+      rejectionReasonForCandidate(candidate?.query || "", normalizedCandidateUrl) || "known rejected source",
+    );
   }
   if (looksLikeAssetOnlyUrl(normalizedCandidateUrl)) {
     return makeRejectedCandidate(candidate, "asset file instead of a playable page");
@@ -1368,7 +1273,9 @@ function sortCandidates(candidates) {
 
 function listAlternativeNames(candidates, selectedUrl = "", limit = 4) {
   return uniqueBy(
-    (Array.isArray(candidates) ? candidates : []).filter((item) => item?.url && item.url !== selectedUrl),
+    (Array.isArray(candidates) ? candidates : []).filter(
+      (item) => item?.url && item.url !== selectedUrl && item.buildDisposition !== "reject_search",
+    ),
     (item) => item.url,
   )
     .slice(0, limit)
@@ -1457,6 +1364,9 @@ function selectRankedCandidates(candidates, limit = 1, reasonSuffix = "") {
   const pushCandidates = (predicate, suffix = "", forceHostedOnline = false) => {
     ranked.forEach((candidate) => {
       if (selected.length >= limit || !predicate(candidate)) {
+        return;
+      }
+      if (candidate.buildDisposition === "reject_search") {
         return;
       }
       if (looksLikeAssetOnlyUrl(candidate?.sourceUrl || candidate?.url || "")) {
@@ -1754,7 +1664,7 @@ async function searchDirectHostHeuristic(query) {
 }
 
 async function searchVerifiedOverrides(query) {
-  const overrides = VERIFIED_QUERY_OVERRIDES[normalizeSearchText(query)] || [];
+  const overrides = searchOverridesForQuery(query);
   if (!overrides.length) {
     return [];
   }
@@ -1835,7 +1745,13 @@ async function searchWebFallback(query) {
   }
 
   const ranked = uniqueBy(rawMatches, (item) => item.url)
-    .filter((item) => item.textScore >= 30 && !isPenalizedDomain(item.url) && !looksLikeAssetOnlyUrl(item.url))
+    .filter(
+      (item) =>
+        item.textScore >= 30 &&
+        !isPenalizedDomain(item.url) &&
+        !looksLikeAssetOnlyUrl(item.url) &&
+        !rejectionReasonForCandidate(query, item.url),
+    )
     .sort((left, right) => right.textScore - left.textScore)
     .slice(0, MAX_WEB_CANDIDATES);
 

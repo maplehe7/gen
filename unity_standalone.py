@@ -576,8 +576,17 @@ def patch_legacy_unity_loader_process_data_job(loader_path: Path) -> bool:
     return True
 
 
+LOG_ENABLED = True
+
+
+def set_logging_enabled(enabled: bool) -> None:
+    global LOG_ENABLED
+    LOG_ENABLED = bool(enabled)
+
+
 def log(message: str) -> None:
-    print(f"[unity-standalone] {message}", flush=True)
+    if LOG_ENABLED:
+        print(f"[unity-standalone] {message}", flush=True)
 
 
 def load_json_file(path: Path) -> dict:
@@ -11234,6 +11243,11 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         choices=("frame", "fullscreen", "none"),
         help="Recommended launch option when both frame and fullscreen are enabled",
     )
+    parser.add_argument(
+        "--probe-only",
+        action="store_true",
+        help="Classify the target and print a machine-readable JSON probe result without exporting files.",
+    )
     return parser.parse_args(argv)
 
 
@@ -11252,6 +11266,255 @@ def normalize_launch_preferences(
     if normalized_recommended not in {"frame", "fullscreen", "none"}:
         normalized_recommended = "none"
     return normalized_allowed, normalized_recommended
+
+
+def build_probe_payload_from_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
+    detected_entry = plan.get("detected_entry")
+    detected_build = plan.get("detected_build")
+    detected_eagler_entry = plan.get("detected_eagler_entry")
+    direct_mode = bool(plan.get("direct_mode"))
+    entry_kind = str(plan.get("entry_kind") or "unity")
+    resolved_entry_url = ""
+    source_page_url = ""
+    if detected_entry is not None:
+        resolved_entry_url = str(getattr(detected_entry, "index_url", "") or "")
+        source_page_url = str(getattr(detected_entry, "source_page_url", "") or "")
+    elif direct_mode:
+        resolved_entry_url = str(plan.get("loader_url") or "")
+
+    payload = {
+        "ok": True,
+        "buildable": entry_kind != "remote_stream",
+        "direct_mode": direct_mode,
+        "entry_kind": entry_kind,
+        "build_kind": str(plan.get("build_kind") or ""),
+        "input_url": str(plan.get("input_url") or ""),
+        "root_url": str(plan.get("root_url") or ""),
+        "resolved_entry_url": resolved_entry_url,
+        "source_page_url": source_page_url,
+        "loader_url": str(plan.get("loader_url") or ""),
+        "output_name": str(plan.get("output_name") or ""),
+        "reason": "Supported export target detected.",
+    }
+    if detected_build is not None:
+        payload["loader_url"] = str(getattr(detected_build, "loader_url", "") or payload["loader_url"])
+    if detected_eagler_entry is not None:
+        payload["reason"] = "Supported Eaglercraft entry detected."
+    elif entry_kind == "html":
+        payload["reason"] = "Supported HTML5 entry detected."
+    elif entry_kind == "remote_stream":
+        payload["buildable"] = False
+        payload["reason"] = (
+            "Remote stream entries are disabled. This exporter only supports builds that run locally."
+        )
+    elif detected_build is not None:
+        payload["reason"] = f"Supported Unity build detected ({payload['build_kind'] or 'unity'})."
+    return payload
+
+
+def emit_probe_payload(payload: Mapping[str, Any]) -> None:
+    print(json.dumps(dict(payload), indent=2), flush=True)
+
+
+def resolve_export_plan(
+    args: argparse.Namespace,
+    allowed_launch_modes: str,
+    recommended_launch_mode: str,
+    *,
+    resolve_direct_assets: bool = True,
+    allow_unsupported_entry: bool = False,
+) -> dict[str, Any]:
+    direct_values = [
+        args.loader_url.strip(),
+        args.framework_url.strip(),
+        args.data_url.strip(),
+        args.wasm_url.strip(),
+    ]
+    direct_mode = any(direct_values)
+    if direct_mode and not all(direct_values):
+        raise FetchError(
+            "If you provide direct URLs, provide all of them: "
+            "--loader-url, --framework-url, --data-url, --wasm-url."
+        )
+    if not direct_mode and not args.entry_url:
+        raise FetchError(
+            "Provide either an entry URL or all direct URLs "
+            "(--loader-url --framework-url --data-url --wasm-url)."
+        )
+
+    input_url = ""
+    entry_kind = "unity"
+    build_kind = "modern"
+    legacy_config: dict[str, Any] = {}
+    candidates: dict[str, list[str]] = {}
+    loader_url = ""
+    framework_url = ""
+    data_url = ""
+    wasm_url = ""
+    detected_build: DetectedBuild | None = None
+    detected_eagler_entry: DetectedEaglerEntry | None = None
+    detected_entry: DetectedEntry | None = None
+    detected_html_entry: DetectedEntry | None = None
+    detected_remote_entry: DetectedEntry | None = None
+    custom_split_bootstrap: dict[str, Any] | None = None
+
+    if direct_mode:
+        loader_url = normalize_url(args.loader_url)
+        framework_url = normalize_url(args.framework_url)
+        data_url = normalize_url(args.data_url)
+        wasm_url = normalize_url(args.wasm_url)
+        root_url = derive_game_root_url(loader_url)
+        log("Mode: direct asset URLs")
+        log(f"Loader URL: {loader_url}")
+    else:
+        input_url = apply_known_entry_url_alias(normalize_url(args.entry_url))
+        root_url = derive_game_root_url(input_url)
+
+        log("Mode: entry URL auto-detect")
+        log(f"Input URL: {input_url}")
+        log(f"Game root URL: {root_url}")
+
+        detected_entry = find_supported_entry(input_url, root_url)
+        entry_kind = detected_entry.entry_kind
+        log(f"Resolved entry URL: {detected_entry.index_url}")
+        log(f"Detected entry kind: {entry_kind}")
+
+        if entry_kind == "unity":
+            if looks_like_inline_legacy_unity_wrapper_html(detected_entry.index_html):
+                try:
+                    detected_build = detect_entry_build(detected_entry.index_url, detected_entry.index_html)
+                except FetchError as exc:
+                    raise FetchError(
+                        "Web fallback is disabled. "
+                        "Direct Unity build extraction failed for inline legacy Unity bootstrap page: "
+                        f"{exc}"
+                    ) from exc
+                else:
+                    build_kind = detected_build.build_kind
+                    legacy_config = detected_build.legacy_config
+                    loader_url = detected_build.loader_url
+                    candidates = detected_build.candidates
+                    log("Extracted direct Unity build from inline legacy wrapper page")
+                    log(f"Detected build kind: {build_kind}")
+                    log(f"Resolved loader URL: {loader_url}")
+            elif looks_like_split_unity_bootstrap_page(detected_entry.index_html):
+                custom_split_bootstrap = extract_custom_split_unity_bootstrap(
+                    detected_entry.index_html,
+                    detected_entry.index_url,
+                )
+                if custom_split_bootstrap is None:
+                    raise FetchError(
+                        "Web fallback is disabled. Split-part Unity bootstrap page did not expose "
+                        "a direct downloadable build."
+                    )
+                log("Extracted direct Unity build from split-part Unity bootstrap page")
+                log(f"Resolved loader URL: {custom_split_bootstrap['loader_url']}")
+            else:
+                detected_build = detect_entry_build(detected_entry.index_url, detected_entry.index_html)
+                build_kind = detected_build.build_kind
+                legacy_config = detected_build.legacy_config
+                loader_url = detected_build.loader_url
+                candidates = detected_build.candidates
+
+                log(f"Detected build kind: {build_kind}")
+                log(f"Resolved loader URL: {loader_url}")
+        elif entry_kind == "eaglercraft":
+            try:
+                detected_eagler_entry = detect_eagler_entry(
+                    detected_entry.index_url,
+                    detected_entry.index_html,
+                )
+            except FetchError as exc:
+                raise FetchError(
+                    "Web fallback is disabled. "
+                    f"Direct Eagler runtime extraction failed: {exc}"
+                ) from exc
+            else:
+                log(f"Resolved Eagler runtime URL: {detected_eagler_entry.classes_url}")
+                log(f"Resolved Eagler assets URL: {detected_eagler_entry.assets_url}")
+                if detected_eagler_entry.locales_url:
+                    log(f"Resolved Eagler locales URL: {detected_eagler_entry.locales_url}")
+        elif entry_kind == "html":
+            detected_html_entry = detected_entry
+        elif entry_kind == "remote_stream":
+            detected_remote_entry = detected_entry
+            if not allow_unsupported_entry:
+                raise FetchError(
+                    "Web fallback is disabled. Remote streamed pages are not exportable as direct standalone builds."
+                )
+
+    if direct_mode:
+        output_name = args.out_dir.strip() or infer_output_name_from_url(root_url, loader_url)
+    elif entry_kind == "eaglercraft" and detected_eagler_entry is not None:
+        output_name = args.out_dir.strip() or infer_output_name_from_entry(
+            detected_eagler_entry.title,
+            root_url,
+            fallback_name="eaglercraft",
+            source_page_url=input_url,
+        )
+    elif custom_split_bootstrap is not None and detected_entry is not None:
+        output_name = args.out_dir.strip() or infer_output_name_from_entry(
+            extract_html_title(detected_entry.index_html),
+            root_url,
+            fallback_name="unity-game",
+            source_page_url=detected_entry.source_page_url or input_url,
+        )
+    elif entry_kind == "html" and detected_entry is not None:
+        output_name = args.out_dir.strip() or infer_output_name_from_entry(
+            extract_html_title(detected_entry.index_html),
+            root_url,
+            fallback_name="html-game",
+            source_page_url=detected_entry.source_page_url or input_url,
+        )
+    elif entry_kind == "remote_stream" and detected_remote_entry is not None:
+        output_name = args.out_dir.strip() or infer_output_name_from_entry(
+            str(detected_remote_entry.metadata.get("app_name") or extract_html_title(detected_remote_entry.index_html)),
+            root_url,
+            fallback_name="remote-stream",
+            source_page_url=detected_remote_entry.source_page_url or input_url,
+        )
+    else:
+        output_name = args.out_dir.strip() or infer_output_name_from_url(root_url, loader_url)
+
+    output_dir = Path(output_name).resolve()
+    build_dir = output_dir / "Build"
+    progress_file = output_dir / ".standalone-progress.json"
+
+    if direct_mode and resolve_direct_assets:
+        build_kind, candidates, legacy_config = resolve_direct_build(
+            loader_url=loader_url,
+            framework_url=framework_url,
+            data_url=data_url,
+            wasm_url=wasm_url,
+            progress_file=progress_file,
+        )
+        log(f"Detected build kind: {build_kind}")
+
+    return {
+        "allowed_launch_modes": allowed_launch_modes,
+        "recommended_launch_mode": recommended_launch_mode,
+        "direct_mode": direct_mode,
+        "input_url": input_url,
+        "entry_kind": entry_kind,
+        "build_kind": build_kind,
+        "legacy_config": legacy_config,
+        "detected_build": detected_build,
+        "detected_eagler_entry": detected_eagler_entry,
+        "detected_entry": detected_entry,
+        "detected_html_entry": detected_html_entry,
+        "detected_remote_entry": detected_remote_entry,
+        "custom_split_bootstrap": custom_split_bootstrap,
+        "loader_url": loader_url,
+        "framework_url": framework_url,
+        "data_url": data_url,
+        "wasm_url": wasm_url,
+        "candidates": candidates,
+        "root_url": root_url,
+        "output_name": output_name,
+        "output_dir": output_dir,
+        "build_dir": build_dir,
+        "progress_file": progress_file,
+    }
 
 
 def infer_output_name_from_url(root_url: str, loader_url: str) -> str:
@@ -13337,162 +13600,69 @@ def main(argv: Sequence[str]) -> int:
         args.launch_options,
         args.recommended_launch,
     )
-
-    direct_values = [
-        args.loader_url.strip(),
-        args.framework_url.strip(),
-        args.data_url.strip(),
-        args.wasm_url.strip(),
-    ]
-    direct_mode = any(direct_values)
-    if direct_mode and not all(direct_values):
-        raise FetchError(
-            "If you provide direct URLs, provide all of them: "
-            "--loader-url, --framework-url, --data-url, --wasm-url."
-        )
-    if not direct_mode and not args.entry_url:
-        raise FetchError(
-            "Provide either an entry URL or all direct URLs "
-            "(--loader-url --framework-url --data-url --wasm-url)."
-        )
-
-    input_url = ""
-    entry_kind = "unity"
-    build_kind = "modern"
-    legacy_config: dict[str, Any] = {}
-    detected_build: DetectedBuild | None = None
-    detected_eagler_entry: DetectedEaglerEntry | None = None
-    detected_entry: DetectedEntry | None = None
-    detected_html_entry: DetectedEntry | None = None
-    detected_remote_entry: DetectedEntry | None = None
-    custom_split_bootstrap: dict[str, Any] | None = None
-
-    if direct_mode:
-        loader_url = normalize_url(args.loader_url)
-        framework_url = normalize_url(args.framework_url)
-        data_url = normalize_url(args.data_url)
-        wasm_url = normalize_url(args.wasm_url)
-        root_url = derive_game_root_url(loader_url)
-        log("Mode: direct asset URLs")
-        log(f"Loader URL: {loader_url}")
-    else:
-        input_url = apply_known_entry_url_alias(normalize_url(args.entry_url))
-        root_url = derive_game_root_url(input_url)
-
-        log("Mode: entry URL auto-detect")
-        log(f"Input URL: {input_url}")
-        log(f"Game root URL: {root_url}")
-
-        detected_entry = find_supported_entry(input_url, root_url)
-        entry_kind = detected_entry.entry_kind
-        log(f"Resolved entry URL: {detected_entry.index_url}")
-        log(f"Detected entry kind: {entry_kind}")
-
-        if entry_kind == "unity":
-            if looks_like_inline_legacy_unity_wrapper_html(detected_entry.index_html):
-                try:
-                    detected_build = detect_entry_build(detected_entry.index_url, detected_entry.index_html)
-                except FetchError as exc:
-                    raise FetchError(
-                        "Web fallback is disabled. "
-                        "Direct Unity build extraction failed for inline legacy Unity bootstrap page: "
-                        f"{exc}"
-                    )
-                else:
-                    build_kind = detected_build.build_kind
-                    legacy_config = detected_build.legacy_config
-                    loader_url = detected_build.loader_url
-                    candidates = detected_build.candidates
-                    log("Extracted direct Unity build from inline legacy wrapper page")
-                    log(f"Detected build kind: {build_kind}")
-                    log(f"Resolved loader URL: {loader_url}")
-            elif looks_like_split_unity_bootstrap_page(detected_entry.index_html):
-                custom_split_bootstrap = extract_custom_split_unity_bootstrap(
-                    detected_entry.index_html,
-                    detected_entry.index_url,
-                )
-                if custom_split_bootstrap is None:
-                    raise FetchError(
-                        "Web fallback is disabled. Split-part Unity bootstrap page did not expose "
-                        "a direct downloadable build."
-                    )
-                log("Extracted direct Unity build from split-part Unity bootstrap page")
-                log(f"Resolved loader URL: {custom_split_bootstrap['loader_url']}")
-            else:
-                detected_build = detect_entry_build(detected_entry.index_url, detected_entry.index_html)
-                build_kind = detected_build.build_kind
-                legacy_config = detected_build.legacy_config
-                loader_url = detected_build.loader_url
-                candidates = detected_build.candidates
-
-                log(f"Detected build kind: {build_kind}")
-                log(f"Resolved loader URL: {loader_url}")
-        elif entry_kind == "eaglercraft":
-            try:
-                detected_eagler_entry = detect_eagler_entry(
-                    detected_entry.index_url,
-                    detected_entry.index_html,
-                )
-            except FetchError as exc:
-                raise FetchError(
-                    "Web fallback is disabled. "
-                    f"Direct Eagler runtime extraction failed: {exc}"
-                ) from exc
-            else:
-                log(f"Resolved Eagler runtime URL: {detected_eagler_entry.classes_url}")
-                log(f"Resolved Eagler assets URL: {detected_eagler_entry.assets_url}")
-                if detected_eagler_entry.locales_url:
-                    log(f"Resolved Eagler locales URL: {detected_eagler_entry.locales_url}")
-        elif entry_kind == "remote_stream":
-            raise FetchError(
-                "Web fallback is disabled. Remote streamed pages are not exportable as direct standalone builds."
+    if args.probe_only:
+        set_logging_enabled(False)
+        try:
+            probe_plan = resolve_export_plan(
+                args,
+                allowed_launch_modes,
+                recommended_launch_mode,
+                resolve_direct_assets=False,
+                allow_unsupported_entry=True,
             )
+        except FetchError as exc:
+            emit_probe_payload(
+                {
+                    "ok": False,
+                    "buildable": False,
+                    "direct_mode": bool(
+                        args.loader_url.strip()
+                        or args.framework_url.strip()
+                        or args.data_url.strip()
+                        or args.wasm_url.strip()
+                    ),
+                    "entry_kind": "unknown",
+                    "build_kind": "",
+                    "input_url": str(args.entry_url or "").strip(),
+                    "root_url": "",
+                    "resolved_entry_url": "",
+                    "source_page_url": "",
+                    "loader_url": "",
+                    "output_name": str(args.out_dir or "").strip(),
+                    "reason": str(exc),
+                }
+            )
+            return 0
+        emit_probe_payload(build_probe_payload_from_plan(probe_plan))
+        return 0
 
-    if direct_mode:
-        output_name = args.out_dir.strip() or infer_output_name_from_url(root_url, loader_url)
-    elif entry_kind == "eaglercraft" and detected_eagler_entry is not None:
-        output_name = args.out_dir.strip() or infer_output_name_from_entry(
-            detected_eagler_entry.title,
-            root_url,
-            fallback_name="eaglercraft",
-            source_page_url=input_url,
-        )
-    elif custom_split_bootstrap is not None and detected_entry is not None:
-        output_name = args.out_dir.strip() or infer_output_name_from_entry(
-            extract_html_title(detected_entry.index_html),
-            root_url,
-            fallback_name="unity-game",
-            source_page_url=detected_entry.source_page_url or input_url,
-        )
-    elif entry_kind == "html" and detected_entry is not None:
-        output_name = args.out_dir.strip() or infer_output_name_from_entry(
-            extract_html_title(detected_entry.index_html),
-            root_url,
-            fallback_name="html-game",
-            source_page_url=detected_entry.source_page_url or input_url,
-        )
-    elif entry_kind == "remote_stream" and detected_remote_entry is not None:
-        output_name = args.out_dir.strip() or infer_output_name_from_entry(
-            str(detected_remote_entry.metadata.get("app_name") or extract_html_title(detected_remote_entry.index_html)),
-            root_url,
-            fallback_name="remote-stream",
-            source_page_url=detected_remote_entry.source_page_url or input_url,
-        )
-    else:
-        output_name = args.out_dir.strip() or infer_output_name_from_url(root_url, loader_url)
-    output_dir = Path(output_name).resolve()
-    build_dir = output_dir / "Build"
-    progress_file = output_dir / ".standalone-progress.json"
-
-    if direct_mode:
-        build_kind, candidates, legacy_config = resolve_direct_build(
-            loader_url=loader_url,
-            framework_url=framework_url,
-            data_url=data_url,
-            wasm_url=wasm_url,
-            progress_file=progress_file,
-        )
-        log(f"Detected build kind: {build_kind}")
+    set_logging_enabled(True)
+    plan = resolve_export_plan(
+        args,
+        allowed_launch_modes,
+        recommended_launch_mode,
+        resolve_direct_assets=True,
+    )
+    direct_mode = bool(plan["direct_mode"])
+    input_url = str(plan["input_url"] or "")
+    entry_kind = str(plan["entry_kind"] or "unity")
+    build_kind = str(plan["build_kind"] or "modern")
+    legacy_config = dict(plan["legacy_config"] or {})
+    detected_build = plan["detected_build"]
+    detected_eagler_entry = plan["detected_eagler_entry"]
+    detected_entry = plan["detected_entry"]
+    detected_html_entry = plan["detected_html_entry"]
+    detected_remote_entry = plan["detected_remote_entry"]
+    custom_split_bootstrap = plan["custom_split_bootstrap"]
+    loader_url = str(plan["loader_url"] or "")
+    framework_url = str(plan["framework_url"] or "")
+    data_url = str(plan["data_url"] or "")
+    wasm_url = str(plan["wasm_url"] or "")
+    candidates = dict(plan["candidates"] or {})
+    root_url = str(plan["root_url"] or "")
+    output_dir = Path(plan["output_dir"])
+    build_dir = Path(plan["build_dir"])
+    progress_file = Path(plan["progress_file"])
 
     if output_dir.exists():
         if args.overwrite:

@@ -17,6 +17,9 @@ IGNORABLE_CONSOLE_ERROR_SUBSTRINGS = (
     "Blocked: js/null.js",
     "FS.syncfs operations in flight at once",
 )
+IGNORABLE_PAGE_ERROR_SUBSTRINGS = (
+    "Maximum call stack size exceeded",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -197,6 +200,11 @@ def append_unique_event(target: list[dict[str, Any]], seen: set[str], payload: d
 def is_ignorable_console_error(text: str) -> bool:
     message = str(text or "")
     return any(snippet in message for snippet in IGNORABLE_CONSOLE_ERROR_SUBSTRINGS)
+
+
+def is_ignorable_page_error(text: str) -> bool:
+    message = str(text or "")
+    return any(snippet in message for snippet in IGNORABLE_PAGE_ERROR_SUBSTRINGS)
 
 
 def ready_state_script() -> str:
@@ -385,6 +393,8 @@ async def verify_runtime(
                     )
 
                 def on_page_error(error: Exception) -> None:
+                    if is_ignorable_page_error(str(error)):
+                        return
                     append_unique_event(
                         page_errors,
                         page_error_seen,

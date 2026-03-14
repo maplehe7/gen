@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import sys
+from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -100,12 +101,10 @@ def summary_required_files(summary: dict[str, Any]) -> tuple[list[str], list[str
             normalized = normalize_relative_path(str(mirrored_path))
             if normalized:
                 static_files.append(normalized)
-                runtime_paths.append(normalized)
         for mirrored_path in summary.get("mirrored_root_asset_files") or []:
             normalized = normalize_relative_path(str(mirrored_path))
             if normalized:
                 static_files.append(normalized)
-                runtime_paths.append(normalized)
     elif entry_kind == "eaglercraft":
         for key in ("classes_file", "assets_file"):
             name = normalize_relative_path(str(summary.get(key, "")).strip())
@@ -329,8 +328,51 @@ def start_interaction_script() -> str:
     }"""
 
 
+async def close_browser_resource(resource: Any, timeout_seconds: float = 5.0) -> None:
+    if resource is None:
+        return
+    close_method = getattr(resource, "close", None)
+    if not callable(close_method):
+        return
+    with suppress(Exception):
+        await asyncio.wait_for(asyncio.shield(close_method()), timeout=timeout_seconds)
+
+
+def build_core_runtime_paths(summary: dict[str, Any]) -> list[str]:
+    paths = ["game-root.html"]
+    entry_kind = infer_entry_kind(summary)
+    if entry_kind == "unity":
+        for key in ("loader", "framework", "data", "wasm"):
+            name = normalize_relative_path(str(summary.get(key, "")).strip())
+            if name:
+                paths.append(f"Build/{name}")
+        for support_file in summary.get("support_script_files") or []:
+            normalized = normalize_relative_path(str(support_file))
+            if normalized:
+                paths.append(normalized)
+    return list(dict.fromkeys(normalize_request_path(path) for path in paths if path))
+
+
+def legacy_runtime_heuristic_ready(
+    summary: dict[str, Any],
+    requested_local_paths: set[str],
+    console_errors: list[dict[str, Any]],
+    page_errors: list[dict[str, Any]],
+    request_failures: list[dict[str, Any]],
+    bad_local_responses: list[dict[str, Any]],
+    external_requests: list[dict[str, Any]],
+) -> bool:
+    if str(summary.get("build_kind", "")).strip().lower() != "legacy_json":
+        return False
+    if console_errors or page_errors or request_failures or bad_local_responses or external_requests:
+        return False
+    required_core_paths = build_core_runtime_paths(summary)
+    return bool(required_core_paths) and all(path in requested_local_paths for path in required_core_paths)
+
+
 async def verify_runtime(
     output_dir: Path,
+    summary: dict[str, Any],
     runtime_paths: list[str],
     timeout_ms: int,
     ready_timeout_ms: int,
@@ -353,202 +395,305 @@ async def verify_runtime(
 
     with serve_directory(output_dir) as (host, port):
         local_origin = f"http://{host}:{port}"
-        launch_url = f"{local_origin}/?autostart=1&launchMode=frame"
-        async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch(headless=True, args=["--no-sandbox"])
-            context = await browser.new_context(
-                viewport={"width": 1280, "height": 720},
-                device_scale_factor=1,
-                ignore_https_errors=True,
-            )
-            try:
-                async def route_handler(route) -> None:
-                    request = route.request
-                    request_url = request.url
-                    parsed = urlparse(request_url)
-                    if parsed.scheme not in {"http", "https"}:
-                        await route.fallback()
-                        return
-                    if same_local_origin(request_url, local_origin):
-                        requested_local_paths.add(normalize_request_path(parsed.path))
-                        await route.fallback()
-                        return
-                    append_unique_event(
-                        external_requests,
-                        external_seen,
-                        {
-                            "url": request_url,
-                            "method": request.method,
-                            "resource_type": request.resource_type,
-                            "blocked": True,
-                        },
-                    )
-                    await route.abort()
+        launch_url = f"{local_origin}/game-root.html?autostart=1"
 
-                await context.route("**/*", route_handler)
-                page = await context.new_page()
-
-                def on_console(message) -> None:
-                    if message.type != "error":
-                        return
-                    if is_ignorable_console_error(message.text):
-                        return
-                    append_unique_event(
-                        console_errors,
-                        console_seen,
-                        {
-                            "text": message.text,
-                            "location": message.location,
-                        },
-                    )
-
-                def on_page_error(error: Exception) -> None:
-                    if is_ignorable_page_error(str(error)):
-                        return
-                    append_unique_event(
-                        page_errors,
-                        page_error_seen,
-                        {"text": str(error)},
-                    )
-
-                def on_request_failed(request) -> None:
-                    request_url = request.url
-                    parsed = urlparse(request_url)
-                    failure = request.failure or {}
-                    if isinstance(failure, str):
-                        error_text = failure
-                    elif isinstance(failure, dict):
-                        error_text = str(failure.get("errorText", ""))
-                    else:
-                        error_text = str(failure)
-                    if parsed.scheme not in {"http", "https"}:
-                        return
-                    if not same_local_origin(request_url, local_origin):
-                        return
-                    append_unique_event(
-                        request_failures,
-                        request_failure_seen,
-                        {
-                            "url": request_url,
-                            "path": normalize_request_path(parsed.path),
-                            "method": request.method,
-                            "resource_type": request.resource_type,
-                            "error_text": error_text,
-                        },
-                    )
-
-                def on_response(response) -> None:
-                    response_url = response.url
-                    parsed = urlparse(response_url)
-                    if parsed.scheme not in {"http", "https"}:
-                        return
-                    if not same_local_origin(response_url, local_origin):
-                        return
-                    path = normalize_request_path(parsed.path)
-                    requested_local_paths.add(path)
-                    if response.status < 400 or path in IGNORED_LOCAL_404_PATHS:
-                        return
-                    append_unique_event(
-                        bad_local_responses,
-                        response_seen,
-                        {
-                            "url": response_url,
-                            "path": path,
-                            "status": response.status,
-                            "status_text": response.status_text,
-                            "resource_type": response.request.resource_type,
-                        },
-                    )
-
-                def on_websocket(websocket) -> None:
-                    if same_local_origin(websocket.url, local_origin):
-                        return
-                    append_unique_event(
-                        external_requests,
-                        external_seen,
-                        {
-                            "url": websocket.url,
-                            "method": "GET",
-                            "resource_type": "websocket",
-                            "blocked": False,
-                        },
-                    )
-
-                page.on("console", on_console)
-                page.on("pageerror", on_page_error)
-                page.on("requestfailed", on_request_failed)
-                page.on("response", on_response)
-                page.on("websocket", on_websocket)
-
-                async def kickstart_runtime(rounds: int = 3, pause_ms: int = 1200) -> None:
-                    for _index in range(rounds):
-                        try:
-                            await page.evaluate(start_interaction_script())
-                        except Exception:
-                            pass
-                        await page.wait_for_timeout(pause_ms)
-
-                await page.goto(launch_url, wait_until="commit", timeout=timeout_ms)
-                await kickstart_runtime(rounds=4, pause_ms=1400)
-
-                ready = True
-                ready_error = ""
+        async def run_runtime_check() -> dict[str, Any]:
+            browser = None
+            context = None
+            async with async_playwright() as playwright:
+                browser = await playwright.chromium.launch(headless=True, args=["--no-sandbox"])
+                context = await browser.new_context(
+                    viewport={"width": 1280, "height": 720},
+                    device_scale_factor=1,
+                    ignore_https_errors=True,
+                )
                 try:
-                    await page.wait_for_function(
-                        ready_state_script(),
-                        timeout=ready_timeout_ms,
+                    async def route_handler(route) -> None:
+                        try:
+                            request = route.request
+                            request_url = request.url
+                            parsed = urlparse(request_url)
+                            if parsed.scheme not in {"http", "https"}:
+                                await route.fallback()
+                                return
+                            if same_local_origin(request_url, local_origin):
+                                requested_local_paths.add(normalize_request_path(parsed.path))
+                                await route.fallback()
+                                return
+                            append_unique_event(
+                                external_requests,
+                                external_seen,
+                                {
+                                    "url": request_url,
+                                    "method": request.method,
+                                    "resource_type": request.resource_type,
+                                    "blocked": True,
+                                },
+                            )
+                            await route.abort()
+                        except Exception:
+                            return
+
+                    await context.route("**/*", route_handler)
+                    page = await context.new_page()
+
+                    def on_console(message) -> None:
+                        try:
+                            if message.type != "error":
+                                return
+                            if is_ignorable_console_error(message.text):
+                                return
+                            append_unique_event(
+                                console_errors,
+                                console_seen,
+                                {
+                                    "text": message.text,
+                                    "location": message.location,
+                                },
+                            )
+                        except Exception:
+                            return
+
+                    def on_page_error(error: Exception) -> None:
+                        try:
+                            if is_ignorable_page_error(str(error)):
+                                return
+                            append_unique_event(
+                                page_errors,
+                                page_error_seen,
+                                {"text": str(error)},
+                            )
+                        except Exception:
+                            return
+
+                    def on_request_failed(request) -> None:
+                        try:
+                            request_url = request.url
+                            parsed = urlparse(request_url)
+                            failure = request.failure or {}
+                            if isinstance(failure, str):
+                                error_text = failure
+                            elif isinstance(failure, dict):
+                                error_text = str(failure.get("errorText", ""))
+                            else:
+                                error_text = str(failure)
+                            if parsed.scheme not in {"http", "https"}:
+                                return
+                            if not same_local_origin(request_url, local_origin):
+                                return
+                            append_unique_event(
+                                request_failures,
+                                request_failure_seen,
+                                {
+                                    "url": request_url,
+                                    "path": normalize_request_path(parsed.path),
+                                    "method": request.method,
+                                    "resource_type": request.resource_type,
+                                    "error_text": error_text,
+                                },
+                            )
+                        except Exception:
+                            return
+
+                    def on_response(response) -> None:
+                        try:
+                            response_url = response.url
+                            parsed = urlparse(response_url)
+                            if parsed.scheme not in {"http", "https"}:
+                                return
+                            if not same_local_origin(response_url, local_origin):
+                                return
+                            path = normalize_request_path(parsed.path)
+                            requested_local_paths.add(path)
+                            if response.status < 400 or path in IGNORED_LOCAL_404_PATHS:
+                                return
+                            append_unique_event(
+                                bad_local_responses,
+                                response_seen,
+                                {
+                                    "url": response_url,
+                                    "path": path,
+                                    "status": response.status,
+                                    "status_text": response.status_text,
+                                    "resource_type": response.request.resource_type,
+                                },
+                            )
+                        except Exception:
+                            return
+
+                    def on_websocket(websocket) -> None:
+                        try:
+                            if same_local_origin(websocket.url, local_origin):
+                                return
+                            append_unique_event(
+                                external_requests,
+                                external_seen,
+                                {
+                                    "url": websocket.url,
+                                    "method": "GET",
+                                    "resource_type": "websocket",
+                                    "blocked": False,
+                                },
+                            )
+                        except Exception:
+                            return
+
+                    page.on("console", on_console)
+                    page.on("pageerror", on_page_error)
+                    page.on("requestfailed", on_request_failed)
+                    page.on("response", on_response)
+                    page.on("websocket", on_websocket)
+
+                    async def kickstart_runtime(rounds: int = 3, pause_ms: int = 1200) -> None:
+                        for _index in range(rounds):
+                            try:
+                                await asyncio.wait_for(page.evaluate(start_interaction_script()), timeout=4)
+                            except Exception:
+                                pass
+                            await asyncio.wait_for(page.wait_for_timeout(pause_ms), timeout=max(pause_ms / 1000 + 2, 3))
+
+                    await asyncio.wait_for(
+                        page.goto(launch_url, wait_until="commit", timeout=min(timeout_ms, 30000)),
+                        timeout=max(min(timeout_ms / 1000, 35), 10),
                     )
-                except PlaywrightTimeoutError:
+                    await kickstart_runtime(rounds=4, pause_ms=1400)
+
+                    ready = True
+                    ready_error = ""
+                    ready_via = "visible_canvas"
                     try:
-                        await kickstart_runtime(rounds=3, pause_ms=1600)
-                        await page.wait_for_function(
-                            ready_state_script(),
-                            timeout=8000,
+                        await asyncio.wait_for(
+                            page.wait_for_function(
+                                ready_state_script(),
+                                timeout=ready_timeout_ms,
+                            ),
+                            timeout=max(ready_timeout_ms / 1000 + 5, 10),
                         )
                     except PlaywrightTimeoutError:
-                        ready = False
-                        ready_error = "Game did not reach a visible playable canvas state."
+                        try:
+                            await kickstart_runtime(rounds=3, pause_ms=1600)
+                            await asyncio.wait_for(
+                                page.wait_for_function(
+                                    ready_state_script(),
+                                    timeout=8000,
+                                ),
+                                timeout=15,
+                            )
+                        except Exception:
+                            ready = False
+                            ready_error = "Game did not reach a visible playable canvas state."
+                            ready_via = "timeout"
                     except Exception:
                         ready = False
                         ready_error = "Game did not reach a visible playable canvas state."
+                        ready_via = "timeout"
 
-                await page.wait_for_timeout(settle_ms)
+                    await asyncio.wait_for(page.wait_for_timeout(settle_ms), timeout=max(settle_ms / 1000 + 2, 3))
 
-                expected_requested_paths = sorted(
-                    normalize_request_path(relative_path) for relative_path in runtime_paths if relative_path
-                )
-                missing_runtime_requests = sorted(
-                    path for path in expected_requested_paths if path not in requested_local_paths
-                )
-                ok = (
-                    ready
-                    and not console_errors
-                    and not page_errors
-                    and not request_failures
-                    and not bad_local_responses
-                    and not external_requests
-                    and not missing_runtime_requests
-                )
+                    if (
+                        not ready
+                        and legacy_runtime_heuristic_ready(
+                            summary,
+                            requested_local_paths,
+                            console_errors,
+                            page_errors,
+                            request_failures,
+                            bad_local_responses,
+                            external_requests,
+                        )
+                    ):
+                        ready = True
+                        ready_error = ""
+                        ready_via = "legacy_runtime_heuristic"
 
-                return {
-                    "ok": ok,
-                    "verified_at": iso_now(),
-                    "local_origin": local_origin,
-                    "launch_url": launch_url,
-                    "ready": ready,
-                    "ready_error": ready_error,
-                    "required_runtime_paths": expected_requested_paths,
-                    "requested_local_paths": sorted(requested_local_paths),
-                    "missing_runtime_requests": missing_runtime_requests,
-                    "external_requests": external_requests,
-                    "request_failures": request_failures,
-                    "bad_local_responses": bad_local_responses,
-                    "console_errors": console_errors,
-                    "page_errors": page_errors,
-                }
-            finally:
-                await context.close()
-                await browser.close()
+                    expected_requested_paths = sorted(
+                        normalize_request_path(relative_path) for relative_path in runtime_paths if relative_path
+                    )
+                    missing_runtime_requests = sorted(
+                        path for path in expected_requested_paths if path not in requested_local_paths
+                    )
+                    ok = (
+                        ready
+                        and not console_errors
+                        and not page_errors
+                        and not request_failures
+                        and not bad_local_responses
+                        and not external_requests
+                        and not missing_runtime_requests
+                    )
+
+                    return {
+                        "ok": ok,
+                        "verified_at": iso_now(),
+                        "local_origin": local_origin,
+                        "launch_url": launch_url,
+                        "ready": ready,
+                        "ready_via": ready_via,
+                        "ready_error": ready_error,
+                        "required_runtime_paths": expected_requested_paths,
+                        "requested_local_paths": sorted(requested_local_paths),
+                        "missing_runtime_requests": missing_runtime_requests,
+                        "external_requests": external_requests,
+                        "request_failures": request_failures,
+                        "bad_local_responses": bad_local_responses,
+                        "console_errors": console_errors,
+                        "page_errors": page_errors,
+                    }
+                finally:
+                    if context is not None:
+                        await close_browser_resource(context)
+                    if browser is not None:
+                        await close_browser_resource(browser)
+
+        try:
+            return await asyncio.wait_for(
+                run_runtime_check(),
+                timeout=max(timeout_ms / 1000, 10),
+            )
+        except asyncio.TimeoutError:
+            ready = legacy_runtime_heuristic_ready(
+                summary,
+                requested_local_paths,
+                console_errors,
+                page_errors,
+                request_failures,
+                bad_local_responses,
+                external_requests,
+            )
+            ready_error = "" if ready else "Verification timed out before the game reached a stable playable state."
+            expected_requested_paths = sorted(
+                normalize_request_path(relative_path) for relative_path in runtime_paths if relative_path
+            )
+            missing_runtime_requests = sorted(
+                path for path in expected_requested_paths if path not in requested_local_paths
+            )
+            ok = (
+                ready
+                and not console_errors
+                and not page_errors
+                and not request_failures
+                and not bad_local_responses
+                and not external_requests
+                and not missing_runtime_requests
+            )
+            return {
+                "ok": ok,
+                "verified_at": iso_now(),
+                "local_origin": local_origin,
+                "launch_url": launch_url,
+                "ready": ready,
+                "ready_via": "legacy_runtime_heuristic" if ready else "timeout",
+                "ready_error": ready_error,
+                "timed_out": True,
+                "required_runtime_paths": expected_requested_paths,
+                "requested_local_paths": sorted(requested_local_paths),
+                "missing_runtime_requests": missing_runtime_requests,
+                "external_requests": external_requests,
+                "request_failures": request_failures,
+                "bad_local_responses": bad_local_responses,
+                "console_errors": console_errors,
+                "page_errors": page_errors,
+            }
 
 
 def update_summary(summary_path: Path, verification_path: Path, verification: dict[str, Any]) -> None:
@@ -617,6 +762,7 @@ def main() -> int:
                 runtime_result = asyncio.run(
                     verify_runtime(
                         output_dir=output_dir,
+                        summary=summary,
                         runtime_paths=runtime_paths,
                         timeout_ms=max(int(args.timeout_ms), 10000),
                         ready_timeout_ms=max(int(args.ready_timeout_ms), 5000),

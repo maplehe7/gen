@@ -23,6 +23,7 @@ CATALOG_SOURCE_PATH = BASE_DIR / "game_catalog.json"
 EXPORTER_PATH = Path(os.environ.get("UNITY_EXPORTER_PATH") or (BASE_DIR / "unity_standalone.py"))
 THUMBNAIL_SCRIPT_PATH = BASE_DIR / "capture_game_thumbnail.py"
 VERIFIER_SCRIPT_PATH = BASE_DIR / "verify_generated_game.py"
+VERIFIER_TIMEOUT_SECONDS = 180
 
 
 def parse_args() -> argparse.Namespace:
@@ -310,8 +311,14 @@ def verify_export_output(output_dir: Path) -> dict[str, Any]:
         str(VERIFIER_SCRIPT_PATH),
         "--output-dir",
         str(output_dir),
+        "--timeout-ms",
+        "120000",
+        "--ready-timeout-ms",
+        "45000",
+        "--settle-ms",
+        "3000",
     ]
-    subprocess.run(command, cwd=BASE_DIR, check=True)
+    subprocess.run(command, cwd=BASE_DIR, check=True, timeout=VERIFIER_TIMEOUT_SECONDS)
     return load_json(output_dir / "standalone-verification.json")
 
 

@@ -51,6 +51,21 @@ const VERIFIED_QUERY_OVERRIDES = {
     },
   ],
 };
+const QUERY_SPECIFIC_REJECTED_HOSTS = {
+  "geometry dash": [
+    "coolmathplay.com",
+    "en.gameslol.net",
+    "gdbrowser.com",
+    "geodashgame.io",
+    "geometry-dashgame.github.io",
+    "geometry-dashonline.com",
+    "geometry.games",
+    "geometrydash-game.io",
+    "geometrydash.game",
+    "geometrydashlitefree.com",
+    "miniplay.com",
+  ],
+};
 const DUCKDUCKGO_HTML_URL = "https://html.duckduckgo.com/html/";
 const BING_SEARCH_URL = "https://www.bing.com/search";
 const BRAVE_SEARCH_URL = "https://search.brave.com/search";
@@ -694,6 +709,19 @@ function isWrapperDomain(value) {
   return matchesHost(domainFromUrl(value), WRAPPER_HOSTS);
 }
 
+function querySpecificRejectedHosts(query) {
+  const normalized = normalizeSearchText(query);
+  if (normalized.startsWith("geometry dash")) {
+    return QUERY_SPECIFIC_REJECTED_HOSTS["geometry dash"] || [];
+  }
+  return QUERY_SPECIFIC_REJECTED_HOSTS[normalized] || [];
+}
+
+function isQuerySpecificRejectedHost(query, value) {
+  const rejectedHosts = querySpecificRejectedHosts(query);
+  return rejectedHosts.length > 0 && matchesHost(domainFromUrl(value), rejectedHosts);
+}
+
 function brandedHostScore(query, value) {
   const compactQuery = compactSearchText(query);
   if (!compactQuery || compactQuery.length < 4) {
@@ -1214,6 +1242,12 @@ async function inspectCandidate(candidate, depth = 0, visited = new Set()) {
   const normalizedCandidateUrl = cleanExtractedUrl(candidate?.url || "");
   if (!normalizedCandidateUrl || visited.has(normalizedCandidateUrl)) {
     return makeRejectedCandidate(candidate, "duplicate or invalid candidate");
+  }
+  if (
+    candidate?.provider !== "override" &&
+    isQuerySpecificRejectedHost(candidate?.query || "", normalizedCandidateUrl)
+  ) {
+    return makeRejectedCandidate(candidate, "known bad host for this search");
   }
   if (looksLikeAssetOnlyUrl(normalizedCandidateUrl)) {
     return makeRejectedCandidate(candidate, "asset file instead of a playable page");

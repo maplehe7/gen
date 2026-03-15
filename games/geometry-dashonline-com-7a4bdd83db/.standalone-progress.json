@@ -49,10 +49,10 @@
   },
   "completed": true,
   "summary": {
-    "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-xjq7_tr9",
-    "index_html": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-xjq7_tr9/index.html",
-    "embedded_entry_html": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-xjq7_tr9/game-root.html",
-    "required_functions_file": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-xjq7_tr9/required-functions.json",
+    "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-tjyw6kce",
+    "index_html": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-tjyw6kce/index.html",
+    "embedded_entry_html": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-tjyw6kce/game-root.html",
+    "required_functions_file": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-tjyw6kce/required-functions.json",
     "loader": "geometry-lite-v26013001.loader.js",
     "framework": "geometry-lite-v26013001.framework.js.unityweb",
     "data": "geometry-lite-v26013001.data.unityweb",
@@ -76,8 +76,8 @@
     "source_url_spoof_enabled": true,
     "original_folder_url": "",
     "streaming_assets_url": "26013001/StreamingAssets",
-    "asset_cache_buster": "c1abfbe69f8d",
-    "embed_cache_buster": "c03af48cde88",
+    "asset_cache_buster": "4445c1ff6d40",
+    "embed_cache_buster": "e95eb40ef323",
     "launch_options": "both",
     "recommended_launch_mode": "none",
     "launcher": "ocean-launcher",
@@ -141,7 +141,7 @@
       "https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js",
       "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"
     ],
-    "progress_file": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-xjq7_tr9/.standalone-progress.json",
+    "progress_file": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-tjyw6kce/.standalone-progress.json",
     "mirrored_streaming_asset_files": [
       "26013001/StreamingAssets/UnityServicesProjectConfiguration.json"
     ],

@@ -1,8 +1,8 @@
 {
   "ok": true,
-  "verified_at": "2026-03-15T17:55:32+00:00",
-  "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-j4r993rv",
-  "summary_path": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-j4r993rv/standalone-build-info.json",
+  "verified_at": "2026-03-15T17:50:31+00:00",
+  "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-ky807f6d",
+  "summary_path": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-ky807f6d/standalone-build-info.json",
   "entry_kind": "unity",
   "required_files": [
     "index.html",
@@ -34,8 +34,8 @@
     "/support/gmsdkv1.js"
   ],
   "static_issues": [],
-  "local_origin": "http://127.0.0.1:44953",
-  "launch_url": "http://127.0.0.1:44953/game-root.html?autostart=1",
+  "local_origin": "http://127.0.0.1:44127",
+  "launch_url": "http://127.0.0.1:44127/game-root.html?autostart=1",
   "ready": true,
   "ready_via": "visible_canvas",
   "ready_error": "",

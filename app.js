@@ -643,7 +643,15 @@ function isTerminalJob(job) {
 }
 
 function isFailedJob(job) {
-  return String(job?.status || "") === "completed" && String(job?.conclusion || "") && String(job?.conclusion || "") !== "success";
+  return (
+    String(job?.status || "") === "completed" &&
+    String(job?.conclusion || "") &&
+    !["success", "cancelled"].includes(String(job?.conclusion || ""))
+  );
+}
+
+function isCancelledJob(job) {
+  return String(job?.status || "") === "completed" && String(job?.conclusion || "") === "cancelled";
 }
 
 function jobRetentionMs(job) {
@@ -730,7 +738,27 @@ function normalizeStoredJobs(rawJobs) {
     }
   });
 
-  return [...deduped.values()]
+  const batchDeduped = new Map();
+  [...deduped.values()].forEach((job) => {
+    const batchId = String(job?.batchId || "").trim();
+    const sourceKey = candidateSourceKey(job?.sourceUrl || "");
+    const rank = candidateRankValue(job);
+    const batchKey = batchId
+      ? `batch:${batchId}:${sourceKey || `rank:${rank}`}`
+      : dedupeJobKey(job);
+    const current = batchDeduped.get(batchKey);
+    const currentPriority = current ? jobSortPriority(current) : Number.POSITIVE_INFINITY;
+    const nextPriority = jobSortPriority(job);
+    if (
+      !current ||
+      nextPriority < currentPriority ||
+      (nextPriority === currentPriority && jobSortTimestamp(job) >= jobSortTimestamp(current))
+    ) {
+      batchDeduped.set(batchKey, job);
+    }
+  });
+
+  return [...batchDeduped.values()]
     .sort((left, right) => {
       const batchDelta = batchCreatedTimestamp(right) - batchCreatedTimestamp(left);
       if (batchDelta !== 0) {
@@ -769,7 +797,13 @@ function formatStatus(status) {
 
 function formatJobStatus(job) {
   if (String(job?.status || "") === "completed") {
-    return String(job?.conclusion || "") === "success" ? "Complete" : "Failed";
+    if (String(job?.conclusion || "") === "success") {
+      return "Complete";
+    }
+    if (String(job?.conclusion || "") === "cancelled") {
+      return "Cancelled";
+    }
+    return "Failed";
   }
   return formatStatus(job?.status);
 }
@@ -818,7 +852,7 @@ function jobsForSection(sectionKey) {
     return jobs.filter((job) => successfulJob(job));
   }
   if (sectionKey === "failed") {
-    return jobs.filter((job) => isFailedJob(job));
+    return jobs.filter((job) => isFailedJob(job) || isCancelledJob(job));
   }
   return [];
 }
@@ -1570,6 +1604,20 @@ async function deletePublishedGame(job, requestId) {
   });
 }
 
+async function cancelWorkflowJob(job) {
+  return fetchJson(workerEndpoint("/cancel"), {
+    method: "POST",
+    keepalive: true,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      runId: String(job?.runId || "").trim(),
+      requestId: String(job?.requestId || "").trim(),
+    }),
+  });
+}
+
 function createBatchDraftJob(batchId, batchLabel, batchSubmittedAt, candidate, poolSize) {
   const candidateRank = Math.max(Number(candidate?.rank) || 1, 1);
   return {
@@ -1743,6 +1791,51 @@ function renderActions(job, actionsRoot) {
     return;
   }
   actionsRoot.innerHTML = "";
+
+  if (activeJob(job)) {
+    const cancelButton = document.createElement("button");
+    cancelButton.className = "job-link secondary";
+    cancelButton.type = "button";
+    cancelButton.textContent = "Cancel job";
+    cancelButton.addEventListener("click", async () => {
+      cancelButton.disabled = true;
+      try {
+        const result = await cancelWorkflowJob(job);
+        if (result?.alreadyCompleted && String(result?.conclusion || "").trim() !== "cancelled") {
+          await refreshJobStatuses();
+          return;
+        }
+        upsertJob({
+          ...job,
+          runId: String(result?.runId || job?.runId || "").trim(),
+          status: "completed",
+          conclusion: "cancelled",
+          progressPercent: clampPercent(job.progressPercent || 0),
+          progressUpdatedAt: Date.now(),
+          phase: "Cancelled by user",
+          etaLabel: "Cancelled",
+          etaSeconds: 0,
+          etaUpdatedAt: Date.now(),
+          error: "Cancelled by user.",
+          failedAt: 0,
+          lastServerUpdateAt: Date.now(),
+          lastSyncAttemptAt: Date.now(),
+          syncFailureCount: 0,
+        });
+        renderJobs();
+        await syncBatchRecoveryAndFailureLogs();
+      } catch (error) {
+        upsertJob({
+          ...job,
+          error: error.message || "Could not cancel this job.",
+          lastSyncAttemptAt: Date.now(),
+          syncFailureCount: Math.max(Number(job.syncFailureCount) || 0, 0) + 1,
+        });
+        renderJobs();
+      }
+    });
+    actionsRoot.append(cancelButton);
+  }
 
   if (successfulJob(job) && job.playPath) {
     const playLink = document.createElement("a");
@@ -2098,7 +2191,7 @@ function renderJobs() {
     buildJobSection(
       "failed",
       "Failed",
-      "Builds that stopped or did not verify.",
+      "Builds that stopped, were cancelled, or did not verify.",
       jobsForSection("failed"),
       "No failed jobs.",
     ),
@@ -2252,7 +2345,10 @@ async function refreshJobStatuses() {
       if (String(job.status || "") === "completed" && String(job.conclusion || "") && String(job.conclusion || "") !== "success") {
         return {
           ...job,
-          error: job.error || `Failed: ${job.conclusion}`,
+          error:
+            String(job.conclusion || "") === "cancelled"
+              ? (job.error || "Cancelled by user.")
+              : (job.error || `Failed: ${job.conclusion}`),
         };
       }
       return job;

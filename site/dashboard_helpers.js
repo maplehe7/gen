@@ -43,6 +43,11 @@ export function selectedCandidatesForSelection(selection) {
   );
 }
 
+export function initialDispatchSubset(candidates, maxActiveCount = 1) {
+  const safeLimit = Math.max(Math.round(Number(maxActiveCount) || 0), 0);
+  return (Array.isArray(candidates) ? candidates : []).slice(0, safeLimit);
+}
+
 function candidateBucket(candidate, index = 0) {
   if (String(candidate?.buildDisposition || "unknown").trim() === "reject_search") {
     return "filtered";

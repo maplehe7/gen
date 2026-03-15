@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   bucketReviewCandidates,
   dashboardSnapshot,
+  initialDispatchSubset,
   initialSelectedCandidateKeys,
   isCancelableJob,
   normalizeSelectedCandidateKeys,
@@ -81,4 +82,18 @@ test("dashboardSnapshot reports review counts alongside active jobs", () => {
   assert.equal(snapshot.reviewBatchCount, 1);
   assert.equal(snapshot.selectedCandidateCount, 1);
   assert.match(snapshot.refreshText, /Refreshed/);
+});
+
+test("initialDispatchSubset throttles selected candidates to the active runner limit", () => {
+  const initial = initialDispatchSubset(
+    [
+      { sourceUrl: "https://one.example/" },
+      { sourceUrl: "https://two.example/" },
+      { sourceUrl: "https://three.example/" },
+    ],
+    1,
+  );
+
+  assert.equal(initial.length, 1);
+  assert.equal(initial[0].sourceUrl, "https://one.example/");
 });

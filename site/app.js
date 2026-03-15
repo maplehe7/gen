@@ -5,6 +5,7 @@ import {
   candidateSelectionKey,
   dashboardSnapshot,
   groupActiveJobsByBatch,
+  initialDispatchSubset,
   initialSelectedCandidateKeys,
   isCancelableJob,
   isDispatchableSelection,
@@ -998,6 +999,9 @@ function candidatePoolForBatch(batchId) {
 
 function batchHasRemainingCandidates(batchJobs) {
   const batchId = String(batchJobs[0]?.batchId || "").trim();
+  if (batchSelectionFor(batchId)?.stopRequested) {
+    return false;
+  }
   const pool = candidatePoolForBatch(batchId);
   if (!pool.length) {
     return false;
@@ -1956,6 +1960,9 @@ async function maybeDispatchBatchFallback(batchId) {
   if (!normalizedBatchId || !selection || selection.dispatchingFallback) {
     return false;
   }
+  if (selection.stopRequested) {
+    return false;
+  }
   if (selection.state === "complete" || selection.state === "auto-kept" || selection.state === "keeping") {
     return false;
   }
@@ -2141,6 +2148,12 @@ async function cancelRemainingBatch(batchId) {
   if (!remote.length && !local.length) {
     return;
   }
+
+  updateBatchSelection(batchId, {
+    stopRequested: true,
+    state: "cancelled",
+    dispatchingFallback: false,
+  });
 
   local.forEach((job) => {
     finalizeCancelledJob(job, "Cancelled before the workflow run was confirmed.", {
@@ -2467,10 +2480,16 @@ async function dispatchReviewedBatch(batchId) {
     desiredSuccessCount: selectedCandidates.length,
     candidatePool: selectedCandidates,
     selectedCandidateKeys: initialSelectedCandidateKeys(selectedCandidates, selectedCandidates.length),
+    stopRequested: false,
     error: "",
   });
 
-  const draftJobs = selectedCandidates.map((candidate) =>
+  const initialCandidates = initialDispatchSubset(
+    selectedCandidates,
+    batchActiveTargetCount(batchId, 0),
+  );
+  const initialDispatchCount = initialCandidates.length;
+  const draftJobs = initialCandidates.map((candidate) =>
     createBatchDraftJob(batchId, batchLabel, batchSubmittedAt, candidate, selectedCandidates.length),
   );
   const results = await Promise.all(draftJobs.map((draftJob) => dispatchCandidateJob(draftJob)));
@@ -2493,6 +2512,7 @@ async function dispatchReviewedBatch(batchId) {
     failureCount,
     batchLabel,
     candidateCount: selectedCandidates.length,
+    dispatchedNow: initialDispatchCount,
   };
 }
 
@@ -2530,11 +2550,11 @@ async function dispatchSelectedReviewBatches() {
   const totalQueued = successes.reduce((sum, item) => sum + item.queuedCount, 0);
   const totalSelected = successes.reduce((sum, item) => sum + item.candidateCount, 0);
   formMessage.textContent = failures.length
-    ? `Queued ${totalQueued} of ${totalSelected} selected candidate build${totalQueued === 1 ? "" : "s"}. Failed: ${failures
+    ? `Queued ${totalQueued} of ${totalSelected} selected candidate build${totalQueued === 1 ? "" : "s"}. Remaining candidates will wait for runner slots. Failed: ${failures
         .slice(0, 3)
         .map((item) => `${item.batchLabel} (${item.error})`)
         .join("; ")}`
-    : `Queued ${totalQueued} selected candidate build${totalQueued === 1 ? "" : "s"} across ${successes.length} request${successes.length === 1 ? "" : "s"}.`;
+    : `Queued ${totalQueued} initial candidate build${totalQueued === 1 ? "" : "s"} across ${successes.length} request${successes.length === 1 ? "" : "s"}. Remaining selected candidates will start as runner slots free up.`;
   await refreshJobStatuses();
 }
 
@@ -2645,7 +2665,7 @@ function renderCandidatePreview() {
       setFormBusy(true);
       try {
         const result = await dispatchReviewedBatch(selection.batchId);
-        formMessage.textContent = `Queued ${result.queuedCount} of ${result.candidateCount} selected candidate${result.candidateCount === 1 ? "" : "s"} for ${result.batchLabel}.`;
+        formMessage.textContent = `Queued ${result.queuedCount} of ${result.candidateCount} selected candidate${result.candidateCount === 1 ? "" : "s"} for ${result.batchLabel}. Remaining candidates will wait for runner slots.`;
         await refreshJobStatuses();
       } catch (error) {
         formMessage.textContent = error.message;

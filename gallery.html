@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Generated Games</title>
-    <link rel="stylesheet" href="./app.css?v=20260313-4" />
+    <link rel="stylesheet" href="./app.css?v=20260314-1" />
   </head>
   <body class="gallery-page">
     <div class="page-shell gallery-shell">
@@ -12,6 +12,19 @@
         <div class="mini-nav">
           <a class="job-link secondary" href="./index.html">Back</a>
         </div>
+
+        <section class="panel gallery-toolbar">
+          <div>
+            <p class="panel-kicker">Gallery</p>
+            <h1 class="panel-title">Published builds</h1>
+            <p class="gallery-status">Filter by title, source host, folder, or build time.</p>
+          </div>
+          <label class="gallery-filter">
+            <span>Filter</span>
+            <input id="gallery-filter" type="search" placeholder="Title, host, folder, date" autocomplete="off" />
+          </label>
+          <p id="gallery-status" class="gallery-status"></p>
+        </section>
 
         <div id="gallery" class="gallery-grid"></div>
       </main>
@@ -28,13 +41,15 @@
         <a class="gallery-link" target="_blank" rel="noreferrer">
           <img class="gallery-thumb" alt="" loading="lazy" />
           <h3 class="gallery-title"></h3>
+          <p class="gallery-source"></p>
+          <p class="gallery-meta"></p>
         </a>
-        <button class="report-button" type="button">Report Not Working</button>
-        <button class="delete-button" type="button" hidden>Delete</button>
+        <button class="report-button" type="button">Report issue</button>
+        <button class="delete-button" type="button" hidden>Delete build</button>
       </article>
     </template>
 
-    <script src="./config.js?v=20260313-4"></script>
-    <script src="./gallery.js?v=20260313-4" defer></script>
+    <script src="./config.js?v=20260314-1"></script>
+    <script type="module" src="./gallery.js?v=20260314-1"></script>
   </body>
 </html>

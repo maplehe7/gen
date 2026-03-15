@@ -1,14 +1,19 @@
+import { filterGalleryEntries, hostFromUrl } from "./ui_helpers.js";
+
 const PLACEHOLDER_WORKER_URL = "PASTE_CLOUDFLARE_WORKER_URL_HERE";
 const ADMIN_KEY = "standalone-forge-admin";
 const PENDING_DELETES_KEY = "standalone-forge-pending-deletes";
 const PENDING_DELETE_TTL_MS = 24 * 60 * 60 * 1000;
 const galleryContainer = document.getElementById("gallery");
 const galleryTemplate = document.getElementById("gallery-template");
+const galleryFilterInput = document.getElementById("gallery-filter");
+const galleryStatus = document.getElementById("gallery-status");
 const adminToggle = document.getElementById("admin-toggle");
 const adminPanel = document.getElementById("admin-panel");
 const adminCodeInput = document.getElementById("admin-code");
 const workerUrl = String(window.STANDALONE_FORGE_CONFIG?.workerUrl || "").trim().replace(/\/+$/, "");
 let galleryEntries = [];
+let galleryFilterValue = "";
 
 function normalizeValue(value) {
   return String(value || "").trim();
@@ -219,7 +224,7 @@ async function reportGame(entry, button) {
     button.textContent = "Reported";
   } catch (error) {
     button.disabled = false;
-    button.textContent = "Report Not Working";
+    button.textContent = "Report issue";
     window.alert(error.message);
   }
 }
@@ -276,27 +281,46 @@ function renderGallery(entries) {
     const rightTime = Date.parse(String(right?.generated_at || "")) || 0;
     return rightTime - leftTime;
   });
+  const visibleEntries = filterGalleryEntries(galleryEntries, galleryFilterValue);
   galleryContainer.innerHTML = "";
-  if (!galleryEntries.length) {
+  if (galleryStatus) {
+    galleryStatus.textContent = `${visibleEntries.length} of ${galleryEntries.length} build${galleryEntries.length === 1 ? "" : "s"}`;
+  }
+  if (!visibleEntries.length) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
-    empty.textContent = "No generated games yet.";
+    empty.textContent = galleryEntries.length ? "No builds match the current filter." : "No generated games yet.";
     galleryContainer.append(empty);
     return;
   }
 
-  galleryEntries.forEach((entry) => {
+  visibleEntries.forEach((entry) => {
     const fragment = galleryTemplate.content.cloneNode(true);
     const card = fragment.querySelector(".gallery-card");
     const link = fragment.querySelector(".gallery-link");
     const thumb = fragment.querySelector(".gallery-thumb");
     const title = fragment.querySelector(".gallery-title");
+    const source = fragment.querySelector(".gallery-source");
+    const meta = fragment.querySelector(".gallery-meta");
     const reportButton = fragment.querySelector(".report-button");
     const deleteButton = fragment.querySelector(".delete-button");
 
     card.id = `game-${entry.id || ""}`;
     link.href = playUrlForPath(entry.play_path || entry.folder || "");
     title.textContent = entry.title || entry.id || "Untitled";
+    if (source) {
+      const sourceHost = hostFromUrl(entry.source_url || "") || "Unknown source";
+      source.textContent = `Source ${sourceHost}`;
+    }
+    if (meta) {
+      meta.textContent = [
+        entry.generated_at ? `Built ${new Date(entry.generated_at).toLocaleString()}` : "",
+        entry.folder || "",
+        entry.id ? `ID ${entry.id}` : "",
+      ]
+        .filter(Boolean)
+        .join(" | ");
+    }
     thumb.alt = title.textContent;
     thumb.src = entry.thumbnail_path
       ? thumbnailUrlForPath(entry.thumbnail_path)
@@ -340,6 +364,10 @@ function handleAdminSubmit(event) {
 
 async function initGallery() {
   setAdminPanelVisible(false);
+  galleryFilterInput?.addEventListener("input", () => {
+    galleryFilterValue = String(galleryFilterInput.value || "").trim();
+    renderGallery(galleryEntries);
+  });
   adminToggle?.addEventListener("click", () => {
     setAdminPanelVisible(adminPanel?.hidden ?? true);
   });

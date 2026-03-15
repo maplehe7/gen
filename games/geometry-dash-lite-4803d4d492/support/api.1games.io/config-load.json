@@ -1,0 +1,28 @@
+{
+  "signed": "local",
+  "gameinfo": {
+    "allow_play": "yes",
+    "unlock_timer": 0,
+    "image": "",
+    "title": "",
+    "description": "",
+    "redirect_url": "",
+    "signed": "local"
+  },
+  "regisinfo": {
+    "sdktype": "disabled",
+    "more_games_url": "",
+    "promotion": {}
+  },
+  "adsinfo": {
+    "enable": "no",
+    "sdk_type": "disabled",
+    "reward": false,
+    "enable_reward": "no",
+    "enable_interstitial": "no",
+    "enable_preroll": "no",
+    "time_show_inter": 999999,
+    "time_show_reward": 999999,
+    "ads_debug": "no"
+  }
+}

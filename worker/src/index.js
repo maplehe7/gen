@@ -2085,34 +2085,28 @@ function sanitizeLogSlug(value) {
 }
 
 async function findRecentRun(env, submittedAtIso, requestId = "") {
-  const runsUrl =
-    `${githubApiBase(env)}/actions/workflows/${encodeURIComponent(workflowFile(env))}/runs` +
-    `?event=workflow_dispatch&branch=${encodeURIComponent(env.GITHUB_REF || "main")}&per_page=10`;
   const submittedAt = Date.parse(submittedAtIso);
   const normalizedRequestId = String(requestId || "").trim();
 
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const payload = await githubJson(runsUrl, env, {}, "List workflow runs");
-    const runs = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : [];
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const runs = await listWorkflowRuns(env, {
+      perPage: normalizedRequestId ? 50 : 20,
+      maxPages: normalizedRequestId ? 3 : 1,
+    });
     if (normalizedRequestId) {
-      const exactMatch = runs.find((run) => {
-        const displayTitle = String(run?.display_title || "").trim();
-        const runName = String(run?.name || "").trim();
-        return displayTitle === normalizedRequestId || runName === normalizedRequestId;
-      });
+      const exactMatch = runs.find((run) => runMatchesRequestId(run, normalizedRequestId));
       if (exactMatch) {
         return exactMatch;
       }
+      await sleep(1500);
+      continue;
     }
 
     const recentRuns = runs.filter((run) => {
       const createdAt = Date.parse(run.created_at || "");
       return Number.isFinite(createdAt) && createdAt >= submittedAt - 5000;
     });
-    if (!normalizedRequestId && recentRuns.length) {
-      return recentRuns[0];
-    }
-    if (normalizedRequestId && attempt >= 4 && recentRuns.length) {
+    if (recentRuns.length) {
       return recentRuns[0];
     }
     await sleep(1500);
@@ -2153,19 +2147,11 @@ async function findRunByRequestId(env, requestId) {
     return null;
   }
 
-  const runsUrl =
-    `${githubApiBase(env)}/actions/workflows/${encodeURIComponent(workflowFile(env))}/runs` +
-    `?event=workflow_dispatch&branch=${encodeURIComponent(env.GITHUB_REF || "main")}&per_page=25`;
-  const payload = await githubJson(runsUrl, env, {}, "List workflow runs");
-  const runs = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : [];
-  return runs.find((run) => {
-    const displayTitle = String(run?.display_title || "").trim();
-    const runName = String(run?.name || "").trim();
-    return displayTitle === normalizedRequestId || runName === normalizedRequestId;
-  }) || null;
+  const runs = await listWorkflowRuns(env, { perPage: 50, maxPages: 3 });
+  return runs.find((run) => runMatchesRequestId(run, normalizedRequestId)) || null;
 }
 
-async function waitForRunByRequestId(env, requestId, attempts = 8, delayMs = 1500) {
+async function waitForRunByRequestId(env, requestId, attempts = 12, delayMs = 1500) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const run = await findRunByRequestId(env, requestId);
     if (run) {
@@ -2176,6 +2162,47 @@ async function waitForRunByRequestId(env, requestId, attempts = 8, delayMs = 150
     }
   }
   return null;
+}
+
+function workflowRunsUrl(env, perPage = 25, page = 1) {
+  return (
+    `${githubApiBase(env)}/actions/workflows/${encodeURIComponent(workflowFile(env))}/runs` +
+    `?event=workflow_dispatch&branch=${encodeURIComponent(env.GITHUB_REF || "main")}` +
+    `&per_page=${encodeURIComponent(String(perPage || 25))}` +
+    `&page=${encodeURIComponent(String(page || 1))}`
+  );
+}
+
+function runMatchesRequestId(run, requestId) {
+  const normalizedRequestId = String(requestId || "").trim();
+  if (!normalizedRequestId) {
+    return false;
+  }
+  const displayTitle = String(run?.display_title || "").trim();
+  const runName = String(run?.name || "").trim();
+  return displayTitle === normalizedRequestId || runName === normalizedRequestId;
+}
+
+async function listWorkflowRuns(env, options = {}) {
+  const perPage = Math.min(Math.max(Number(options?.perPage) || 25, 1), 100);
+  const maxPages = Math.min(Math.max(Number(options?.maxPages) || 1, 1), 5);
+  const runs = [];
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const payload = await githubJson(
+      workflowRunsUrl(env, perPage, page),
+      env,
+      {},
+      "List workflow runs",
+    );
+    const pageRuns = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : [];
+    runs.push(...pageRuns);
+    if (pageRuns.length < perPage) {
+      break;
+    }
+  }
+
+  return runs;
 }
 
 async function cancelWorkflowRun(env, runId) {

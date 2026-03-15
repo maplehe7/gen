@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-03-14T19:19:11Z",
+  "generated_at": "2026-03-15T01:35:18Z",
   "source": "reports\\failed-builds.txt",
   "entry_count": 31,
-  "event_count": 48,
+  "event_count": 50,
   "totals": {
-    "known_cancelled": 35,
+    "known_cancelled": 37,
     "known_failed": 13
   },
   "entries": [
@@ -338,7 +338,7 @@
       ],
       "history_counts": {
         "known_failed": 0,
-        "known_cancelled": 6,
+        "known_cancelled": 8,
         "unknown": 0
       },
       "source_modes": [
@@ -351,13 +351,15 @@
       ],
       "detail_paths": [
         "reports/failed-builds/0ff8d940-dd49-4b2b-be79-7705ed2bef1f.txt",
+        "reports/failed-builds/14cb658a-b90f-4c8f-ab45-a81dd9f24e1b.txt",
+        "reports/failed-builds/36ec1617-2d8b-41c3-8bc3-4c2132dbb4f2.txt",
         "reports/failed-builds/619f9615-0dad-4238-a580-b2bf823a5a87.txt",
         "reports/failed-builds/90dd02bb-2639-4305-9249-f35dc6fe845c.txt",
         "reports/failed-builds/aad2cfea-c75d-403a-b9b3-ffb402c3b00f.txt",
         "reports/failed-builds/cbb4ecb5-0ebc-45a1-8b0e-b675d42f524b.txt",
         "reports/failed-builds/fcc15bb5-1d00-42c5-aa86-cbca731278d3.txt"
       ],
-      "last_seen_at": "2026-03-14T16:34:18.948Z"
+      "last_seen_at": "2026-03-14T23:07:18.342Z"
     },
     {
       "source_url": "https://geometrydash.game/",

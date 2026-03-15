@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   bucketReviewCandidates,
+  classifyCancellationResult,
   dashboardSnapshot,
   initialDispatchSubset,
   initialSelectedCandidateKeys,
@@ -63,6 +64,15 @@ test("splitBatchCancellationJobs separates remote and local-only jobs", () => {
   assert.equal(result.local.length, 1);
   assert.equal(result.remote.length, 1);
   assert.equal(result.remote[0].requestId, "2");
+});
+
+test("classifyCancellationResult keeps cancellation pending until the workflow run is discoverable", () => {
+  assert.equal(classifyCancellationResult({ found: false, runId: "" }), "awaiting_run");
+  assert.equal(
+    classifyCancellationResult({ alreadyCompleted: true, conclusion: "success", runId: "42" }),
+    "already_completed",
+  );
+  assert.equal(classifyCancellationResult({ cancelled: true, runId: "42" }), "cancelled");
 });
 
 test("dashboardSnapshot reports review counts alongside active jobs", () => {

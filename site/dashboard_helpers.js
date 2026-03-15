@@ -135,6 +135,20 @@ export function splitBatchCancellationJobs(batchJobs) {
   return { remote, local };
 }
 
+export function classifyCancellationResult(result) {
+  const conclusion = String(result?.conclusion || "").trim();
+  if (result?.alreadyCompleted && conclusion && conclusion !== "cancelled") {
+    return "already_completed";
+  }
+  if (result?.found === false && !String(result?.runId || "").trim()) {
+    return "awaiting_run";
+  }
+  if (result?.cancelled || conclusion === "cancelled") {
+    return "cancelled";
+  }
+  return "cancelled";
+}
+
 export function groupActiveJobsByBatch(jobs) {
   const groups = new Map();
   (Array.isArray(jobs) ? jobs : []).forEach((job) => {

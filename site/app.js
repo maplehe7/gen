@@ -3,6 +3,7 @@ import {
   bucketReviewCandidates,
   buildSelectionSummary,
   candidateSelectionKey,
+  classifyCancellationResult,
   dashboardSnapshot,
   groupActiveJobsByBatch,
   initialDispatchSubset,
@@ -1830,7 +1831,12 @@ async function trimQueuedBatchOverflow() {
     for (const job of overflowJobs) {
       try {
         const result = await cancelWorkflowJob(job);
-        if (result?.alreadyCompleted && String(result?.conclusion || "").trim() !== "cancelled") {
+        const outcome = classifyCancellationResult(result);
+        if (outcome === "already_completed") {
+          continue;
+        }
+        if (outcome === "awaiting_run") {
+          keepJobCancellationPending(job, true);
           continue;
         }
         upsertJob({
@@ -1845,6 +1851,8 @@ async function trimQueuedBatchOverflow() {
           etaSeconds: 0,
           etaUpdatedAt: Date.now(),
           error: "Cancelled to free runner slot.",
+          cancelPending: false,
+          batchCancelPending: false,
           failedAt: 0,
           lastServerUpdateAt: Date.now(),
           lastSyncAttemptAt: Date.now(),
@@ -2081,6 +2089,21 @@ function markJobCancellationPending(job, batch = false) {
   });
 }
 
+function keepJobCancellationPending(job, batch = false) {
+  upsertJob({
+    ...job,
+    cancelPending: true,
+    batchCancelPending: batch,
+    phase: batch ? "Waiting to cancel remaining build" : "Waiting to cancel build",
+    etaLabel: "Waiting for workflow run",
+    etaSeconds: 0,
+    etaUpdatedAt: Date.now(),
+    lastSyncAttemptAt: Date.now(),
+    syncFailureCount: Math.max(Number(job.syncFailureCount) || 0, 0),
+    error: "",
+  });
+}
+
 async function cancelActiveJob(job, options = {}) {
   const batchCancel = Boolean(options.batchCancel);
   if (!isCancelableJob(job)) {
@@ -2105,7 +2128,8 @@ async function cancelActiveJob(job, options = {}) {
 
   try {
     const result = await cancelWorkflowJob(job);
-    if (result?.alreadyCompleted && String(result?.conclusion || "").trim() !== "cancelled") {
+    const outcome = classifyCancellationResult(result);
+    if (outcome === "already_completed") {
       upsertJob({
         ...job,
         cancelPending: false,
@@ -2113,6 +2137,11 @@ async function cancelActiveJob(job, options = {}) {
       });
       await refreshJobStatuses();
       return { ok: false, alreadyCompleted: true };
+    }
+    if (outcome === "awaiting_run") {
+      keepJobCancellationPending(job, batchCancel);
+      renderJobs();
+      return { ok: true, awaitingRun: true };
     }
 
     finalizeCancelledJob(
@@ -2830,7 +2859,7 @@ function buildJobCardFragment(job) {
   appendBadgeRow(fragment.querySelector(".job-heading"), job);
   percent.textContent = `${roundedProgress}%`;
   fill.style.width = `${progressPercent.toFixed(1)}%`;
-  phase.textContent = job.cancelPending ? "Cancellation requested" : (job.phase || "Queued");
+  phase.textContent = job.cancelPending ? (job.phase || "Cancellation requested") : (job.phase || "Queued");
   eta.textContent = visibleEtaLabel(job, nowMs);
   error.textContent = buildJobErrorSummary(job);
   renderHeaderActions(job, headerActions);
@@ -3061,6 +3090,55 @@ async function refreshJobStatuses() {
             syncFailureCount: nextSyncFailureCount,
             error: "",
           };
+        }
+        if (job.cancelPending) {
+          const cancelResult = await cancelWorkflowJob({
+            ...job,
+            runId: payload.run?.id || job.runId,
+          });
+          const cancelOutcome = classifyCancellationResult(cancelResult);
+          if (cancelOutcome === "cancelled") {
+            return serializeJobForStorage({
+              ...job,
+              runId: String(cancelResult?.runId || payload.run?.id || job?.runId || "").trim(),
+              status: "completed",
+              conclusion: "cancelled",
+              progressPercent: clampPercent(job.progressPercent || 0),
+              progressUpdatedAt: Date.now(),
+              phase: job.batchCancelPending ? "Cancelled remaining build" : "Cancelled by operator",
+              etaLabel: "Cancelled",
+              etaSeconds: 0,
+              etaUpdatedAt: Date.now(),
+              error: job.batchCancelPending ? "Cancelled remaining build." : "Cancelled by operator.",
+              cancelPending: false,
+              batchCancelPending: false,
+              failedAt: 0,
+              lastServerUpdateAt: Date.now(),
+              lastSyncAttemptAt: Date.now(),
+              syncFailureCount: 0,
+            });
+          }
+          if (cancelOutcome === "awaiting_run") {
+            return serializeJobForStorage({
+              ...job,
+              runId: String(payload.run?.id || job.runId || "").trim(),
+              status: String(payload.run?.status || job.status || "queued").trim() || "queued",
+              conclusion: String(payload.run?.conclusion || job.conclusion || "").trim(),
+              progressPercent: Math.max(Number(job.progressPercent) || 0, 6),
+              progressUpdatedAt: Date.now(),
+              phase: job.batchCancelPending ? "Waiting to cancel remaining build" : "Waiting to cancel build",
+              etaLabel: "Waiting for workflow run",
+              etaSeconds: 0,
+              etaUpdatedAt: Date.now(),
+              cancelPending: true,
+              batchCancelPending: Boolean(job.batchCancelPending),
+              selectedForDispatch: false,
+              lastServerUpdateAt: Date.now(),
+              lastSyncAttemptAt: Date.now(),
+              syncFailureCount: 0,
+              error: "",
+            });
+          }
         }
         recordSuccessfulRunHistory(payload.run, payload.jobs);
         const derived = progressFromRun(payload.run, payload.jobs);

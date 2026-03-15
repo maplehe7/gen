@@ -1,8 +1,8 @@
 {
-  "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-z5v40h45",
-  "index_html": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-z5v40h45/index.html",
-  "embedded_entry_html": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-z5v40h45/game-root.html",
-  "required_functions_file": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-z5v40h45/required-functions.json",
+  "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-mysil578",
+  "index_html": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-mysil578/index.html",
+  "embedded_entry_html": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-mysil578/game-root.html",
+  "required_functions_file": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-mysil578/required-functions.json",
   "loader": "geometry-lite-v26013001.loader.js",
   "framework": "geometry-lite-v26013001.framework.js.unityweb",
   "data": "geometry-lite-v26013001.data.unityweb",
@@ -26,8 +26,8 @@
   "source_url_spoof_enabled": true,
   "original_folder_url": "",
   "streaming_assets_url": "26013001/StreamingAssets",
-  "asset_cache_buster": "7f270a86f3e1",
-  "embed_cache_buster": "140fbe126690",
+  "asset_cache_buster": "9e52287a6b74",
+  "embed_cache_buster": "1fc36fbbe4ae",
   "launch_options": "both",
   "recommended_launch_mode": "none",
   "launcher": "ocean-launcher",
@@ -91,7 +91,7 @@
     "https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js",
     "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"
   ],
-  "progress_file": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-z5v40h45/.standalone-progress.json",
+  "progress_file": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-mysil578/.standalone-progress.json",
   "mirrored_streaming_asset_files": [
     "26013001/StreamingAssets/UnityServicesProjectConfiguration.json"
   ],
@@ -107,9 +107,9 @@
   ],
   "verification": {
     "ok": true,
-    "verified_at": "2026-03-15T17:52:11+00:00",
-    "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-z5v40h45",
-    "summary_path": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-z5v40h45/standalone-build-info.json",
+    "verified_at": "2026-03-15T17:54:00+00:00",
+    "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-mysil578",
+    "summary_path": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-mysil578/standalone-build-info.json",
     "entry_kind": "unity",
     "required_files": [
       "index.html",
@@ -141,8 +141,8 @@
       "/support/gmsdkv1.js"
     ],
     "static_issues": [],
-    "local_origin": "http://127.0.0.1:33389",
-    "launch_url": "http://127.0.0.1:33389/game-root.html?autostart=1",
+    "local_origin": "http://127.0.0.1:37395",
+    "launch_url": "http://127.0.0.1:37395/game-root.html?autostart=1",
     "ready": true,
     "ready_via": "visible_canvas",
     "ready_error": "",
@@ -166,5 +166,5 @@
     "console_errors": [],
     "page_errors": []
   },
-  "verification_path": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-z5v40h45/standalone-verification.json"
+  "verification_path": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-mysil578/standalone-verification.json"
 }

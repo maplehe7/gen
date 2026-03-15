@@ -517,14 +517,27 @@
   let launchPanelHideTimer = 0;
   let fakeProgressTimer = 0;
   let fakeProgressValue = 0;
+  let currentProgressValue = 0;
   let handoffPollTimer = 0;
   const stepLogEntries = [];
   const loaderStepEpoch = Date.now();
   let lastLoggedStep = "";
   let lastProgressBucket = -1;
+  function canonicalizeLocalPageUrl(value) {
+    try {
+      const parsed = new URL(value || window.location.href);
+      ["_", "ts", "v"].forEach(function (key) {
+        parsed.searchParams.delete(key);
+      });
+      return parsed.toString();
+    } catch (err) {
+      return String(value || window.location.href || "");
+    }
+  }
+  const LAUNCHER_PAGE_URL = canonicalizeLocalPageUrl(window.location.href);
   const requestedEmbedVariant = (function () {
     try {
-      const rawValue = new URL(window.location.href).searchParams.get("embedVariant") || "";
+      const rawValue = new URL(LAUNCHER_PAGE_URL).searchParams.get("embedVariant") || "";
       const normalized = rawValue.trim().toLowerCase();
       return normalized === "alt" ? "alt" : normalized === "primary" ? "primary" : "";
     } catch (err) {
@@ -533,7 +546,7 @@
   })();
   const requestedLaunchMode = (function () {
     try {
-      return new URL(window.location.href).searchParams.get("launchMode") || "";
+      return new URL(LAUNCHER_PAGE_URL).searchParams.get("launchMode") || "";
     } catch (err) {
       return "";
     }
@@ -567,7 +580,7 @@
       return "";
     }
     try {
-      return new URL(value, window.location.href).host || "";
+      return new URL(value, LAUNCHER_PAGE_URL).host || "";
     } catch (err) {
       return "";
     }
@@ -679,7 +692,7 @@
           " proto=" +
           window.location.protocol.replace(":", "") +
           " targetHost=" +
-          safeUrlHost(remoteUrl || embedUrl || window.location.href)
+          safeUrlHost(remoteUrl || embedUrl || LAUNCHER_PAGE_URL)
         );
       case "Launch requested":
         return "[launch] user-activation accepted target=" + launcherTargetKind();
@@ -731,7 +744,7 @@
         return true;
       }
       try {
-        return new URL(activeUrl, window.location.href).origin === window.location.origin;
+        return new URL(activeUrl, LAUNCHER_PAGE_URL).origin === window.location.origin;
       } catch (err) {
         return false;
       }
@@ -832,8 +845,30 @@
     }
   }
 
+  function hasEmbeddedOceanProgress(frameDocument) {
+    if (!frameDocument) {
+      return false;
+    }
+    const root = frameDocument.documentElement || null;
+    const body = frameDocument.body || null;
+    const loadState =
+      (root && root.getAttribute("data-ocean-unity-state")) ||
+      (body && body.getAttribute("data-ocean-unity-state")) ||
+      "";
+    if (loadState) {
+      return true;
+    }
+    return Boolean(
+      frameDocument.getElementById("progressTrack") &&
+        frameDocument.getElementById("progressFill")
+    );
+  }
+
   function syncEmbeddedRuntimeProgress(frameDocument) {
     if (!frameDocument) {
+      return;
+    }
+    if (!hasEmbeddedOceanProgress(frameDocument)) {
       return;
     }
     const embeddedLoadingScreen = frameDocument.getElementById("loadingScreen");
@@ -956,9 +991,14 @@
     logLoaderStep(text);
   }
 
-  function setProgress(progress) {
+  function setProgress(progress, options) {
+    const force = Boolean(options && options.force);
     const numeric = Number(progress);
-    const safeProgress = Number.isFinite(numeric) ? Math.min(1, Math.max(0, numeric)) : 0;
+    let safeProgress = Number.isFinite(numeric) ? Math.min(1, Math.max(0, numeric)) : 0;
+    if (!force) {
+      safeProgress = Math.max(safeProgress, currentProgressValue);
+    }
+    currentProgressValue = safeProgress;
     const percent = Math.round(safeProgress * 100);
     progressFill.style.width = percent + "%";
     loadingScreen.setAttribute("data-progress", String(percent));
@@ -1117,7 +1157,7 @@
   }
 
   function buildLaunchUrl(mode) {
-    const targetUrl = new URL(window.location.href);
+    const targetUrl = new URL(LAUNCHER_PAGE_URL);
     targetUrl.searchParams.set("autostart", "1");
     targetUrl.searchParams.set("launchMode", mode);
     if (hasAlternateEmbedVariant()) {
@@ -1148,13 +1188,14 @@
     showLaunchPanel();
     setProgressVisibility(false);
     fakeProgressValue = 0;
-    setProgress(0);
+    currentProgressValue = 0;
+    setProgress(0, { force: true });
     setStatus(resolvedInitialStatusText);
   }
 
   function startFakeProgress() {
     clearFakeProgressTimer();
-    fakeProgressValue = 0.02;
+    fakeProgressValue = Math.max(currentProgressValue, 0.02);
     setProgress(fakeProgressValue);
     fakeProgressTimer = window.setInterval(function () {
       if (fakeProgressValue >= 0.92) {
@@ -1168,7 +1209,7 @@
       } else {
         fakeProgressValue += 0.018;
       }
-      fakeProgressValue = Math.min(fakeProgressValue, 0.92);
+      fakeProgressValue = Math.min(Math.max(fakeProgressValue, currentProgressValue), 0.92);
       const percent = setProgress(fakeProgressValue);
       setStatus("Loading " + percent + "%");
     }, 140);
@@ -1264,7 +1305,7 @@
   }
 
   function consumeAutoStartFlag() {
-    const currentUrl = new URL(window.location.href);
+    const currentUrl = new URL(LAUNCHER_PAGE_URL);
     const shouldAutoStart = currentUrl.searchParams.get("autostart") === "1";
     if (shouldAutoStart) {
       currentUrl.searchParams.delete("autostart");
@@ -1394,7 +1435,7 @@
     return new Promise(function (resolve, reject) {
       let settled = false;
       const frame = document.createElement("iframe");
-      const resolvedUrl = new URL(selectedEmbedUrl, window.location.href).toString();
+      const resolvedUrl = new URL(selectedEmbedUrl, LAUNCHER_PAGE_URL).toString();
       frame.className = "ocean-game-embed";
       frame.src = resolvedUrl;
       frame.title = embedTitle;
@@ -1457,7 +1498,8 @@
       logLoaderStep("Launch requested");
       loadingScreen.classList.add("is-loading");
       setProgressVisibility(true);
-      setProgress(0);
+      currentProgressValue = 0;
+      setProgress(0, { force: true });
       setStatus("Preparing launch");
       startFakeProgress();
 
@@ -1505,7 +1547,8 @@
   }
 
   setProgressVisibility(false);
-  setProgress(0);
+  currentProgressValue = 0;
+  setProgress(0, { force: true });
   logLoaderStep("Shell initialized");
   setStatus(resolvedInitialStatusText);
 

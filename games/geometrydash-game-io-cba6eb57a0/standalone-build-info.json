@@ -1,8 +1,8 @@
 {
-  "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-ky807f6d",
-  "index_html": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-ky807f6d/index.html",
-  "embedded_entry_html": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-ky807f6d/game-root.html",
-  "required_functions_file": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-ky807f6d/required-functions.json",
+  "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-eqx6dk4d",
+  "index_html": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-eqx6dk4d/index.html",
+  "embedded_entry_html": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-eqx6dk4d/game-root.html",
+  "required_functions_file": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-eqx6dk4d/required-functions.json",
   "loader": "geometry-lite-v26013001.loader.js",
   "framework": "geometry-lite-v26013001.framework.js.unityweb",
   "data": "geometry-lite-v26013001.data.unityweb",
@@ -26,8 +26,8 @@
   "source_url_spoof_enabled": true,
   "original_folder_url": "",
   "streaming_assets_url": "26013001/StreamingAssets",
-  "asset_cache_buster": "f8383313b1ef",
-  "embed_cache_buster": "1b1c87c20917",
+  "asset_cache_buster": "c8d1d9d5b493",
+  "embed_cache_buster": "9502b8b3e92b",
   "launch_options": "both",
   "recommended_launch_mode": "none",
   "launcher": "ocean-launcher",
@@ -91,7 +91,7 @@
     "https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js",
     "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"
   ],
-  "progress_file": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-ky807f6d/.standalone-progress.json",
+  "progress_file": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-eqx6dk4d/.standalone-progress.json",
   "mirrored_streaming_asset_files": [
     "26013001/StreamingAssets/UnityServicesProjectConfiguration.json"
   ],
@@ -107,9 +107,9 @@
   ],
   "verification": {
     "ok": true,
-    "verified_at": "2026-03-15T17:50:31+00:00",
-    "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-ky807f6d",
-    "summary_path": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-ky807f6d/standalone-build-info.json",
+    "verified_at": "2026-03-15T17:53:52+00:00",
+    "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-eqx6dk4d",
+    "summary_path": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-eqx6dk4d/standalone-build-info.json",
     "entry_kind": "unity",
     "required_files": [
       "index.html",
@@ -141,8 +141,8 @@
       "/support/gmsdkv1.js"
     ],
     "static_issues": [],
-    "local_origin": "http://127.0.0.1:44127",
-    "launch_url": "http://127.0.0.1:44127/game-root.html?autostart=1",
+    "local_origin": "http://127.0.0.1:39707",
+    "launch_url": "http://127.0.0.1:39707/game-root.html?autostart=1",
     "ready": true,
     "ready_via": "visible_canvas",
     "ready_error": "",
@@ -166,5 +166,5 @@
     "console_errors": [],
     "page_errors": []
   },
-  "verification_path": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-ky807f6d/standalone-verification.json"
+  "verification_path": "/home/runner/work/gen/gen/dist/.build-staging/geometrydash-game-io-cba6eb57a0-eqx6dk4d/standalone-verification.json"
 }

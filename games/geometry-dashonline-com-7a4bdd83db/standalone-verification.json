@@ -1,8 +1,8 @@
 {
   "ok": true,
-  "verified_at": "2026-03-15T17:49:18+00:00",
-  "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-ahztyw96",
-  "summary_path": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-ahztyw96/standalone-build-info.json",
+  "verified_at": "2026-03-15T17:52:11+00:00",
+  "output_dir": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-z5v40h45",
+  "summary_path": "/home/runner/work/gen/gen/dist/.build-staging/geometry-dashonline-com-7a4bdd83db-z5v40h45/standalone-build-info.json",
   "entry_kind": "unity",
   "required_files": [
     "index.html",
@@ -34,8 +34,8 @@
     "/support/gmsdkv1.js"
   ],
   "static_issues": [],
-  "local_origin": "http://127.0.0.1:46571",
-  "launch_url": "http://127.0.0.1:46571/game-root.html?autostart=1",
+  "local_origin": "http://127.0.0.1:33389",
+  "launch_url": "http://127.0.0.1:33389/game-root.html?autostart=1",
   "ready": true,
   "ready_via": "visible_canvas",
   "ready_error": "",
